@@ -1,0 +1,33 @@
+
+name: LumioFrontend
+
+options:
+  bundleIdPrefix: com.lumio
+
+targets:
+  lumio:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+
+    sources:
+      - path: Sources/LumioFrontend
+
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lumio.app
+        PRODUCT_NAME: lumio
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.0"
+
+schemes:
+  lumio:
+    build:
+      targets:
+        lumio: all
+    run:
+      config: Debug
+    archive:
+      config: Release
+    management:
+      shared: true
