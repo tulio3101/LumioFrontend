@@ -1,25 +1,12 @@
-// swift-tools-version: 6.4
-// The swift-tools-version declares the minimum version of Swift required to build this package.
-
+// swift-tools-version: 6.0
 import PackageDescription
 
 let package = Package(
     name: "LumioFrontend",
+    platforms: [.iOS(.v16), .macOS(.v13)],
     targets: [
-        // Targets are the basic building blocks of a package, defining a module or a test suite.
-        // Targets can depend on other targets in this package and products from dependencies.
-        .executableTarget(
-            name: "LumioFrontend",
-            swiftSettings: [
-                .enableUpcomingFeature("ApproachableConcurrency"),
-            ],
-        ),
-        .testTarget(
-            name: "LumioFrontendTests",
-            dependencies: ["LumioFrontend"],
-            swiftSettings: [
-                .enableUpcomingFeature("ApproachableConcurrency"),
-            ],
-        ),
-    ]
+        .executableTarget(name: "LumioFrontend"),
+        .testTarget(name: "LumioFrontendTests", dependencies: ["LumioFrontend"]),
+    ],
+    swiftLanguageModes: [.v5]
 )

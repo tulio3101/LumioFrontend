@@ -17,6 +17,22 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.lumio.app
         PRODUCT_NAME: lumio
+        PRODUCT_MODULE_NAME: LumioFrontend
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.0"
+
+  lumioTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: Tests/LumioFrontendTests
+    dependencies:
+      - target: lumio
+    settings:
+      base:
         GENERATE_INFOPLIST_FILE: YES
         SWIFT_VERSION: "5.0"
 
@@ -27,6 +43,9 @@ schemes:
         lumio: all
     run:
       config: Debug
+    test:
+      targets:
+        - lumioTests
     archive:
       config: Release
     management:
