@@ -17,11 +17,14 @@ struct AudioMessage: Identifiable {
     let createdAt: Date
     let expiresAt: Date?
     let contextID: String?
+    let deduplicationKey: String?
+    let captureSequence: UInt64?
     var status: AudioMessageStatus = .pending
 
     init(
         id: UUID = UUID(), text: String, priority: AudioPriority,
-        createdAt: Date = Date(), expiresAt: Date? = nil, contextID: String? = nil
+        createdAt: Date = Date(), expiresAt: Date? = nil, contextID: String? = nil,
+        deduplicationKey: String? = nil, captureSequence: UInt64? = nil
     ) {
         self.id = id
         self.text = text
@@ -29,6 +32,8 @@ struct AudioMessage: Identifiable {
         self.createdAt = createdAt
         self.expiresAt = expiresAt
         self.contextID = contextID
+        self.deduplicationKey = deduplicationKey
+        self.captureSequence = captureSequence
     }
 
     func isExpired(at now: Date = Date()) -> Bool {

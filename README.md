@@ -33,6 +33,8 @@ Hay una app SwiftUI con destino y preferencias, una pantalla/ViewModel de ejempl
 contratos por funcionalidad, transporte HTTP y DTOs de narración. Calcular ruta
 muestra un error explícito hasta conectar MapKit; no inicia una asistencia ficticia.
 Audio ya incluye cola, política, árbitro y adaptador AVSpeechSynthesizer.
+También deduplica eventos P2/P3 y reemplaza narraciones pendientes de capturas
+antiguas mediante metadatos opcionales; las reglas están en la guía de arquitectura.
 No están implementados cámara, seguridad, autenticación ni llamadas de narración.
 El audio nativo está pendiente de validación en Xcode/dispositivo. No hay modelo Core ML ni claves de servicios incluidos.
 

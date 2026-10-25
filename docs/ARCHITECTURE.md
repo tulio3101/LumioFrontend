@@ -163,3 +163,49 @@ El reproductor debe notificar únicamente el token del intento que terminó. El
 adaptador nativo elimina los tokens al detener y usa un único sintetizador. Los
 productores reales todavía no están conectados y no se agrega una pantalla de
 prueba de voz a la navegación del usuario.
+
+## HU: descartar mensajes duplicados u obsoletos
+
+Implementada en AudioDeduplicationPolicy y AudioArbiterService. No requiere API ni
+base de datos. El contrato para productores futuros es:
+
+- `deduplicationKey`: identidad estable del evento/información, no el texto.
+- `contextID`: grupo de información comparable (ruta, giro o escena). Usar IDs
+  distintos para contextos independientes; conservar los contextos invalidados en
+  las instantáneas posteriores mientras puedan llegar respuestas de ellos.
+- `captureSequence`: UInt64 creciente asignado al capturar, no al recibir la
+  narración. Solo participa para P3 con contextID. La misma captura conserva su
+  secuencia aunque la respuesta llegue tarde. Al iniciar otro contexto, usar otro ID.
+
+Reglas:
+1. Un UUID activo o pendiente repetido se ignora sin cambiar el estado del original.
+2. P2/P3 con la misma clave no vacía, contexto no vacío y prioridad se consideran
+   duplicados mientras el mensaje anterior siga siendo relevante y activo/pendiente.
+   El nuevo se notifica como descartado. Sin clave o contexto no se aplica ese filtro.
+3. P1 no participa en deduplicación por clave ni comparación de capturas. Sigue
+   sujeto a vencimiento/contexto y a la protección por UUID.
+4. P3 de captura más reciente reemplaza pendientes de capturas anteriores del mismo
+   contexto, aunque comparta clave. No interrumpe una narración activa por novedad.
+5. Solo un mensaje relevante y aceptado actualiza la última secuencia por contexto.
+   Una respuesta inferior a esa secuencia se descarta aunque la narración reciente
+   ya haya terminado. Secuencias iguales no son antiguas: la clave/UUID decide su
+   duplicidad. Sin secuencia no se puede inferir cuál captura es anterior.
+6. No hay historial temporal de duplicados reproducidos. Sí hay un registro de la
+   última secuencia aceptada por contexto: se libera al invalidar ese contexto o
+   ejecutar resetSession. resetSession detiene audio, descarta activos/pendientes,
+   limpia contexto/registro e invalida callbacks anteriores. Invocarlo al cerrar el
+   trayecto; un nuevo trayecto puede usar otra instancia del árbitro.
+7. Los supervivientes conservan su orden original. La narración nueva ocupa su
+   posición real de llegada, no la del mensaje reemplazado.
+
+La vigencia se comprueba antes de modificar pendientes; los vencidos se limpian
+antes de comparar duplicados. Los cambios se observan mediante onMessageChanged.
+Como en el resto del árbitro, esos callbacks deben ser observadores no reentrantes.
+
+Pruebas en `Tests/LumioFrontendTests/AudioDeduplicationTests.swift`: diez escenarios
+nuevos cubren duplicados activos/pendientes, UUID, contextos/prioridades diferentes,
+metadatos ausentes, protección P1, reemplazo, respuestas fuera de orden, información
+nueva inválida, continuidad/FIFO, expiración y limpieza de sesión/contexto.
+Resultado de `swift test --cache-path /tmp/lumio-swift-cache`: 23 pruebas pasan
+(13 previas + 10 nuevas). Validación portable con reproductor simulado; integración
+nativa y productores quedan para la etapa posterior acordada.
