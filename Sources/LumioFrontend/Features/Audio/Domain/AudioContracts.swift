@@ -20,12 +20,13 @@ protocol AudioArbitrating: AnyObject {
     func processNext()
     func playbackFinished(token: PlaybackToken)
     func discardIrrelevant()
+    func updateContext(_ context: AudioDecisionContext)
 }
 
 /// El productor proporciona el contexto; todavía no se fijan umbrales de giro.
 struct AudioDecisionContext {
-    let navigationRequiresInterruption: Bool
-    let invalidatedContextIDs: Set<String>
+    var urgentNavigationMessageIDs: Set<UUID> = []
+    var invalidatedContextIDs: Set<String> = []
 }
 
 protocol AudioPolicyEvaluating {

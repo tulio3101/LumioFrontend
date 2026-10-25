@@ -2,6 +2,7 @@
 import SwiftUI
 
 @main
+@MainActor
 struct LumioApp: App {
     private let dependencies = AppDependencies()
 

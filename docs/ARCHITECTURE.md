@@ -61,7 +61,7 @@ que la seguridad local esté disponible.
 
 | Área | Siguiente implementación | Integración |
 | --- | --- | --- |
-| Audio | Cola, política y AudioArbiterService | AVSpeechSynthesizer mediante AudioPlaying |
+| Audio | Conectar productores y validar en dispositivo | Cola/árbitro implementados; AVSpeechSynthesizer mediante AudioPlaying |
 | Safety | Cámara, inferencia y distancia confiable | AVFoundation, Vision/Core ML, ARKit |
 | Navigation | Cálculo, seguimiento y eventos de giro | MapKit y CoreLocation |
 | Narration | Servicio remoto y control de frecuencia | HTTPClient, POST /narration |
@@ -79,7 +79,9 @@ Todos llegan a un único árbitro por sesión y solo su reproductor llama al TTS
 Ningún detector, ViewModel ni servicio remoto debe reproducir por su cuenta.
 
 El backend Python contiene un prototipo de reglas: trasladar sus escenarios, no
-invocar su cola por HTTP. El scaffold Swift todavía no implementa el árbitro.
+invocar su cola por HTTP. La implementación Swift está en Audio/Application y la
+cola/política en Audio/Domain. AppDependencies mantiene una instancia del árbitro
+con el reproductor nativo en plataformas Apple.
 
 Reglas conocidas:
 - P1 interrumpe P2/P3. Misma prioridad conserva FIFO por recepción, no createdAt.
@@ -89,14 +91,25 @@ Reglas conocidas:
 - Relevancia combina vencimiento y validez del contexto. No confundirla con estado.
 
 Los umbrales del spike siguen pendientes de resolver; no se codifican números aquí.
-AudioDecisionContext expresa datos de decisión sin inventar cómo se calculan.
+AudioDecisionContext expresa datos de decisión sin inventar cómo se calculan:
+urgentNavigationMessageIDs contiene los mensajes de giro urgentes e
+invalidatedContextIDs identifica giros/rutas/escenas que ya no son válidos.
+updateContext reemplaza la instantánea y reevalúa los pendientes inmediatamente.
+El productor mantiene el contexto actualizado; un mensaje P2 sin marca urgente espera.
 PlaybackToken identifica cada intento, para ignorar callbacks antiguos incluso si
 se vuelve a reproducir el mismo mensaje. El adaptador AVSpeechSynthesizer debe mapear
 cada utterance a su token; sus callbacks se entregan al árbitro en MainActor.
 
 play inicia sin esperar a que termine toda la locución. stop detiene el audio antes
-de permitir otro inicio. La cola acepta eventos durante reproducción. Hace falta
-probar fallos y cancelación además del camino normal.
+de permitir otro inicio. La cola acepta eventos durante reproducción. Las pruebas
+portables cubren prioridad, FIFO, interrupciones, tokens antiguos, expiración y
+fallos de inicio. Si el inicio falla, el mensaje se descarta y se informa mediante
+onPlaybackError; los siguientes mensajes siguen procesándose. Un P2 interrumpido
+conserva su orden original y se reproduce desde el inicio si todavía es relevante.
+
+La integración nativa aún requiere pruebas en iPhone de stop/reinicio y ducking,
+así como manejo de interrupciones externas (llamadas, Siri), rutas de audio y ciclo
+de vida de la sesión. El código portable no valida esas condiciones del sistema.
 
 Antes de usar sensores, agregar descripciones de permisos a project.yml, solicitar
 consentimiento y manejar rechazo, falta de hardware y modo reducido. No anunciar
@@ -130,3 +143,23 @@ del flujo Xcode, declararlos también en Package.swift cuando SwiftPM los necesi
 Referencias oficiales:
 - https://developer.apple.com/documentation/swiftui/stateobject
 - https://docs.swift.org/latest/documentation/packagemanagerdocs/introducingpackages/
+
+
+## Integración de la cola
+
+Todos los productores llaman a receive en MainActor; no llaman al reproductor.
+El árbitro posee copias de los mensajes (struct): observar currentMessage,
+pendingMessages u onMessageChanged; modificar el valor original no modifica la cola.
+Actualizar el contexto para invalidar un giro, no mutar el mensaje original.
+Para reevaluar vencimientos sin nuevos eventos, el coordinador de trayecto puede
+llamar a processNext; siempre se comprueban antes de reproducir. El contexto nuevo
+invalida pendientes, no interrumpe automáticamente una locución activa por caducidad.
+
+Los callbacks de estado/error son para observación; no deben iniciar operaciones
+reentrantes del árbitro de forma síncrona. Para efectos derivados, programar una
+Task en MainActor. No hay historial persistente ni endpoints para esta cola.
+
+El reproductor debe notificar únicamente el token del intento que terminó. El
+adaptador nativo elimina los tokens al detener y usa un único sintetizador. Los
+productores reales todavía no están conectados y no se agrega una pantalla de
+prueba de voz a la navegación del usuario.

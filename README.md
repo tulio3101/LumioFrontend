@@ -32,8 +32,9 @@ como en XcodeGen. La versión de herramientas y el modo de lenguaje son distinto
 Hay una app SwiftUI con destino y preferencias, una pantalla/ViewModel de ejemplo,
 contratos por funcionalidad, transporte HTTP y DTOs de narración. Calcular ruta
 muestra un error explícito hasta conectar MapKit; no inicia una asistencia ficticia.
-No están implementados cámara, seguridad, autenticación, TTS, cola ni llamadas de
-narración. No hay modelo Core ML ni claves de servicios incluidos.
+Audio ya incluye cola, política, árbitro y adaptador AVSpeechSynthesizer.
+No están implementados cámara, seguridad, autenticación ni llamadas de narración.
+El audio nativo está pendiente de validación en Xcode/dispositivo. No hay modelo Core ML ni claves de servicios incluidos.
 
 ## Organización
 
@@ -46,7 +47,7 @@ Sources/LumioFrontend/
   Features/
     Navigation/            Domain, Data, Presentation: ejemplo completo de capas
     Safety/Domain/         Eventos y contrato de monitor local
-    Audio/Domain/          Mensajes y contratos de árbitro, política y reproductor
+    Audio/                 Domain, Application (árbitro), Data (reproductor nativo)
     Narration/             Contrato local y DTOs del backend
     Users/Domain/          Perfil y contrato de carga
     Places/Domain/         Lugares guardados y contrato de carga
