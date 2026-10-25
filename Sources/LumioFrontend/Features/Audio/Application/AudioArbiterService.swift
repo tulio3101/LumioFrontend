@@ -9,6 +9,8 @@ final class AudioArbiterService: AudioArbitrating {
     private var current: AudioMessageQueue.Entry?
     private var token: PlaybackToken?
     private var context = AudioDecisionContext()
+    private let deduplication = AudioDeduplicationPolicy()
+    private var latestCaptureByContext: [String: UInt64] = [:]
 
     var currentMessage: AudioMessage? { current?.message }
     var pendingMessages: [AudioMessage] {
@@ -39,13 +41,52 @@ final class AudioArbiterService: AudioArbitrating {
             publish(message, status: .discarded)
             return
         }
+        // Limpiar pendientes vencidos antes de usarlos como referencia de duplicidad.
+        discardIrrelevant()
+        if message.priority == .environmentInformation,
+           let contextID = message.contextID, let sequence = message.captureSequence,
+           let latest = latestCaptureByContext[contextID], sequence < latest {
+            publish(message, status: .discarded)
+            return
+        }
+        let candidates = queue.entries.map(\.message) + (current.map { [$0.message] } ?? [])
+        if candidates.contains(where: {
+            policy.isRelevant($0, context: context, now: now())
+                && deduplication.isDuplicate(message, of: $0)
+        }) {
+            publish(message, status: .discarded)
+            return
+        }
+        let replaced = queue.removeIrrelevant {
+            !deduplication.isNewerCapture(message, than: $0)
+        }
+        if message.priority == .environmentInformation,
+           let contextID = message.contextID, let sequence = message.captureSequence {
+            latestCaptureByContext[contextID] = sequence
+        }
         queue.append(message)
+        for old in replaced { publish(old, status: .discarded) }
         processNext()
     }
 
     func updateContext(_ context: AudioDecisionContext) {
         self.context = context
+        for id in context.invalidatedContextIDs {
+            latestCaptureByContext.removeValue(forKey: id)
+        }
         processNext()
+    }
+
+    /// Cerrar el trayecto: detener audio y liberar cola, contexto e historial de capturas.
+    func resetSession() {
+        let messages = queue.entries.map(\.message) + (current.map { [$0.message] } ?? [])
+        token = nil
+        current = nil
+        queue = AudioMessageQueue()
+        context = AudioDecisionContext()
+        latestCaptureByContext.removeAll()
+        player.stop()
+        for message in messages { publish(message, status: .discarded) }
     }
 
     func discardIrrelevant() {

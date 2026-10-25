@@ -3,7 +3,7 @@ import Testing
 @testable import LumioFrontend
 
 @MainActor
-private final class FakeAudioPlayer: AudioPlaying {
+final class FakeAudioPlayer: AudioPlaying {
     var onFinished: ((PlaybackToken) -> Void)?
     var active: PlaybackToken?
     var started: [UUID] = []

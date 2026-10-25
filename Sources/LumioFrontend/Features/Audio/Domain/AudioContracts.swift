@@ -20,6 +20,7 @@ protocol AudioArbitrating: AnyObject {
     func processNext()
     func playbackFinished(token: PlaybackToken)
     func discardIrrelevant()
+    func resetSession()
     func updateContext(_ context: AudioDecisionContext)
 }
 
