@@ -7,6 +7,7 @@ let package = Package(
     targets: [
         .executableTarget(name: "LumioFrontend"),
         .testTarget(name: "LumioFrontendTests", dependencies: ["LumioFrontend"]),
+        .testTarget(name: "SafetyTests", dependencies: ["LumioFrontend"]),
     ],
     swiftLanguageModes: [.v5]
 )
