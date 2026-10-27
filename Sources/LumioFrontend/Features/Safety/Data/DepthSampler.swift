@@ -49,7 +49,7 @@ struct DepthSampler {
             let confRow  = confBase.advanced(by: y * confStride)
                                    .assumingMemoryBound(to: UInt8.self)
             for x in x0..<x1 {
-                guard ARConfidenceLevel(rawValue: confRow[x]) == .high else { continue }
+                guard ARConfidenceLevel(rawValue: Int(confRow[x])) == .high else { continue }
                 let d = depthRow[x]
                 guard d > 0, d.isFinite else { continue }
                 samples.append(d)

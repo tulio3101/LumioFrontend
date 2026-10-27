@@ -49,11 +49,10 @@ final class SafetyService: SafetyMonitoring {
     private func consumeLoop() async {
         for await detections in pipeline.detections {
             guard !Task.isCancelled else { return }
-            await handle(detections)
+            handle(detections)
         }
     }
 
-    @MainActor
     private func handle(_ detections: [Detection]) {
         for det in detections {
             let requiresImmediate = isHighRisk(det)

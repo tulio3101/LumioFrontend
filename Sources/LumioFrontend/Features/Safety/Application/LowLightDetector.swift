@@ -72,17 +72,22 @@ final class LowLightDetector {
     }
 
     private func emitAlert() {
-        audioArbiter.receive(AudioMessage(
-            text: "Poca luz. Avanza con precaución.",
-            priority: .immediateRisk,
-            deduplicationKey: "low-light-alert"
-        ))
-        feedbackGenerator.notificationOccurred(.warning)
+        // analyze() is called from any thread; audio and haptics must run on main actor.
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.audioArbiter.receive(AudioMessage(
+                text: "Poca luz. Avanza con precaución.",
+                priority: .immediateRisk,
+                deduplicationKey: "low-light-alert"
+            ))
+            self.feedbackGenerator.notificationOccurred(.warning)
+        }
     }
 
     private func emitRecovery() {
-        // No audio on recovery to avoid noise; silence is the confirmation.
-        feedbackGenerator.notificationOccurred(.success)
+        Task { @MainActor [weak self] in
+            self?.feedbackGenerator.notificationOccurred(.success)
+        }
     }
 }
 #endif
