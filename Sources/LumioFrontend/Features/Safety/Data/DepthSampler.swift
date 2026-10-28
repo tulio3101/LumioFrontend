@@ -3,8 +3,11 @@ import ARKit
 import CoreGraphics
 
 /// Estimates distance to an obstacle using ARKit LiDAR sceneDepth data.
-/// Per ADR-307: samples the median depth of the 30% central area of the bounding box,
-/// using only high-confidence pixels. Returns nil for distances > 4 m or no valid pixels.
+/// Samples the median depth of the 30% central area of the bounding box,
+/// using only high-confidence pixels. Returns nil when no valid pixels are found.
+/// NOTE (desvío de ADR-307): ADR-307 prescribía retornar nil para > 4 m y suprimir el anuncio.
+/// Decisión posterior: retornar el valor real para que SafetyService anuncie "a más de 4 metros".
+/// El umbral maxAlertDistanceMeters se conserva como referencia para SafetyService.
 struct DepthSampler {
     static let maxAlertDistanceMeters: Float = 4.0
 
@@ -58,8 +61,7 @@ struct DepthSampler {
 
         guard !samples.isEmpty else { return nil }
         samples.sort()
-        let median = samples[samples.count / 2]
-        return median <= maxAlertDistanceMeters ? median : nil
+        return samples[samples.count / 2]
     }
 }
 #endif
