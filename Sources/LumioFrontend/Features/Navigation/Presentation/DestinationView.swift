@@ -3,6 +3,9 @@ import SwiftUI
 
 struct DestinationView: View {
     @StateObject private var model: DestinationViewModel
+    #if os(iOS) && DEBUG
+    @EnvironmentObject var debugContainer: DebugSafetyContainer
+    #endif
 
     init(service: any NavigationPlanning) {
         _model = StateObject(wrappedValue: DestinationViewModel(service: service))
@@ -32,10 +35,21 @@ struct DestinationView: View {
                 }
             }
             Section {
+                #if os(iOS) && DEBUG
+                if let service = debugContainer.service {
+                    DebugSafetySection(service: service)
+                } else {
+                    FeatureStatusView(
+                        title: "SafetyService no disponible",
+                        message: "Falta yolo26n_640_int8.mlpackage en Copy Bundle Resources del target lumio."
+                    )
+                }
+                #else
                 FeatureStatusView(
                     title: "Asistencia aún no disponible",
                     message: "La cámara, las alertas y la reproducción de audio están pendientes de integración."
                 )
+                #endif
             }
         }
         .navigationTitle("Lumio")
