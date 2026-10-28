@@ -12,6 +12,9 @@ targets:
 
     sources:
       - path: Sources/LumioFrontend
+      # Xcode compiles .mlpackage → .mlmodelc via coremlc (Compile Sources build phase).
+      # Loaded at runtime with Bundle.main.url(forResource:withExtension:"mlmodelc").
+      - path: Resources/yolo26n_640_int8.mlpackage
 
     settings:
       base:
@@ -20,6 +23,7 @@ targets:
         PRODUCT_MODULE_NAME: LumioFrontend
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_NSCameraUsageDescription: "Lumio usa la cámara para detectar obstáculos y avisarte por audio."
         GENERATE_INFOPLIST_FILE: YES
         SWIFT_VERSION: "5.0"
 
