@@ -21,7 +21,9 @@ final class SpeechAudioPlayer: NSObject, AudioPlaying, AVSpeechSynthesizerDelega
         try session.setActive(true)
         #endif
         let utterance = AVSpeechUtterance(string: message.text)
-        utterance.voice = AVSpeechSynthesisVoice(language: "es")
+        // es-MX: iOS pronuncia "0,3" como "cero coma tres" (separador decimal español).
+        // Si el dispositivo no tiene la voz es-MX descargada, iOS cae en la más cercana disponible.
+        utterance.voice = AVSpeechSynthesisVoice(language: "es-MX")
         attempts[ObjectIdentifier(utterance)] = token
         synthesizer.speak(utterance)
     }
