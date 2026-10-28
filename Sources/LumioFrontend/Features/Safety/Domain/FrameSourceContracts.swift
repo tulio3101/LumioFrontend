@@ -17,5 +17,9 @@ protocol FrameSource: AnyObject {
     var frames: AsyncStream<CapturedFrame> { get }
     func start() throws
     func stop()
+    /// Called by the consumer (DetectionPipeline) when it finishes processing a frame,
+    /// allowing the source to accept the next one. Part of the single-frame gate pattern
+    /// that prevents ARFrame accumulation (ARKit warns when >3 frames are retained).
+    func frameProcessingComplete()
 }
 #endif
