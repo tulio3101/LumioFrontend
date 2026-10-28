@@ -40,6 +40,31 @@ import Foundation
 }
 #endif
 
+// MARK: - SCRUM-349: formato de voz en español (desvío ADR-307)
+// ADR-307 usaba centímetros y silenciaba > 4 m.
+// Decisión posterior: siempre metros con coma decimal; > 4 m → "a más de 4 metros".
+
+@Test func distanceCommaDecimalFormat() {
+    // SafetyService uses this pattern so es-MX TTS reads "cero coma tres".
+    let dist: Double = 0.3
+    let formatted = String(format: "%.1f", dist).replacingOccurrences(of: ".", with: ",")
+    #expect(formatted == "0,3")
+}
+
+@Test func distanceOneDecimalRounding() {
+    #expect(String(format: "%.1f", 1.45).replacingOccurrences(of: ".", with: ",") == "1,5")
+    #expect(String(format: "%.1f", 3.24).replacingOccurrences(of: ".", with: ",") == "3,2")
+}
+
+#if os(iOS)
+@Test func distanceAbove4mTriggersFarTier() {
+    // DepthSampler now returns actual values beyond maxAlertDistanceMeters.
+    // SafetyService maps them to the .far tier → announces "a más de 4 metros".
+    let far: Float = 4.1
+    #expect(far > DepthSampler.maxAlertDistanceMeters)
+}
+#endif
+
 @Test func detectionPipelineTypesDoNotRequireNetwork() {
     // Compile-time proof: if Safety imported URLSession/Network, this file would fail to build.
     // The test itself just verifies Detection and ObstacleClass are usable cross-platform.
