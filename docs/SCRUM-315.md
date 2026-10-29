@@ -71,3 +71,21 @@ sin iniciar un trayecto real para probar estos diálogos.
     fallos; estas condiciones no se consideran validadas por pruebas simuladas.
 
 El cierre de la HU requiere compilación iOS exitosa y evidencia de estas pruebas.
+
+## Regresión: Configurar no abre la explicación
+
+Se aplica estilo borderless a los botones de la lista para aislar sus acciones. El
+estilo automático de List puede activar varios botones de la misma fila: Escuchar
+estado inicia la voz y el guard de Configurar impide entonces abrir la explicación.
+Esta es una causa probable identificada al revisar el código; falta confirmar en
+dispositivo que explica el fallo reportado.
+
+Con un IPA del commit corregido y micrófono Sin solicitar:
+
+1. Pulsar únicamente Configurar micrófono: debe abrir Antes de continuar, sin
+   reproducir el mensaje de Escuchar estado.
+2. Pulsar Ahora no y después Escuchar estado: debe reproducir el estado sin abrir
+   la explicación ni solicitar autorización.
+3. Repetir ambos pasos con VoiceOver y doble toque sobre cada control.
+4. Confirmar que Continuar con Micrófono permanece visible y se habilita al
+   finalizar la explicación.

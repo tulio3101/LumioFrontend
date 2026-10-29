@@ -44,6 +44,9 @@ struct PermissionsView: View {
                 Section("Último mensaje") { Text(model.message) }
             }
         }
+        // List usa estilo automático: varios botones de una fila pueden activarse juntos.
+        // Cada acción debe responder únicamente al botón que el usuario activa.
+        .buttonStyle(.borderless)
         .navigationTitle("Permisos")
         .task { await model.refresh() }
         .onChange(of: scenePhase) { phase in
