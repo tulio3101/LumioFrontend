@@ -8,7 +8,11 @@ struct LumioApp: App {
 
     var body: some Scene {
         WindowGroup {
+            #if os(iOS)
+            RootView(navigationService: dependencies.navigationService, permissions: dependencies.permissions)
+            #else
             RootView(navigationService: dependencies.navigationService)
+            #endif
         }
     }
 }

@@ -21,6 +21,10 @@ targets:
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_NSCameraUsageDescription: "Lumio utiliza la cámara para detectar obstáculos durante la asistencia."
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Lumio utiliza tu ubicación para calcular rutas desde tu posición y guiarte mientras usas la app."
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "Lumio utiliza el micrófono para escuchar el destino que indicas por voz."
+        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "Lumio utiliza el reconocimiento de voz para transcribir y confirmar tu destino."
         SWIFT_VERSION: "5.0"
 
   lumioTests:
