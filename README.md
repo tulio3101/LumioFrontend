@@ -45,13 +45,15 @@ Sources/LumioFrontend/
   LumioFrontend.swift       Entrada @main (SwiftUI en Apple)
   App/                     Composición de dependencias y navegación raíz
   Core/                    Transporte HTTP y errores compartidos
-  Shared/UI/               Componentes visuales reutilizables
+  Shared/UI/               Componentes visuales reutilizables y tokens de color
+  Resources/               Recursos del target (declarados en Package.swift)
   Features/
     Navigation/            Domain, Data, Presentation: ejemplo completo de capas
     Safety/Domain/         Eventos y contrato de monitor local
     Audio/                 Domain, Application (árbitro), Data (reproductor nativo)
     Narration/             Contrato local y DTOs del backend
-    Users/Domain/          Perfil y contrato de carga
+    Users/                 Perfil, sesión y formularios de registro/login (sin backend)
+    Welcome/Presentation/  Bienvenida sin sesión activa
     Places/Domain/         Lugares guardados y contrato de carga
     Settings/Presentation/ Preferencias (pantalla inicial)
 Tests/LumioFrontendTests/

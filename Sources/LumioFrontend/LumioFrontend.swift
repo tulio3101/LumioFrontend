@@ -8,7 +8,11 @@ struct LumioApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView(navigationService: dependencies.navigationService)
+            RootView(
+                sessionService: dependencies.sessionService,
+                authenticationService: dependencies.authenticationService,
+                navigationService: dependencies.navigationService
+            )
         }
     }
 }
