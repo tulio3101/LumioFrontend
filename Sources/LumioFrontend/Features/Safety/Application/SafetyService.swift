@@ -223,6 +223,16 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
         case .chair:         return "silla"
         case .dog:           return "perro"
         case .pottedPlant:   return "planta"
+        case .diningTable:   return "mesa"
+        case .bed:           return "cama"
+        case .couch:         return "sofá"
+        case .toilet:        return "inodoro"
+        case .refrigerator:  return "nevera"
+        case .tv:            return "televisor"
+        case .laptop:        return "portátil"
+        case .suitcase:      return "maleta"
+        case .backpack:      return "mochila"
+        case .umbrella:      return "sombrilla"
         }
     }
 }

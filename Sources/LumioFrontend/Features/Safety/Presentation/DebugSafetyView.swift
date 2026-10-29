@@ -91,12 +91,12 @@ struct DetectionBoxesOverlay: View {
             ForEach(Array(detections.enumerated()), id: \.offset) { _, det in
                 let r = boxRect(det.boundingBox, in: geo.size)
                 Rectangle()
-                    .stroke(Color.yellow, lineWidth: 2)
+                    .stroke(Color(uiColor: .systemGreen), lineWidth: 2)
                     .frame(width: r.width, height: r.height)
                     .position(x: r.midX, y: r.midY)
                 Text(label(for: det))
                     .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(.yellow)
+                    .foregroundColor(Color(uiColor: .systemGreen))
                     .shadow(color: .black, radius: 1)
                     .position(x: r.midX, y: max(r.minY - 8, 8))
             }

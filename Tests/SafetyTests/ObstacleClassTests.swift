@@ -20,6 +20,17 @@ import CoreGraphics
         ("chair",         .chair),
         ("dog",           .dog),
         ("potted plant",  .pottedPlant),
+        // Interior COCO classes added for indoor navigation
+        ("dining table",  .diningTable),
+        ("bed",           .bed),
+        ("couch",         .couch),
+        ("toilet",        .toilet),
+        ("refrigerator",  .refrigerator),
+        ("tv",            .tv),
+        ("laptop",        .laptop),
+        ("suitcase",      .suitcase),
+        ("backpack",      .backpack),
+        ("umbrella",      .umbrella),
     ]
     for (label, expected) in cases {
         #expect(ObstacleClass.from(cocoLabel: label) == expected)
@@ -27,9 +38,9 @@ import CoreGraphics
 }
 
 @Test func nonMobilityCocoClassesReturnNil() {
+    // couch/bed/refrigerator removed — they are now mobility classes.
     let nonMobility = [
-        "airplane", "cat", "couch", "bed", "refrigerator",
-        "toothbrush", "boat", "sheep", "cow", "horse", "",
+        "airplane", "cat", "toothbrush", "boat", "sheep", "cow", "horse", "",
     ]
     for label in nonMobility {
         #expect(ObstacleClass.from(cocoLabel: label) == nil)
