@@ -1,7 +1,8 @@
-/// Marcador explícito: la autenticación aún no existe, así que nunca hay sesión guardada.
-/// Sustituir por un adaptador que lea los tokens de Keychain cuando exista el login.
-struct UnavailableSessionService: SessionRestoring {
+/// Marcador sin backend configurado: nunca hay sesión guardada que restaurar ni cerrar.
+struct UnavailableSessionService: SessionRestoring, SessionEnding {
     func hasActiveSession() -> Bool {
         false
     }
+
+    func endSession() async {}
 }
