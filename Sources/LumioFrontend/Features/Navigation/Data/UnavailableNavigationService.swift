@@ -1,11 +1,22 @@
 /// Marcador para plataformas sin MapKit/CoreLocation (Linux, macOS en SwiftPM): no simula
 /// una ruta válida ni activa el modo de asistencia.
-struct UnavailableNavigationService: RouteCreating {
+struct UnavailableNavigationService: RouteCreating, RouteModifying {
     func createRoute(to destination: DestinationRequest) async throws -> ActiveRoute {
+        throw FeatureUnavailable.navigation
+    }
+
+    func changeDestination(to destination: DestinationRequest) async throws -> ActiveRoute {
         throw FeatureUnavailable.navigation
     }
 
     func restoreActiveRoute() async -> ActiveRoute? {
         nil
     }
+}
+
+/// Copia local vacía para plataformas sin navegación.
+struct NoActiveRouteStore: ActiveRouteStoring {
+    func load() throws -> ActiveRoute? { nil }
+    func save(_ route: ActiveRoute) throws {}
+    func clear() throws {}
 }

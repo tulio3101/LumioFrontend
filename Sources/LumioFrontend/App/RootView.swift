@@ -3,8 +3,10 @@ import SwiftUI
 
 struct RootView: View {
     let routeCreator: any RouteCreating
+    let routeModifier: any RouteModifying
     let destinationSuggester: any DestinationSuggesting
     let authenticationService: any Authenticating
+    let signOut: any SigningOut
     /// Se decide antes del primer frame para no mostrar la bienvenida de forma transitoria.
     @State private var entry: AppEntry
 
@@ -12,10 +14,14 @@ struct RootView: View {
         sessionService: any SessionRestoring,
         authenticationService: any Authenticating,
         routeCreator: any RouteCreating,
-        destinationSuggester: any DestinationSuggesting
+        routeModifier: any RouteModifying,
+        destinationSuggester: any DestinationSuggesting,
+        signOut: any SigningOut
     ) {
         self.routeCreator = routeCreator
+        self.routeModifier = routeModifier
         self.destinationSuggester = destinationSuggester
+        self.signOut = signOut
         self.authenticationService = authenticationService
         _entry = State(initialValue: AppEntry(session: sessionService))
     }
@@ -36,19 +42,24 @@ struct RootView: View {
     private var home: some View {
         TabView {
             NavigationStack {
-                DestinationView(routeCreator: routeCreator, suggester: destinationSuggester)
+                DestinationView(
+                    routeCreator: routeCreator,
+                    routeModifier: routeModifier,
+                    suggester: destinationSuggester
+                )
             }
             .tabItem { Label("Trayecto", systemImage: "figure.walk") }
 
             NavigationStack {
-                SettingsView()
+                SettingsView(signOut: signOut) { entry = .welcome }
             }
             .tabItem { Label("Preferencias", systemImage: "gearshape") }
         }
         .tint(LumioColor.actionPrimary)
     }
 
-    /// Mientras no exista autenticación, solo las compilaciones DEBUG pueden llegar al inicio.
+    /// Solo DEBUG: entrar sin sesión si el backend no está disponible. Las rutas se calculan
+    /// pero quedan pendientes de guardar en el servidor.
     private var developmentBypass: (() -> Void)? {
         #if DEBUG
         return { entry = .home }

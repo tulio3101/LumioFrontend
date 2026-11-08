@@ -22,6 +22,16 @@ final class DestinationViewModel: ObservableObject {
         let recovery: Recovery
     }
 
+    /// Qué hace la hoja de planificación con el destino indicado.
+    enum PlanningMode: Hashable, Identifiable {
+        /// Crear Ruta (SCRUM-8).
+        case create
+        /// Modificar Ruta (SCRUM-9): misma ruta, nuevo destino.
+        case changeDestination
+
+        var id: Self { self }
+    }
+
     /// Entrada provisional: Indicar Destino por Voz (SCRUM-313) entregará el destino confirmado.
     @Published var destination = "" {
         didSet {
@@ -39,16 +49,26 @@ final class DestinationViewModel: ObservableObject {
     @Published private(set) var suggestions: [DestinationSuggestion] = []
     /// Texto que produjo las sugerencias actuales; nil si no se ha completado una búsqueda.
     @Published private(set) var suggestionsQuery: String?
+    @Published private(set) var planningMode: PlanningMode = .create
+    /// Revisión de la ruta recién actualizada, para confirmarlo en pantalla una vez.
+    @Published private(set) var updatedRevision: Int?
 
     private let routeCreator: any RouteCreating
+    private let routeModifier: any RouteModifying
     private let suggester: any DestinationSuggesting
     private let instructions = NavigationInstructionBuilder()
     private var suggestionTask: Task<Void, Never>?
     private var isApplyingSuggestion = false
 
-    /// Sin `suggester` no hay autocompletado (el destino se escribe completo).
-    init(routeCreator: any RouteCreating, suggester: (any DestinationSuggesting)? = nil) {
+    /// Sin `suggester` no hay autocompletado (el destino se escribe completo). Sin
+    /// `routeModifier` no se puede cambiar el destino.
+    init(
+        routeCreator: any RouteCreating,
+        routeModifier: (any RouteModifying)? = nil,
+        suggester: (any DestinationSuggesting)? = nil
+    ) {
         self.routeCreator = routeCreator
+        self.routeModifier = routeModifier ?? UnavailableNavigationService()
         self.suggester = suggester ?? NoDestinationSuggestions()
     }
 
@@ -67,25 +87,41 @@ final class DestinationViewModel: ObservableObject {
         route = await routeCreator.restoreActiveRoute()
     }
 
-    /// Limpia el fallo anterior al abrir de nuevo la planificación.
-    func beginPlanning() {
+    /// Prepara la hoja. Al cambiar de destino el campo empieza vacío: se pide uno nuevo.
+    func beginPlanning(_ mode: PlanningMode) {
         guard !isLoading else { return }
         failure = nil
+        if mode == .changeDestination {
+            destination = ""
+        }
+        planningMode = mode
     }
 
     // MARK: Crear ruta
 
-    /// Con el destino vacío también se llama al servicio: así el aviso se locuta y vibra
-    /// igual que cualquier otro fallo, y la pantalla lo muestra junto al campo.
+    /// Envía el texto escrito según el modo de la hoja. Con el destino vacío también se
+    /// llama al servicio: así el aviso se locuta y vibra igual que cualquier otro fallo.
     @discardableResult
-    func createRoute() async -> Bool {
-        await createRoute(to: .query(destination))
+    func submitDestination() async -> Bool {
+        switch planningMode {
+        case .create: return await createRoute(to: .query(destination))
+        case .changeDestination: return await changeDestination(to: .query(destination))
+        }
     }
 
     /// Punto de entrada para un destino ya confirmado (por ejemplo, por voz).
     @discardableResult
     func createRoute(to request: DestinationRequest) async -> Bool {
-        await perform(displayName: Self.name(of: request)) { request }
+        planningMode = .create
+        return await perform(displayName: Self.name(of: request)) { request }
+    }
+
+    /// Modificar Ruta. Punto de entrada de Indicar Destino por Voz (SCRUM-313): el dictado
+    /// confirmado llega aquí igual que en Crear Ruta.
+    @discardableResult
+    func changeDestination(to request: DestinationRequest) async -> Bool {
+        planningMode = .changeDestination
+        return await perform(displayName: Self.name(of: request)) { request }
     }
 
     /// Elegir una sugerencia confirma el destino. Si no se puede ubicar el lugar exacto,
@@ -104,11 +140,15 @@ final class DestinationViewModel: ObservableObject {
         }
     }
 
+    /// Ejecuta la operación del modo actual. Si cambiar el destino falla, `route` no cambia:
+    /// la ruta anterior sigue activa.
     private func perform(
         displayName: String?,
         request makeRequest: () async -> DestinationRequest
     ) async -> Bool {
         guard !isLoading else { return false }
+        let mode = planningMode
+        let previous = route
         isLoading = true
         failure = nil
         pendingDestination = displayName
@@ -118,10 +158,22 @@ final class DestinationViewModel: ObservableObject {
             pendingDestination = nil
         }
         do {
-            route = try await routeCreator.createRoute(to: await makeRequest())
+            let request = await makeRequest()
+            switch mode {
+            case .create:
+                route = try await routeCreator.createRoute(to: request)
+                updatedRevision = nil
+            case .changeDestination:
+                let changed = try await routeModifier.changeDestination(to: request)
+                route = changed
+                updatedRevision = changed.revision
+            }
             return true
         } catch let error as RouteCreationError {
-            failure = Failure(message: RouteAnnouncements.failure(error), recovery: Self.recovery(for: error))
+            let message = mode == .changeDestination
+                ? RouteAnnouncements.modificationFailure(error, keeping: previous)
+                : RouteAnnouncements.failure(error)
+            failure = Failure(message: message, recovery: Self.recovery(for: error))
         } catch FeatureUnavailable.navigation {
             failure = Failure(
                 message: "La creación de rutas no está disponible en esta plataforma.",
@@ -164,12 +216,14 @@ final class DestinationViewModel: ObservableObject {
 
     private static func recovery(for error: RouteCreationError) -> Failure.Recovery {
         switch error {
-        case .emptyDestination, .destinationNotFound, .noRouteAvailable:
+        case .emptyDestination, .destinationNotFound, .noRouteAvailable, .sameDestination:
             return .editDestination
         case .locationPermissionDenied:
             return .openSettings
         case .locationUnavailable, .localStorageFailed, .serviceUnavailable:
             return .retry
+        case .noActiveRoute:
+            return .none
         }
     }
 

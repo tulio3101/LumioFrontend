@@ -34,15 +34,36 @@ enum SpokenDuration {
         guard rest > 0 else { return hoursText }
         return "\(hoursText) y \(rest == 1 ? "1 minuto" : "\(rest) minutos")"
     }
+
+    /// Duración aproximada concordada: «unos 4 minutos», «alrededor de 1 minuto».
+    static func approximate(seconds: Double) -> String? {
+        guard let duration = text(seconds: seconds) else { return nil }
+        return duration.hasPrefix("1 ") ? "alrededor de \(duration)" : "unos \(duration)"
+    }
 }
 
-/// Textos que se locutan en Crear Ruta. La pantalla muestra los mismos.
+/// Textos que se locutan en Crear Ruta y Modificar Ruta. La pantalla muestra los mismos.
 enum RouteAnnouncements {
     static func ready(_ route: ActiveRoute) -> String {
-        var text = "Ruta lista hacia \(route.destination.name). "
-            + "Son \(SpokenDistance.text(meters: route.distanceMeters))"
-        if let duration = SpokenDuration.text(seconds: route.expectedTravelTimeSeconds) {
-            text += ", unos \(duration) caminando"
+        "Ruta lista hacia \(route.destination.name). " + summary(route)
+    }
+
+    static func updated(_ route: ActiveRoute) -> String {
+        "Ruta actualizada hacia \(route.destination.name). " + summary(route)
+    }
+
+    /// El cambio de destino falló: se dice por qué y que la ruta anterior sigue activa.
+    static func modificationFailure(_ error: RouteCreationError, keeping route: ActiveRoute?) -> String {
+        let reason = failure(error)
+        guard let route, error != .noActiveRoute else { return reason }
+        return "No se pudo cambiar el destino. \(reason) "
+            + "Sigues con la ruta hacia \(route.destination.name)."
+    }
+
+    private static func summary(_ route: ActiveRoute) -> String {
+        var text = "Son \(SpokenDistance.text(meters: route.distanceMeters))"
+        if let duration = SpokenDuration.approximate(seconds: route.expectedTravelTimeSeconds) {
+            text += ", \(duration) caminando"
         }
         return text + "."
     }
@@ -66,6 +87,10 @@ enum RouteAnnouncements {
         case .serviceUnavailable:
             return "No se pudo calcular la ruta en este momento. "
                 + "Revisa tu conexión e intenta de nuevo."
+        case .noActiveRoute:
+            return "No hay una ruta activa para cambiar. Indica un destino para crear una."
+        case .sameDestination:
+            return "Ese ya es el destino de tu ruta."
         }
     }
 }
@@ -73,9 +98,14 @@ enum RouteAnnouncements {
 /// Genera las instrucciones paso a paso y sus mensajes de navegación (prioridad 2).
 struct NavigationInstructionBuilder {
     static let failureContextID = "route-creation"
+    static let modificationFailureContextID = "route-modification"
 
-    static func contextID(for routeID: UUID) -> String {
-        "route-\(routeID.uuidString)"
+    /// Agrupa los mensajes de las instrucciones vigentes. Cada cambio de destino crea un
+    /// contexto nuevo (`-r<revision>`): invalidar el anterior no silencia las nuevas
+    /// instrucciones ni las hace pasar por duplicadas de las viejas.
+    static func contextID(for route: ActiveRoute) -> String {
+        let base = "route-\(route.id.uuidString)"
+        return route.revision == 0 ? base : "\(base)-r\(route.revision)"
     }
 
     /// Normaliza los pasos del proveedor: descarta los que no tienen instrucción (MapKit
@@ -101,12 +131,12 @@ struct NavigationInstructionBuilder {
         return "\(step.instruction) y continúa \(SpokenDistance.text(meters: step.distanceMeters))."
     }
 
-    func message(for step: RouteStep, routeID: UUID, now: Date) -> AudioMessage {
+    func message(for step: RouteStep, in route: ActiveRoute, now: Date) -> AudioMessage {
         AudioMessage(
             text: spokenText(for: step),
             priority: .routeInformation,
             createdAt: now,
-            contextID: Self.contextID(for: routeID),
+            contextID: Self.contextID(for: route),
             deduplicationKey: "step-\(step.order)"
         )
     }
@@ -116,8 +146,30 @@ struct NavigationInstructionBuilder {
             text: RouteAnnouncements.ready(route),
             priority: .routeInformation,
             createdAt: now,
-            contextID: Self.contextID(for: route.id),
+            contextID: Self.contextID(for: route),
             deduplicationKey: "route-ready"
+        )
+    }
+
+    func updatedMessage(for route: ActiveRoute, now: Date) -> AudioMessage {
+        AudioMessage(
+            text: RouteAnnouncements.updated(route),
+            priority: .routeInformation,
+            createdAt: now,
+            contextID: Self.contextID(for: route),
+            deduplicationKey: "route-updated"
+        )
+    }
+
+    func modificationFailureMessage(
+        _ error: RouteCreationError, keeping route: ActiveRoute?, now: Date
+    ) -> AudioMessage {
+        AudioMessage(
+            text: RouteAnnouncements.modificationFailure(error, keeping: route),
+            priority: .routeInformation,
+            createdAt: now,
+            contextID: Self.modificationFailureContextID,
+            deduplicationKey: "failure-\(error)"
         )
     }
 

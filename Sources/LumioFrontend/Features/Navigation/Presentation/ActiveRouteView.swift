@@ -5,7 +5,7 @@ import SwiftUI
 struct ActiveRouteView: View {
     @ObservedObject var model: DestinationViewModel
 
-    @State private var isPlanning = false
+    @State private var isChangingDestination = false
     @AccessibilityFocusState private var summaryHasFocus: Bool
 
     var body: some View {
@@ -24,9 +24,9 @@ struct ActiveRouteView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
         #endif
-        .sheet(isPresented: $isPlanning) {
-            RoutePlannerView(model: model) {
-                isPlanning = false
+        .sheet(isPresented: $isChangingDestination) {
+            RoutePlannerView(model: model, mode: .changeDestination) {
+                isChangingDestination = false
                 focusSummary()
             }
         }
@@ -36,6 +36,13 @@ struct ActiveRouteView: View {
     private func content(_ route: ActiveRoute) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
+                if model.updatedRevision == route.revision {
+                    LumioStatusBanner(
+                        .success,
+                        title: "Ruta actualizada",
+                        message: "Estas son las nuevas indicaciones desde donde estabas al cambiar el destino."
+                    )
+                }
                 RouteSummaryCard(route: route, headerFocus: $summaryHasFocus)
                 if route.isPendingBackendSync {
                     LumioStatusBanner(
@@ -46,11 +53,12 @@ struct ActiveRouteView: View {
                 }
                 stepsSection(route)
                 Button {
-                    isPlanning = true
+                    isChangingDestination = true
                 } label: {
                     Label("Cambiar destino", systemImage: "arrow.triangle.swap")
                 }
                 .buttonStyle(LumioSecondaryButtonStyle())
+                .accessibilityHint("Calcula una ruta nueva desde donde estás. La actual sigue activa hasta que la nueva esté lista.")
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 20)
@@ -149,8 +157,8 @@ struct RouteSummaryCard: View {
         )
         RouteMetric(
             title: "Caminando",
-            value: SpokenDuration.text(seconds: route.expectedTravelTimeSeconds).map { "Unos \($0)" }
-                ?? "Sin estimación",
+            value: SpokenDuration.approximate(seconds: route.expectedTravelTimeSeconds)
+                .map { $0.prefix(1).uppercased() + $0.dropFirst() } ?? "Sin estimación",
             systemImage: "clock"
         )
         RouteMetric(

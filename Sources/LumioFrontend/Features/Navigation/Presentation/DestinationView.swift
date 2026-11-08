@@ -2,19 +2,26 @@
 import SwiftUI
 
 /// Inicio del trayecto. Una sola acción principal: sin ruta, «Indicar destino»; con ruta
-/// activa, «Ver indicaciones». Planificar ocurre en su propia hoja (RoutePlannerView) y el
-/// detalle de la ruta en su propia pantalla (ActiveRouteView).
+/// activa, «Ver indicaciones» (y «Cambiar destino» como secundaria). Planificar o cambiar el
+/// destino ocurre en su propia hoja (RoutePlannerView) y el detalle de la ruta en su propia
+/// pantalla (ActiveRouteView).
 struct DestinationView: View {
     @StateObject private var model: DestinationViewModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isPlanning = false
+    @State private var planning: DestinationViewModel.PlanningMode?
     @State private var showsRoute = false
     /// La hoja se cierra antes de navegar para que ambas transiciones no se mezclen.
     @State private var opensRouteAfterPlanning = false
     @State private var hasAppeared = false
 
-    init(routeCreator: any RouteCreating, suggester: (any DestinationSuggesting)? = nil) {
-        _model = StateObject(wrappedValue: DestinationViewModel(routeCreator: routeCreator, suggester: suggester))
+    init(
+        routeCreator: any RouteCreating,
+        routeModifier: (any RouteModifying)? = nil,
+        suggester: (any DestinationSuggesting)? = nil
+    ) {
+        _model = StateObject(wrappedValue: DestinationViewModel(
+            routeCreator: routeCreator, routeModifier: routeModifier, suggester: suggester
+        ))
     }
 
     var body: some View {
@@ -47,10 +54,10 @@ struct DestinationView: View {
         .navigationDestination(isPresented: $showsRoute) {
             ActiveRouteView(model: model)
         }
-        .sheet(isPresented: $isPlanning, onDismiss: openRouteIfReady) {
-            RoutePlannerView(model: model) {
+        .sheet(item: $planning, onDismiss: openRouteIfReady) { mode in
+            RoutePlannerView(model: model, mode: mode) {
                 opensRouteAfterPlanning = true
-                isPlanning = false
+                planning = nil
             }
         }
         .tint(LumioColor.actionPrimary)
@@ -91,7 +98,9 @@ struct DestinationView: View {
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
 
-            Button(action: startPlanning) {
+            Button {
+                planning = .create
+            } label: {
                 Label("Indicar destino", systemImage: "magnifyingglass")
             }
             .buttonStyle(LumioPrimaryButtonStyle())
@@ -127,11 +136,13 @@ struct DestinationView: View {
                 .buttonStyle(LumioPrimaryButtonStyle())
                 .accessibilityHint("\(route.steps.count == 1 ? "1 paso" : "\(route.steps.count) pasos") hasta \(route.destination.name).")
 
-                Button(action: startPlanning) {
-                    Label("Nueva ruta", systemImage: "magnifyingglass")
+                Button {
+                    planning = .changeDestination
+                } label: {
+                    Label("Cambiar destino", systemImage: "arrow.triangle.swap")
                 }
                 .buttonStyle(LumioSecondaryButtonStyle())
-                .accessibilityHint("Reemplaza la ruta activa por una nueva.")
+                .accessibilityHint("Calcula una ruta nueva desde donde estás. La actual sigue activa hasta que la nueva esté lista.")
             }
         }
     }
@@ -193,10 +204,6 @@ struct DestinationView: View {
     }
 
     // MARK: Acciones
-
-    private func startPlanning() {
-        isPlanning = true
-    }
 
     private func openRouteIfReady() {
         guard opensRouteAfterPlanning else { return }

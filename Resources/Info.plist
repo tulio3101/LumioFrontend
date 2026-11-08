@@ -17,7 +17,5 @@
 	</dict>
 	<key>LumioAPIBaseURL</key>
 	<string>http://localhost:8000</string>
-	<key>LumioDevUserID</key>
-	<string></string>
 </dict>
 </plist>

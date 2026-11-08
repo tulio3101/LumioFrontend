@@ -1,6 +1,7 @@
 import Foundation
 
-// Refleja el contrato de PUT /places/routes/active del backend (RouteCreate / ActiveRoute).
+// Reflejan el contrato de /places/routes del backend (RouteCreate, RouteDestinationChange y
+// ActiveRoute). Cambiar destino envía el mismo cuerpo que crear la ruta.
 
 struct PlaceDTO: Codable, Equatable {
     let name: String

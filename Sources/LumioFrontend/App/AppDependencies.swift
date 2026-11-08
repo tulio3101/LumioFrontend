@@ -2,51 +2,61 @@
 @MainActor
 struct AppDependencies {
     let routeCreator: any RouteCreating
+    let routeModifier: any RouteModifying
     let destinationSuggester: any DestinationSuggesting
     let sessionService: any SessionRestoring
     let authenticationService: any Authenticating
+    let signOut: any SigningOut
     #if canImport(AVFoundation)
     let audioArbiter: AudioArbiterService
     #endif
 
-    init(
-        routeCreator: (any RouteCreating)? = nil,
-        destinationSuggester: (any DestinationSuggesting)? = nil,
-        sessionService: any SessionRestoring = UnavailableSessionService(),
-        authenticationService: any Authenticating = UnavailableAuthenticationService(),
-        configuration: AppConfiguration = .main
-    ) {
-        self.sessionService = sessionService
-        self.authenticationService = authenticationService
+    init(configuration: AppConfiguration = .main) {
         #if os(iOS)
-        self.destinationSuggester = destinationSuggester ?? MapKitDestinationSuggester()
-        #else
-        self.destinationSuggester = destinationSuggester ?? NoDestinationSuggestions()
-        #endif
-        #if canImport(AVFoundation)
         let arbiter = AudioArbiterService(player: SpeechAudioPlayer())
-        self.audioArbiter = arbiter
+        audioArbiter = arbiter
+
+        // Sesión: tokens en Keychain; las rutas se envían con el access token.
+        let http = URLSessionHTTPClient()
+        let tokens = KeychainTokenStore()
+        let authAPI = configuration.apiBaseURL.map { AuthAPI(client: http, baseURL: $0) }
+        let session = StoredSessionService(api: authAPI, store: tokens)
+        sessionService = session
+        authenticationService = RemoteAuthenticationService(api: authAPI, store: tokens)
+        let routeClient: any HTTPClient = authAPI.map {
+            AuthorizedHTTPClient(base: http, api: $0, store: tokens)
+        } ?? http
+
+        // Crear Ruta y Modificar Ruta comparten copia local, backend, audio y háptica.
+        let store = FileActiveRouteStore(fileURL: FileActiveRouteStore.defaultFileURL())
+        let sync = RemoteActiveRouteService(client: routeClient, baseURL: configuration.apiBaseURL)
+        let location = CoreLocationCurrentLocationProvider()
+        let geocoder = MapKitDestinationGeocoder()
+        let calculator = MapKitWalkingRouteCalculator()
+        let haptics = UIKitHapticFeedback()
+        routeCreator = RouteCreationService(
+            location: location, geocoder: geocoder, calculator: calculator,
+            store: store, sync: sync, arbiter: arbiter, haptics: haptics
+        )
+        routeModifier = RouteModificationService(
+            location: location, geocoder: geocoder, calculator: calculator,
+            store: store, sync: sync, arbiter: arbiter, haptics: haptics
+        )
+        destinationSuggester = MapKitDestinationSuggester()
+        signOut = SignOutService(session: session, routes: store, arbiter: arbiter)
+        #else
+        #if canImport(AVFoundation)
+        audioArbiter = AudioArbiterService(player: SpeechAudioPlayer())
         #endif
-        if let routeCreator {
-            self.routeCreator = routeCreator
-        } else {
-            #if os(iOS)
-            self.routeCreator = RouteCreationService(
-                location: CoreLocationCurrentLocationProvider(),
-                geocoder: MapKitDestinationGeocoder(),
-                calculator: MapKitWalkingRouteCalculator(),
-                store: FileActiveRouteStore(fileURL: FileActiveRouteStore.defaultFileURL()),
-                sync: RemoteActiveRouteService(
-                    client: URLSessionHTTPClient(),
-                    baseURL: configuration.apiBaseURL,
-                    userID: configuration.devUserID
-                ),
-                arbiter: arbiter,
-                haptics: UIKitHapticFeedback()
-            )
-            #else
-            self.routeCreator = UnavailableNavigationService()
-            #endif
-        }
+        let navigation = UnavailableNavigationService()
+        routeCreator = navigation
+        routeModifier = navigation
+        destinationSuggester = NoDestinationSuggestions()
+        sessionService = UnavailableSessionService()
+        authenticationService = UnavailableAuthenticationService()
+        signOut = SignOutService(
+            session: UnavailableSessionService(), routes: NoActiveRouteStore(), arbiter: nil
+        )
+        #endif
     }
 }
