@@ -18,6 +18,10 @@ enum LumioColor {
     static let controlBorder = Color(light: 0x70838D, dark: 0x829BAA)
     static let errorText = Color(light: 0xB42318, dark: 0xFFB4AB)
     static let errorBackground = Color(light: 0xFDECE9, dark: 0x452522)
+    static let successText = Color(light: 0x18734A, dark: 0x83DFAC)
+    static let successBackground = Color(light: 0xEAF6EF, dark: 0x16392B)
+    static let warningText = Color(light: 0x875400, dark: 0xFFD581)
+    static let warningBackground = Color(light: 0xFFF4D6, dark: 0x40321B)
     /// Solo para el símbolo y el nombre de marca, nunca para acciones.
     /// En oscuro usa el azul claro porque #087FAE no contrasta con el fondo.
     static let brand = Color(light: 0x087FAE, dark: 0x76D4F5)

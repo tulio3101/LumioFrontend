@@ -21,13 +21,15 @@ import Testing
     #expect(response.priority == .normal)
 }
 
-@Test func navigationStubDoesNotInventRoutes() async {
+@Test @MainActor func navigationStubDoesNotInventRoutes() async {
+    let service = UnavailableNavigationService()
     do {
-        _ = try await UnavailableNavigationService().planRoute(to: "Universidad")
-        Issue.record("El scaffold no debe devolver una ruta ficticia")
+        _ = try await service.createRoute(to: .query("Universidad"))
+        Issue.record("Sin MapKit no debe devolverse una ruta ficticia")
     } catch FeatureUnavailable.navigation {
-        // Esperado hasta integrar MapKit.
+        // Esperado en plataformas sin MapKit/CoreLocation.
     } catch {
         Issue.record("Error inesperado: \(error)")
     }
+    #expect(await service.restoreActiveRoute() == nil)
 }
