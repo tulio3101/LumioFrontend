@@ -11,7 +11,8 @@ struct LumioApp: App {
             RootView(
                 sessionService: dependencies.sessionService,
                 authenticationService: dependencies.authenticationService,
-                navigationService: dependencies.navigationService
+                routeCreator: dependencies.routeCreator,
+                destinationSuggester: dependencies.destinationSuggester
             )
         }
     }

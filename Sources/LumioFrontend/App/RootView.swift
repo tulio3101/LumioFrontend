@@ -2,7 +2,8 @@
 import SwiftUI
 
 struct RootView: View {
-    let navigationService: any NavigationPlanning
+    let routeCreator: any RouteCreating
+    let destinationSuggester: any DestinationSuggesting
     let authenticationService: any Authenticating
     /// Se decide antes del primer frame para no mostrar la bienvenida de forma transitoria.
     @State private var entry: AppEntry
@@ -10,9 +11,11 @@ struct RootView: View {
     init(
         sessionService: any SessionRestoring,
         authenticationService: any Authenticating,
-        navigationService: any NavigationPlanning
+        routeCreator: any RouteCreating,
+        destinationSuggester: any DestinationSuggesting
     ) {
-        self.navigationService = navigationService
+        self.routeCreator = routeCreator
+        self.destinationSuggester = destinationSuggester
         self.authenticationService = authenticationService
         _entry = State(initialValue: AppEntry(session: sessionService))
     }
@@ -33,15 +36,16 @@ struct RootView: View {
     private var home: some View {
         TabView {
             NavigationStack {
-                DestinationView(service: navigationService)
+                DestinationView(routeCreator: routeCreator, suggester: destinationSuggester)
             }
-            .tabItem { Label("Trayecto", systemImage: "location") }
+            .tabItem { Label("Trayecto", systemImage: "figure.walk") }
 
             NavigationStack {
                 SettingsView()
             }
             .tabItem { Label("Preferencias", systemImage: "gearshape") }
         }
+        .tint(LumioColor.actionPrimary)
     }
 
     /// Mientras no exista autenticación, solo las compilaciones DEBUG pueden llegar al inicio.

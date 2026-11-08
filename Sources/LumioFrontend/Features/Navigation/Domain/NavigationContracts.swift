@@ -1,0 +1,60 @@
+import Foundation
+
+/// Caso de uso Crear Ruta (SCRUM-8). Anuncia por audio el resultado, sea éxito o error.
+@MainActor
+protocol RouteCreating {
+    func createRoute(to destination: DestinationRequest) async throws -> ActiveRoute
+    /// Ruta activa de la copia local. Si quedó pendiente, se reintenta guardarla en el backend.
+    func restoreActiveRoute() async -> ActiveRoute?
+}
+
+/// Posición actual con precisión suficiente para iniciar una ruta (SCRUM-105).
+/// Lanza RouteCreationError.locationPermissionDenied o .locationUnavailable.
+@MainActor
+protocol CurrentLocationProviding {
+    func currentLocation() async throws -> GeoCoordinate
+}
+
+/// Convierte el destino confirmado en una ubicación válida.
+/// Lanza RouteCreationError.destinationNotFound o .serviceUnavailable.
+@MainActor
+protocol DestinationGeocoding {
+    func place(for query: String, near origin: GeoCoordinate) async throws -> RoutePlace
+}
+
+/// Ruta peatonal entre dos puntos (SCRUM-107).
+/// Lanza RouteCreationError.noRouteAvailable o .serviceUnavailable.
+@MainActor
+protocol WalkingRouteCalculating {
+    func walkingRoute(from origin: RoutePlace, to destination: RoutePlace) async throws
+        -> CalculatedRoute
+}
+
+/// Copia local de la ruta activa en el dispositivo.
+@MainActor
+protocol ActiveRouteStoring {
+    func load() throws -> ActiveRoute?
+    func save(_ route: ActiveRoute) throws
+    func clear() throws
+}
+
+/// Persistencia de la ruta activa en el backend. Devuelve el id que asigna el backend.
+@MainActor
+protocol ActiveRouteSyncing {
+    func upload(_ route: ActiveRoute) async throws -> UUID
+}
+
+enum HapticCue: Equatable {
+    case routeReady
+    case routeFailed
+}
+
+/// Acompaña los anuncios de Crear Ruta. Los patrones de giro pertenecen a Guiar Giros.
+@MainActor
+protocol HapticFeedbackPlaying {
+    func play(_ cue: HapticCue)
+}
+
+struct NoHapticFeedback: HapticFeedbackPlaying {
+    func play(_ cue: HapticCue) {}
+}
