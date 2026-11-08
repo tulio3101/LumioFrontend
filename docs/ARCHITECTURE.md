@@ -46,12 +46,12 @@ Se usa ObservableObject para conservar iOS 16. La vista posee su ViewModel con
 @StateObject; su estado publicado actualiza la presentación. No se añade Redux,
 un contenedor de inyección ni librerías de navegación para este scaffold.
 
-## Flujo de Crear Ruta (SCRUM-8)
+## Flujo de Crear Ruta (SCRUM-8) y Modificar Ruta (SCRUM-9)
 
 Pantallas (un DestinationViewModel compartido):
   DestinationView    inicio del trayecto; una acción principal según haya o no ruta activa
   RoutePlannerView   hoja para indicar el destino (con sugerencias), calcular y
-                     recuperarse de fallos
+                     recuperarse de fallos; modo `.create` o `.changeDestination`
   ActiveRouteView    resumen, estado de guardado y pasos como línea de tiempo
 El ViewModel clasifica cada fallo por su salida (corregir destino, abrir Ajustes,
 reintentar) para que la pantalla ofrezca la acción adecuada.
@@ -61,31 +61,54 @@ Sugerencias: DestinationViewModel -> DestinationSuggesting -> MapKitDestinationS
 Elegir una sugerencia confirma el destino como `DestinationRequest.place`; si no se puede
 ubicar, se usa su texto como `.query` para que el servicio locute el fallo.
 
-DestinationViewModel -> RouteCreating
-  RouteCreationService (Application), en iOS:
-    1. CurrentLocationProviding  -> CoreLocationCurrentLocationProvider (permiso y precisión)
+DestinationViewModel -> RouteCreating / RouteModifying
+  WalkingRoutePlanner (Application), común a crear y modificar:
+    1. CurrentLocationProviding  -> CoreLocationCurrentLocationProvider (lectura nueva cada vez)
     2. DestinationGeocoding      -> MapKitDestinationGeocoder (MKLocalSearch cerca del usuario)
     3. WalkingRouteCalculating   -> MapKitWalkingRouteCalculator (MKDirections, .walking)
-    4. NavigationInstructionBuilder normaliza los pasos y crea mensajes P2
-    5. ActiveRouteStoring        -> FileActiveRouteStore (copia local en Application Support)
-    6. AudioArbitrating          -> anuncio "Ruta lista" + primera instrucción (P2) y háptica
-    7. ActiveRouteSyncing        -> RemoteActiveRouteService (PUT /places/routes/active)
+    4. NavigationInstructionBuilder normaliza los pasos
+  RouteCreationService: ruta nueva -> copia local -> "Ruta lista" + primera instrucción
+  RouteModificationService: misma ruta (mismo id), revisión +1, current_step 0 -> copia
+    local -> invalida el audio del recorrido anterior -> "Ruta actualizada" + primera
+    instrucción. Si falla antes de guardar, la ruta anterior queda intacta y se locuta
+    "No se pudo cambiar el destino… Sigues con la ruta hacia X".
+  ActiveRouteSynchronizer -> RemoteActiveRouteService (con AuthorizedHTTPClient):
+    ruta nueva: PUT /places/routes/active; cambio de destino: PUT
+    /places/routes/{remoteID}/destination (si el backend ya la cerró, 404/409, se guarda
+    como ruta nueva). No sobrescribe una revisión local más nueva.
   En Linux y macOS (SwiftPM): UnavailableNavigationService.
 
+Audio de las instrucciones: cada revisión del recorrido tiene su propio `contextID`
+(`route-<id>` y luego `route-<id>-r<n>`). El árbitro deja invalidados para siempre los
+contextos y deduplica por clave dentro de un contexto, así que reutilizar el contexto
+silenciaría las instrucciones nuevas o las haría pasar por duplicadas de las viejas.
+
+## Sesión (JWT)
+
+RemoteAuthenticationService (POST /users, /users/login) guarda los tokens en
+KeychainTokenStore. AuthorizedHTTPClient añade `Authorization: Bearer`, ante un 401
+renueva una sola vez con /users/refresh y repite la petición; si el refresh se rechaza,
+borra la sesión (la ruta queda pendiente en el teléfono). StoredSessionService decide la
+pantalla inicial sin red. SignOutService (Preferencias) revoca la sesión, borra la ruta
+local y detiene el audio.
+
 La ruta está lista en cuanto existe la copia local: la guía no depende del backend.
-Si el backend falla, la ruta queda pendiente (remoteID nil) y restoreActiveRoute()
-reintenta guardarla al volver a la pantalla. Cada fallo es un RouteCreationError con
+Si el backend falla, la ruta queda pendiente (remoteID nil o hasPendingDestinationChange)
+y restoreActiveRoute() reintenta guardarla al volver a la pantalla. Cada fallo es un RouteCreationError con
 su anuncio en RouteAnnouncements, y la pantalla muestra el mismo texto. Nunca se
 locuta desde la vista ni desde el ViewModel.
 
 Contratos para las HUs siguientes:
 - Indicar Destino por Voz (SCRUM-313) entrega `DestinationRequest.query` (texto
-  confirmado) o `.place` (ya geocodificado) a `DestinationViewModel.createRoute(to:)`.
+  confirmado) o `.place` (ya geocodificado) a `DestinationViewModel.createRoute(to:)`
+  o, con una ruta activa, a `DestinationViewModel.changeDestination(to:)` (Modificar
+  Ruta exige pedir el cambio por voz con confirmación por audio).
 - Guiar Giros (SCRUM-312) lee la copia local (`ActiveRouteStoring`), usa
   `RouteStep.maneuverCoordinate` para anunciar a tiempo y
-  `NavigationInstructionBuilder.message(for:routeID:now:)` para crear el mensaje P2.
-  Todos los mensajes de una ruta comparten `contextID` = `route-<id>`; al crear una
-  ruta nueva se invalida el contexto de la anterior.
+  `NavigationInstructionBuilder.message(for:in:now:)` para crear el mensaje P2. Usa
+  siempre `NavigationInstructionBuilder.contextID(for: route)`: cambia con cada
+  revisión; al crear una ruta o cambiar su destino se invalida el contexto anterior.
+  Al cambiar el destino `currentStep` vuelve a 0.
 - Finalizar Ruta (SCRUM-10) borra la copia local con `ActiveRouteStoring.clear()`.
 
 Antes de empezar un trayecto con asistencia completa, hay que comprobar que la seguridad
@@ -99,7 +122,7 @@ local esté disponible.
 | Safety | Cámara, inferencia y distancia confiable | AVFoundation, Vision/Core ML, ARKit |
 | Navigation | Seguimiento y eventos de giro (SCRUM-312) | Crear Ruta implementada con MapKit y CoreLocation |
 | Narration | Servicio remoto y control de frecuencia | HTTPClient, POST /narration |
-| Users | Sesión, DTOs y autenticación | API /users, tokens en Keychain |
+| Users | Inicio de sesión con Google | Correo, Keychain, Bearer y refresh implementados |
 | Places | Confirmar contrato de favoritos con backend | El backend actual expone rutas, no asumir CRUD de favoritos |
 | Settings | Preferencias y consumo por TTS | Persistencia local de preferencias si se requiere |
 
