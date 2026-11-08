@@ -72,3 +72,5 @@ docs/ARCHITECTURE.md
 Lee [la guía de arquitectura y equivalencias con React](docs/ARCHITECTURE.md)
 antes de agregar una funcionalidad. Se agrupa por funcionalidad y se componen las
 vistas: no son alternativas incompatibles.
+
+a
