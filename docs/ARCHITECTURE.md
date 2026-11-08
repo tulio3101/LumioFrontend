@@ -46,16 +46,50 @@ Se usa ObservableObject para conservar iOS 16. La vista posee su ViewModel con
 @StateObject; su estado publicado actualiza la presentación. No se añade Redux,
 un contenedor de inyección ni librerías de navegación para este scaffold.
 
-## Flujo de ejemplo
+## Flujo de Crear Ruta (SCRUM-8)
 
-DestinationView -> DestinationViewModel -> NavigationPlanning
-                                      -> UnavailableNavigationService (actual)
-                                      -> MapKitNavigationService (por implementar)
+Pantallas (un DestinationViewModel compartido):
+  DestinationView    inicio del trayecto; una acción principal según haya o no ruta activa
+  RoutePlannerView   hoja para indicar el destino (con sugerencias), calcular y
+                     recuperarse de fallos
+  ActiveRouteView    resumen, estado de guardado y pasos como línea de tiempo
+El ViewModel clasifica cada fallo por su salida (corregir destino, abrir Ajustes,
+reintentar) para que la pantalla ofrezca la acción adecuada.
 
-AppDependencies selecciona la implementación. El servicio actual lanza un error
-explícito. Sustituirlo por un adaptador real o un fake de pruebas; no meter MapKit
-en la vista. El ejemplo solo calcula una ruta: empezar un trayecto requiere comprobar
-que la seguridad local esté disponible.
+Sugerencias: DestinationViewModel -> DestinationSuggesting -> MapKitDestinationSuggester
+(MKLocalSearchCompleter, espera 0,3 s tras la última tecla, mínimo 3 letras, máximo 5).
+Elegir una sugerencia confirma el destino como `DestinationRequest.place`; si no se puede
+ubicar, se usa su texto como `.query` para que el servicio locute el fallo.
+
+DestinationViewModel -> RouteCreating
+  RouteCreationService (Application), en iOS:
+    1. CurrentLocationProviding  -> CoreLocationCurrentLocationProvider (permiso y precisión)
+    2. DestinationGeocoding      -> MapKitDestinationGeocoder (MKLocalSearch cerca del usuario)
+    3. WalkingRouteCalculating   -> MapKitWalkingRouteCalculator (MKDirections, .walking)
+    4. NavigationInstructionBuilder normaliza los pasos y crea mensajes P2
+    5. ActiveRouteStoring        -> FileActiveRouteStore (copia local en Application Support)
+    6. AudioArbitrating          -> anuncio "Ruta lista" + primera instrucción (P2) y háptica
+    7. ActiveRouteSyncing        -> RemoteActiveRouteService (PUT /places/routes/active)
+  En Linux y macOS (SwiftPM): UnavailableNavigationService.
+
+La ruta está lista en cuanto existe la copia local: la guía no depende del backend.
+Si el backend falla, la ruta queda pendiente (remoteID nil) y restoreActiveRoute()
+reintenta guardarla al volver a la pantalla. Cada fallo es un RouteCreationError con
+su anuncio en RouteAnnouncements, y la pantalla muestra el mismo texto. Nunca se
+locuta desde la vista ni desde el ViewModel.
+
+Contratos para las HUs siguientes:
+- Indicar Destino por Voz (SCRUM-313) entrega `DestinationRequest.query` (texto
+  confirmado) o `.place` (ya geocodificado) a `DestinationViewModel.createRoute(to:)`.
+- Guiar Giros (SCRUM-312) lee la copia local (`ActiveRouteStoring`), usa
+  `RouteStep.maneuverCoordinate` para anunciar a tiempo y
+  `NavigationInstructionBuilder.message(for:routeID:now:)` para crear el mensaje P2.
+  Todos los mensajes de una ruta comparten `contextID` = `route-<id>`; al crear una
+  ruta nueva se invalida el contexto de la anterior.
+- Finalizar Ruta (SCRUM-10) borra la copia local con `ActiveRouteStoring.clear()`.
+
+Antes de empezar un trayecto con asistencia completa, hay que comprobar que la seguridad
+local esté disponible.
 
 ## Trabajo por funcionalidad
 
@@ -63,7 +97,7 @@ que la seguridad local esté disponible.
 | --- | --- | --- |
 | Audio | Conectar productores y validar en dispositivo | Cola/árbitro implementados; AVSpeechSynthesizer mediante AudioPlaying |
 | Safety | Cámara, inferencia y distancia confiable | AVFoundation, Vision/Core ML, ARKit |
-| Navigation | Cálculo, seguimiento y eventos de giro | MapKit y CoreLocation |
+| Navigation | Seguimiento y eventos de giro (SCRUM-312) | Crear Ruta implementada con MapKit y CoreLocation |
 | Narration | Servicio remoto y control de frecuencia | HTTPClient, POST /narration |
 | Users | Sesión, DTOs y autenticación | API /users, tokens en Keychain |
 | Places | Confirmar contrato de favoritos con backend | El backend actual expone rutas, no asumir CRUD de favoritos |
