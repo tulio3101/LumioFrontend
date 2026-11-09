@@ -77,4 +77,11 @@ enum BackendDate {
         formatter.formatOptions = [.withInternetDateTime]
         return formatter.date(from: base)?.addingTimeInterval(fraction)
     }
+
+    /// UTC con milisegundos, p. ej. «2026-11-08T10:00:00.250Z».
+    static func string(from date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.string(from: date)
+    }
 }
