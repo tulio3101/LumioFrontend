@@ -138,6 +138,9 @@ final class SpyArbiter: AudioArbitrating {
 
     func resetSession() { resets += 1 }
     func updateContext(_ context: AudioDecisionContext) { contexts.append(context) }
+    private(set) var cancelledContexts: [Set<String>] = []
+
+    func cancel(contextIDs: Set<String>) { cancelledContexts.append(contextIDs) }
 }
 
 @MainActor
