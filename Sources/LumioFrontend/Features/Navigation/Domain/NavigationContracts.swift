@@ -26,6 +26,13 @@ protocol InstructionRepeating {
     func repeatCurrentInstruction(of route: ActiveRoute) -> Bool
 }
 
+/// Consultar Ruta Actual (SCRUM-23): estado de la ruta activa según su copia local, sin
+/// backend. Siempre locuta la respuesta, también cuando no hay ruta activa.
+@MainActor
+protocol RouteStatusQuerying {
+    func queryActiveRoute() async -> RouteStatus
+}
+
 /// Posición actual con precisión suficiente para iniciar una ruta (SCRUM-105).
 /// Lanza RouteCreationError.locationPermissionDenied o .locationUnavailable.
 @MainActor

@@ -99,6 +99,8 @@ enum RouteAnnouncements {
 struct NavigationInstructionBuilder {
     static let failureContextID = "route-creation"
     static let modificationFailureContextID = "route-modification"
+    /// Respuestas de Consultar Ruta cuando no hay ruta (o no se puede leer).
+    static let statusContextID = "route-status"
 
     /// Agrupa los mensajes de las instrucciones vigentes. Cada cambio de destino crea un
     /// contexto nuevo (`-r<revision>`): invalidar el anterior no silencia las nuevas
@@ -170,6 +172,25 @@ struct NavigationInstructionBuilder {
             createdAt: now,
             contextID: Self.modificationFailureContextID,
             deduplicationKey: "failure-\(error)"
+        )
+    }
+
+    /// Respuesta de Consultar Ruta. Con ruta va en el contexto de su revisión: si el destino
+    /// cambia antes de que suene, se descarta con las instrucciones anteriores. Una segunda
+    /// consulta mientras la primera espera o suena no se duplica.
+    func statusMessage(_ status: RouteStatus, now: Date) -> AudioMessage {
+        let context: String
+        if case let .active(route, _) = status {
+            context = Self.contextID(for: route)
+        } else {
+            context = Self.statusContextID
+        }
+        return AudioMessage(
+            text: RouteStatusAnnouncements.text(for: status, instructions: self),
+            priority: .routeInformation,
+            createdAt: now,
+            contextID: context,
+            deduplicationKey: "route-status"
         )
     }
 
