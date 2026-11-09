@@ -2,33 +2,43 @@ import Foundation
 import Testing
 @testable import LumioFrontend
 
-/// Integración del flujo Crear Ruta con las piezas reales del cliente: AudioArbiter,
-/// copia local en disco y cliente del backend. Solo se simulan los servicios del sistema
-/// (GPS, MapKit, síntesis de voz) y la red.
+/// Integración de Crear Ruta y Modificar Ruta con las piezas reales del cliente:
+/// AudioArbiter, copia local en disco, cliente del backend con sesión (Bearer y refresh).
+/// Solo se simulan los servicios del sistema (GPS, MapKit, síntesis de voz) y la red.
 @MainActor
-private struct IntegratedFlow {
+struct IntegratedFlow {
     let player = FakeAudioPlayer()
     let arbiter: AudioArbiterService
     let location = FakeLocationProvider()
     let geocoder = FakeGeocoder()
     let calculator = FakeRouteCalculator()
     let http: FakeHTTPClient
+    let tokens = InMemoryTokenStore(AuthTokens(accessToken: "access-1", refreshToken: "refresh-1"))
     let fileURL = temporaryFileURL()
     let service: RouteCreationService
+    let modifier: RouteModificationService
 
     init(backend: Result<Data, Error>) {
         arbiter = AudioArbiterService(player: player)
         http = FakeHTTPClient(response: backend)
-        service = RouteCreationService(
-            location: location,
-            geocoder: geocoder,
-            calculator: calculator,
-            store: FileActiveRouteStore(fileURL: fileURL),
-            sync: RemoteActiveRouteService(
-                client: http, baseURL: URL(string: "http://localhost:8000")!, userID: UUID()
-            ),
-            arbiter: arbiter
+        let baseURL = URL(string: "http://localhost:8000")!
+        let authorized = AuthorizedHTTPClient(
+            base: http, api: AuthAPI(client: http, baseURL: baseURL), store: tokens
         )
+        let store = FileActiveRouteStore(fileURL: fileURL)
+        let sync = RemoteActiveRouteService(client: authorized, baseURL: baseURL)
+        service = RouteCreationService(
+            location: location, geocoder: geocoder, calculator: calculator,
+            store: store, sync: sync, arbiter: arbiter
+        )
+        modifier = RouteModificationService(
+            location: location, geocoder: geocoder, calculator: calculator,
+            store: store, sync: sync, arbiter: arbiter
+        )
+    }
+
+    var storedRoute: ActiveRoute? {
+        get throws { try FileActiveRouteStore(fileURL: fileURL).load() }
     }
 
     func cleanUp() {
@@ -36,16 +46,16 @@ private struct IntegratedFlow {
     }
 }
 
-private let backendID = UUID()
-private let backendResponse = Data("""
-{"id":"\(backendID.uuidString)","origin":{"name":"Ubicación actual","latitude":4.6097,
+let integrationBackendID = UUID()
+let integrationBackendResponse = Data("""
+{"id":"\(integrationBackendID.uuidString)","origin":{"name":"Ubicación actual","latitude":4.6097,
 "longitude":-74.0817},"destination":{"name":"Farmacia Central","latitude":4.611,
 "longitude":-74.079},"steps":[],"distance_meters":320.0,"expected_travel_time_seconds":260.0,
 "current_step":0,"status":"active","started_at":"2026-11-07T15:30:00Z"}
 """.utf8)
 
 @Test @MainActor func createdRouteIsSpokenStoredAndPersisted() async throws {
-    let flow = IntegratedFlow(backend: .success(backendResponse))
+    let flow = IntegratedFlow(backend: .success(integrationBackendResponse))
     defer { flow.cleanUp() }
 
     let route = try await flow.service.createRoute(to: .query("Farmacia Central"))
@@ -62,14 +72,15 @@ private let backendResponse = Data("""
     // Copia local en disco con el id del backend.
     let stored = try FileActiveRouteStore(fileURL: flow.fileURL).load()
     #expect(stored == route)
-    #expect(stored?.remoteID == backendID)
+    #expect(stored?.remoteID == integrationBackendID)
 
-    // Backend: una única petición PUT.
+    // Backend: una única petición PUT, identificada con el access token.
     #expect(flow.http.requests.map(\.httpMethod) == ["PUT"])
+    #expect(flow.http.requests.first?.value(forHTTPHeaderField: "Authorization") == "Bearer access-1")
 }
 
 @Test @MainActor func safetyAlertInterruptsAndReadyAnnouncementResumes() async throws {
-    let flow = IntegratedFlow(backend: .success(backendResponse))
+    let flow = IntegratedFlow(backend: .success(integrationBackendResponse))
     defer { flow.cleanUp() }
     _ = try await flow.service.createRoute(to: .query("Farmacia Central"))
 
@@ -81,7 +92,7 @@ private let backendResponse = Data("""
 }
 
 @Test @MainActor func unavailableRouteIsSpokenAndLeavesNoLocalCopy() async throws {
-    let flow = IntegratedFlow(backend: .success(backendResponse))
+    let flow = IntegratedFlow(backend: .success(integrationBackendResponse))
     defer { flow.cleanUp() }
     flow.calculator.result = .failure(RouteCreationError.noRouteAvailable)
 
@@ -103,9 +114,42 @@ private let backendResponse = Data("""
     #expect(route.isPendingBackendSync)
     #expect(try FileActiveRouteStore(fileURL: flow.fileURL).load()?.isPendingBackendSync == true)
 
-    flow.http.response = .success(backendResponse)
+    flow.http.response = .success(integrationBackendResponse)
     let restored = await flow.service.restoreActiveRoute()
 
-    #expect(restored?.remoteID == backendID)
-    #expect(try FileActiveRouteStore(fileURL: flow.fileURL).load()?.remoteID == backendID)
+    #expect(restored?.remoteID == integrationBackendID)
+    #expect(try FileActiveRouteStore(fileURL: flow.fileURL).load()?.remoteID == integrationBackendID)
+}
+
+// MARK: - Sesión
+
+private let renewedTokens = Data("""
+{"access_token":"access-2","refresh_token":"refresh-2","token_type":"bearer","expires_in":900}
+""".utf8)
+
+@Test @MainActor func expiredAccessTokenIsRenewedAndTheRouteIsSaved() async throws {
+    let flow = IntegratedFlow(backend: .success(integrationBackendResponse))
+    defer { flow.cleanUp() }
+    flow.http.queued = [.failure(HTTPClientError.statusCode(401)), .success(renewedTokens)]
+
+    let route = try await flow.service.createRoute(to: .query("Farmacia Central"))
+
+    #expect(route.remoteID == integrationBackendID)
+    #expect(flow.http.requests.map { $0.url?.path } == [
+        "/places/routes/active", "/users/refresh", "/places/routes/active",
+    ])
+    #expect(flow.http.requests.last?.value(forHTTPHeaderField: "Authorization") == "Bearer access-2")
+    #expect(flow.tokens.load() == AuthTokens(accessToken: "access-2", refreshToken: "refresh-2"))
+}
+
+@Test @MainActor func rejectedSessionKeepsTheRouteOnThePhone() async throws {
+    let flow = IntegratedFlow(backend: .failure(HTTPClientError.statusCode(401)))
+    defer { flow.cleanUp() }
+
+    let route = try await flow.service.createRoute(to: .query("Farmacia Central"))
+
+    // La ruta se puede seguir; la sesión se cierra y la ruta queda pendiente de guardar.
+    #expect(route.isPendingBackendSync)
+    #expect(try flow.storedRoute == route)
+    #expect(flow.tokens.load() == nil)
 }

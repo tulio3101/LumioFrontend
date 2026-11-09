@@ -4,11 +4,12 @@ import SwiftUI
 import UIKit
 #endif
 
-/// Planificar una ruta: una sola tarea en su propia hoja (indicar destino → calcular).
-/// El resultado y los fallos ya se locutan por el AudioArbiter, así que aquí no se repiten
-/// como anuncios de VoiceOver; solo se anuncia el inicio del cálculo.
+/// Planificar una ruta o cambiar su destino: una sola tarea en su propia hoja (indicar
+/// destino → calcular). El resultado y los fallos ya se locutan por el AudioArbiter, así que
+/// aquí no se repiten como anuncios de VoiceOver; solo se anuncia el inicio del cálculo.
 struct RoutePlannerView: View {
     @ObservedObject var model: DestinationViewModel
+    let mode: DestinationViewModel.PlanningMode
     /// Se llama cuando la ruta quedó lista; quien presenta la hoja decide a dónde ir.
     let onRouteReady: () -> Void
 
@@ -23,7 +24,7 @@ struct RoutePlannerView: View {
         NavigationStack {
             ZStack {
                 if model.isLoading, let destination = model.pendingDestination {
-                    CalculatingRouteView(destination: destination)
+                    CalculatingRouteView(title: copy.calculatingTitle, destination: destination)
                         .transition(.opacity)
                 } else {
                     form
@@ -33,7 +34,7 @@ struct RoutePlannerView: View {
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: model.isLoading)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(LumioColor.background.ignoresSafeArea())
-            .navigationTitle("Nueva ruta")
+            .navigationTitle(copy.navigationTitle)
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -51,7 +52,7 @@ struct RoutePlannerView: View {
             announceSuggestionsIfNeeded(suggestions)
         }
         .onAppear {
-            model.beginPlanning()
+            model.beginPlanning(mode)
             // Tras la animación de la hoja, para que el teclado no la interrumpa.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { fieldIsFocused = true }
         }
@@ -89,12 +90,12 @@ struct RoutePlannerView: View {
                 LumioIconBadge(systemName: "mappin.and.ellipse", size: 56)
                     .transition(.opacity)
             }
-            Text("¿A dónde quieres ir?")
+            Text(copy.heading)
                 .font(isTyping ? .title2.weight(.bold) : .largeTitle.weight(.bold))
                 .foregroundStyle(LumioColor.textPrimary)
                 .accessibilityAddTraits(.isHeader)
             if !isTyping {
-                Text("Escribe una dirección o el nombre de un lugar. Lumio calcula la ruta a pie y te la lee paso a paso.")
+                Text(copy.subheading(currentDestination: model.route?.destination.name))
                     .font(.body)
                     .foregroundStyle(LumioColor.textSecondary)
                     .transition(.opacity)
@@ -121,7 +122,9 @@ struct RoutePlannerView: View {
                     .submitLabel(.go)
                     .onSubmit(submit)
                     .destinationInput()
-                    .accessibilityHint(fieldError ?? "Al escribir aparecen sugerencias debajo. También puedes pulsar Calcular ruta.")
+                    .accessibilityHint(
+                        fieldError ?? "Al escribir aparecen sugerencias debajo. También puedes pulsar \(copy.submitLabel)."
+                    )
                 if !model.destination.isEmpty {
                     Button {
                         model.destination = ""
@@ -218,7 +221,7 @@ struct RoutePlannerView: View {
 
     private func failureBanner(_ failure: DestinationViewModel.Failure) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            LumioStatusBanner(.error, title: "No se pudo crear la ruta", message: failure.message)
+            LumioStatusBanner(.error, title: copy.failureTitle, message: failure.message)
             #if os(iOS)
             if failure.recovery == .openSettings, let settingsURL = URL(string: UIApplication.openSettingsURLString) {
                 Button {
@@ -249,6 +252,10 @@ struct RoutePlannerView: View {
         .background(LumioColor.background.ignoresSafeArea())
     }
 
+    private var copy: PlannerCopy {
+        mode == .changeDestination ? .changeDestination : .create
+    }
+
     private var isTyping: Bool {
         !model.destination.isEmpty
     }
@@ -256,7 +263,7 @@ struct RoutePlannerView: View {
     private func select(_ suggestion: DestinationSuggestion) {
         guard !model.isLoading else { return }
         fieldIsFocused = false
-        announceForAccessibility("Calculando ruta a pie hacia \(suggestion.title).")
+        announceForAccessibility("\(copy.calculatingTitle) hacia \(suggestion.title).")
         Task {
             if await model.selectSuggestion(suggestion) {
                 onRouteReady()
@@ -279,17 +286,17 @@ struct RoutePlannerView: View {
     }
 
     private var submitLabel: String {
-        model.failure?.recovery == .retry ? "Intentar de nuevo" : "Calcular ruta"
+        model.failure?.recovery == .retry ? "Intentar de nuevo" : copy.submitLabel
     }
 
     private func submit() {
         guard !model.isLoading else { return }
         fieldIsFocused = false
         if model.pendingDestinationWillBeValid {
-            announceForAccessibility("Calculando ruta a pie.")
+            announceForAccessibility("\(copy.calculatingTitle).")
         }
         Task {
-            if await model.createRoute() {
+            if await model.submitDestination() {
                 onRouteReady()
             } else if model.failure?.recovery == .editDestination {
                 fieldIsFocused = true
@@ -310,6 +317,42 @@ struct RoutePlannerView: View {
     private var fieldShape: RoundedRectangle {
         RoundedRectangle(cornerRadius: 14, style: .continuous)
     }
+}
+
+/// Textos de la hoja según el modo: mismo flujo, distinta intención.
+private struct PlannerCopy {
+    let navigationTitle: String
+    let heading: String
+    let submitLabel: String
+    let calculatingTitle: String
+    let failureTitle: String
+    let isChange: Bool
+
+    func subheading(currentDestination: String?) -> String {
+        if isChange, let currentDestination {
+            return "Tu ruta hacia \(currentDestination) sigue activa hasta que la nueva esté lista. "
+                + "La nueva ruta sale desde donde estás ahora."
+        }
+        return "Escribe una dirección o el nombre de un lugar. Lumio calcula la ruta a pie y te la lee paso a paso."
+    }
+
+    static let create = PlannerCopy(
+        navigationTitle: "Nueva ruta",
+        heading: "¿A dónde quieres ir?",
+        submitLabel: "Calcular ruta",
+        calculatingTitle: "Calculando tu ruta a pie",
+        failureTitle: "No se pudo crear la ruta",
+        isChange: false
+    )
+
+    static let changeDestination = PlannerCopy(
+        navigationTitle: "Cambiar destino",
+        heading: "¿A dónde quieres ir ahora?",
+        submitLabel: "Cambiar destino",
+        calculatingTitle: "Actualizando tu ruta",
+        failureTitle: "No se pudo cambiar el destino",
+        isChange: true
+    )
 }
 
 /// Una sugerencia: nombre, dirección y posición en la lista para orientarse con VoiceOver.
@@ -361,6 +404,7 @@ private struct SuggestionButtonStyle: ButtonStyle {
 
 /// Estado de espera: el símbolo irradia mientras se calcula (sin movimiento si se reduce).
 private struct CalculatingRouteView: View {
+    let title: String
     let destination: String
 
     var body: some View {
@@ -368,7 +412,7 @@ private struct CalculatingRouteView: View {
             LumioRadiantMark(size: 132, isWorking: true)
                 .padding(.top, 24)
             VStack(spacing: 10) {
-                Text("Calculando tu ruta a pie")
+                Text(title)
                     .font(.title2.weight(.bold))
                     .foregroundStyle(LumioColor.textPrimary)
                 Text("Hacia \(destination)")
@@ -387,7 +431,7 @@ private struct CalculatingRouteView: View {
         .padding(24)
         .frame(maxWidth: 520)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Calculando tu ruta a pie hacia \(destination).")
+        .accessibilityLabel("\(title) hacia \(destination).")
         .accessibilityAddTraits(.updatesFrequently)
     }
 }

@@ -8,6 +8,17 @@ struct GeoCoordinate: Codable, Equatable {
         latitude.isFinite && longitude.isFinite
             && (-90...90).contains(latitude) && (-180...180).contains(longitude)
     }
+
+    /// Distancia aproximada en metros (haversine); suficiente para comparar destinos.
+    func distance(to other: GeoCoordinate) -> Double {
+        let earthRadius = 6_371_000.0
+        let lat1 = latitude * .pi / 180
+        let lat2 = other.latitude * .pi / 180
+        let dLat = lat2 - lat1
+        let dLon = (other.longitude - longitude) * .pi / 180
+        let a = sin(dLat / 2) * sin(dLat / 2) + cos(lat1) * cos(lat2) * sin(dLon / 2) * sin(dLon / 2)
+        return 2 * earthRadius * atan2(sqrt(a), sqrt(1 - a))
+    }
 }
 
 struct RoutePlace: Codable, Equatable {
@@ -27,7 +38,7 @@ struct RouteStep: Codable, Equatable {
 
 /// Ruta activa. Esta es la copia local que usan la guía y la consulta de la ruta sin backend.
 struct ActiveRoute: Codable, Equatable, Identifiable {
-    /// Identidad local; también agrupa sus mensajes de audio (contextID).
+    /// Identidad local. Se conserva al cambiar el destino (Modificar Ruta).
     let id: UUID
     /// Identificador asignado por el backend. Es nil mientras la ruta no se haya persistido allí.
     var remoteID: UUID?
@@ -38,8 +49,45 @@ struct ActiveRoute: Codable, Equatable, Identifiable {
     let expectedTravelTimeSeconds: Double
     let createdAt: Date
     var currentStep: Int = 0
+    /// Versión del recorrido: sube con cada cambio de destino. Separa el audio de las
+    /// instrucciones anteriores del de las nuevas (ver NavigationInstructionBuilder.contextID).
+    var revision: Int = 0
+    /// El backend todavía no conoce el último cambio de destino.
+    var hasPendingDestinationChange = false
 
-    var isPendingBackendSync: Bool { remoteID == nil }
+    var isPendingBackendSync: Bool { remoteID == nil || hasPendingDestinationChange }
+
+    /// Indicación que el usuario debe seguir ahora. Si `currentStep` ya pasó del último
+    /// paso, es la llegada (el último). nil si la ruta no tiene pasos.
+    var currentInstruction: RouteStep? {
+        steps.first { $0.order == currentStep } ?? steps.last
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, remoteID, origin, destination, steps, distanceMeters, expectedTravelTimeSeconds
+        case createdAt, currentStep, revision, hasPendingDestinationChange
+    }
+}
+
+extension ActiveRoute {
+    /// Las copias locales guardadas antes de Modificar Ruta no tienen `revision` ni
+    /// `hasPendingDestinationChange`: se leen con sus valores por defecto.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        remoteID = try container.decodeIfPresent(UUID.self, forKey: .remoteID)
+        origin = try container.decode(RoutePlace.self, forKey: .origin)
+        destination = try container.decode(RoutePlace.self, forKey: .destination)
+        steps = try container.decode([RouteStep].self, forKey: .steps)
+        distanceMeters = try container.decode(Double.self, forKey: .distanceMeters)
+        expectedTravelTimeSeconds = try container.decode(Double.self, forKey: .expectedTravelTimeSeconds)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        currentStep = try container.decodeIfPresent(Int.self, forKey: .currentStep) ?? 0
+        revision = try container.decodeIfPresent(Int.self, forKey: .revision) ?? 0
+        hasPendingDestinationChange = try container.decodeIfPresent(
+            Bool.self, forKey: .hasPendingDestinationChange
+        ) ?? false
+    }
 }
 
 /// Destino ya confirmado por el usuario. Punto de extensión de Indicar Destino por Voz
@@ -62,7 +110,7 @@ struct CalculatedRouteStep: Equatable {
     let maneuverCoordinate: GeoCoordinate?
 }
 
-/// Fallos de Crear Ruta. Cada uno tiene su anuncio en RouteAnnouncements.
+/// Fallos de Crear Ruta y Modificar Ruta. Cada uno tiene su anuncio en RouteAnnouncements.
 enum RouteCreationError: Error, Equatable, CaseIterable {
     case emptyDestination
     case locationPermissionDenied
@@ -71,4 +119,8 @@ enum RouteCreationError: Error, Equatable, CaseIterable {
     case noRouteAvailable
     case localStorageFailed
     case serviceUnavailable
+    /// Modificar Ruta: no hay ruta activa cuyo destino cambiar.
+    case noActiveRoute
+    /// Modificar Ruta: el destino nuevo es el mismo que el actual.
+    case sameDestination
 }

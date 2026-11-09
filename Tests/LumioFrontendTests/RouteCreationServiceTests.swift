@@ -201,9 +201,8 @@ import Testing
 }
 
 @Test @MainActor func newRouteInvalidatesPendingMessagesOfThePreviousOne() async throws {
-    let first = UUID()
-    let harness = RouteCreationHarness(routeIDs: [first, UUID()])
-    _ = try await harness.service.createRoute(to: .query("Farmacia Central"))
+    let harness = RouteCreationHarness(routeIDs: [UUID(), UUID()])
+    let first = try await harness.service.createRoute(to: .query("Farmacia Central"))
     #expect(harness.arbiter.contexts.isEmpty)
 
     let second = try await harness.service.createRoute(to: .query("Parque"))

@@ -19,6 +19,12 @@ func durationsAreRoundedForSpeech(seconds: Double, expected: String) {
     #expect(SpokenDuration.text(seconds: seconds) == expected)
 }
 
+@Test func approximateDurationAgreesInNumber() {
+    #expect(SpokenDuration.approximate(seconds: 70) == "alrededor de 1 minuto")
+    #expect(SpokenDuration.approximate(seconds: 260) == "unos 4 minutos")
+    #expect(SpokenDuration.approximate(seconds: 0) == nil)
+}
+
 @Test func missingDurationIsNotAnnounced() {
     #expect(SpokenDuration.text(seconds: 0) == nil)
     #expect(SpokenDuration.text(seconds: .nan) == nil)
@@ -58,13 +64,63 @@ func durationsAreRoundedForSpeech(seconds: Double, expected: String) {
 }
 
 @Test func stepMessagesAreNavigationPriorityGroupedByRoute() {
-    let routeID = UUID()
     let step = RouteStep(order: 3, instruction: "Gira", distanceMeters: 5, maneuverCoordinate: nil)
-    let message = NavigationInstructionBuilder().message(for: step, routeID: routeID, now: Date())
+    let route = sampleActiveRoute()
+    let message = NavigationInstructionBuilder().message(for: step, in: route, now: Date())
 
     #expect(message.priority == .routeInformation)
-    #expect(message.contextID == "route-\(routeID.uuidString)")
+    #expect(message.contextID == "route-\(route.id.uuidString)")
     #expect(message.deduplicationKey == "step-3")
+}
+
+@Test func eachDestinationChangeHasItsOwnAudioContext() {
+    var route = sampleActiveRoute()
+    let original = NavigationInstructionBuilder.contextID(for: route)
+    route.revision = 2
+
+    #expect(NavigationInstructionBuilder.contextID(for: route) == "route-\(route.id.uuidString)-r2")
+    #expect(NavigationInstructionBuilder.contextID(for: route) != original)
+}
+
+@Test func updatedRouteIsAnnouncedWithItsSummary() {
+    var route = sampleActiveRoute()
+    route.revision = 1
+
+    let message = NavigationInstructionBuilder().updatedMessage(for: route, now: Date())
+
+    #expect(message.text == "Ruta actualizada hacia Farmacia Central. Son 320 metros, unos 4 minutos caminando.")
+    #expect(message.priority == .routeInformation)
+    #expect(message.contextID == NavigationInstructionBuilder.contextID(for: route))
+    #expect(message.deduplicationKey == "route-updated")
+}
+
+@Test(arguments: RouteCreationError.allCases.filter { $0 != .noActiveRoute })
+func failedChangeSaysThePreviousRouteContinues(error: RouteCreationError) {
+    let message = NavigationInstructionBuilder()
+        .modificationFailureMessage(error, keeping: sampleActiveRoute(), now: Date())
+
+    #expect(message.text.hasPrefix("No se pudo cambiar el destino. \(RouteAnnouncements.failure(error))"))
+    #expect(message.text.hasSuffix("Sigues con la ruta hacia Farmacia Central."))
+    #expect(message.priority == .routeInformation)
+    #expect(message.contextID == NavigationInstructionBuilder.modificationFailureContextID)
+}
+
+@Test func changeWithoutActiveRouteOnlyExplainsWhy() {
+    #expect(RouteAnnouncements.modificationFailure(.noActiveRoute, keeping: nil)
+        == "No hay una ruta activa para cambiar. Indica un destino para crear una.")
+}
+
+private func sampleActiveRoute() -> ActiveRoute {
+    ActiveRoute(
+        id: UUID(),
+        remoteID: nil,
+        origin: RoutePlace(name: "Ubicación actual", coordinate: currentPosition),
+        destination: pharmacy,
+        steps: NavigationInstructionBuilder().steps(from: sampleCalculatedRoute().steps),
+        distanceMeters: 320,
+        expectedTravelTimeSeconds: 260,
+        createdAt: Date()
+    )
 }
 
 @Test(arguments: RouteCreationError.allCases)

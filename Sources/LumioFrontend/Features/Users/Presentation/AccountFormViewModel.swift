@@ -109,14 +109,34 @@ final class AccountFormViewModel: ObservableObject {
     }
 
     private func describe(_ error: Error, title: String, feature: String) -> Failure {
-        if case FeatureUnavailable.authentication = error {
+        switch error {
+        case FeatureUnavailable.authentication:
             return Failure(
                 title: title,
                 message: "\(feature) todavía no está conectado con el servidor de Lumio.",
                 isServiceUnavailable: true
             )
+        case AuthenticationError.invalidCredentials:
+            return Failure(
+                title: title,
+                message: "El correo o la contraseña no son correctos.",
+                isServiceUnavailable: false
+            )
+        case AuthenticationError.emailAlreadyRegistered:
+            return Failure(
+                title: title,
+                message: "Ya existe una cuenta con ese correo. Usa «Iniciar sesión».",
+                isServiceUnavailable: false
+            )
+        case is URLError:
+            return Failure(
+                title: title,
+                message: "No pudimos conectar con el servidor de Lumio. Revisa tu conexión e intenta de nuevo.",
+                isServiceUnavailable: true
+            )
+        default:
+            return Failure(title: title, message: "Intenta nuevamente en unos momentos.", isServiceUnavailable: false)
         }
-        return Failure(title: title, message: "Intenta nuevamente en unos momentos.", isServiceUnavailable: false)
     }
 }
 #endif

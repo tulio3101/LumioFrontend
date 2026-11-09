@@ -1,12 +1,14 @@
 #if canImport(SwiftUI)
 import SwiftUI
 
-/// Detalle de la ruta activa: resumen, estado de guardado e indicaciones paso a paso.
+/// Detalle de la ruta activa. Arriba, la indicación que se sigue ahora y la acción para
+/// volver a oírla (la principal de la pantalla mientras se camina); después el resumen,
+/// «Cambiar destino» y la lista completa de pasos.
 struct ActiveRouteView: View {
     @ObservedObject var model: DestinationViewModel
 
-    @State private var isPlanning = false
-    @AccessibilityFocusState private var summaryHasFocus: Bool
+    @State private var isChangingDestination = false
+    @AccessibilityFocusState private var instructionHasFocus: Bool
 
     var body: some View {
         Group {
@@ -24,19 +26,38 @@ struct ActiveRouteView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
         #endif
-        .sheet(isPresented: $isPlanning) {
-            RoutePlannerView(model: model) {
-                isPlanning = false
-                focusSummary()
+        .sheet(isPresented: $isChangingDestination) {
+            RoutePlannerView(model: model, mode: .changeDestination) {
+                isChangingDestination = false
+                focusInstruction()
             }
         }
-        .onAppear(perform: focusSummary)
+        .onAppear(perform: focusInstruction)
+        // «Ruta actualizada» se confirma una sola vez: al volver a esta pantalla ya no está.
+        .onDisappear { model.acknowledgeRouteUpdate() }
     }
 
     private func content(_ route: ActiveRoute) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                RouteSummaryCard(route: route, headerFocus: $summaryHasFocus)
+                if model.updatedRevision == route.revision {
+                    LumioStatusBanner(
+                        .success,
+                        title: "Ruta actualizada",
+                        message: "Estas son las nuevas indicaciones desde donde estabas al cambiar el destino."
+                    )
+                }
+                if let step = route.currentInstruction {
+                    CurrentInstructionCard(
+                        step: step,
+                        total: route.steps.count,
+                        spokenText: model.spokenText(for: step),
+                        focus: $instructionHasFocus
+                    ) {
+                        model.repeatCurrentInstruction()
+                    }
+                }
+                RouteSummaryCard(route: route)
                 if route.isPendingBackendSync {
                     LumioStatusBanner(
                         .warning,
@@ -44,18 +65,25 @@ struct ActiveRouteView: View {
                         message: "Puedes seguirla sin problema. Se guardará en el servidor la próxima vez que abras Lumio con conexión."
                     )
                 }
-                stepsSection(route)
+                // Antes de los pasos: con VoiceOver se llega sin recorrer toda la lista.
                 Button {
-                    isPlanning = true
+                    isChangingDestination = true
                 } label: {
                     Label("Cambiar destino", systemImage: "arrow.triangle.swap")
                 }
                 .buttonStyle(LumioSecondaryButtonStyle())
+                .accessibilityHint("Calcula una ruta nueva desde donde estás. La actual sigue activa hasta que la nueva esté lista.")
+                stepsSection(route)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 20)
             .frame(maxWidth: 560)
             .frame(maxWidth: .infinity)
+        }
+        // Magic Tap (doble toque con dos dedos) repite la indicación sin buscar el botón,
+        // como en las apps de navegación.
+        .accessibilityAction(.magicTap) {
+            model.repeatCurrentInstruction()
         }
     }
 
@@ -86,19 +114,70 @@ struct ActiveRouteView: View {
         }
     }
 
-    /// Al llegar (o al cambiar de ruta) VoiceOver empieza por el resumen, no por la barra.
-    private func focusSummary() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { summaryHasFocus = true }
+    /// Al llegar (o al cambiar de ruta) VoiceOver empieza por la indicación actual, no por
+    /// la barra de navegación.
+    private func focusInstruction() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { instructionHasFocus = true }
     }
 }
 
 // MARK: Componentes de ruta
 
+/// La indicación que se sigue ahora, en grande, con la acción para volver a oírla.
+private struct CurrentInstructionCard: View {
+    let step: RouteStep
+    let total: Int
+    let spokenText: String
+    let focus: AccessibilityFocusState<Bool>.Binding
+    let onRepeat: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text("Ahora")
+                        .font(.caption.weight(.bold))
+                        .textCase(.uppercase)
+                        .tracking(0.8)
+                        .foregroundStyle(LumioColor.actionPrimary)
+                    Spacer(minLength: 0)
+                    Text("Paso \(step.order + 1) de \(total)")
+                        .font(.subheadline)
+                        .foregroundStyle(LumioColor.textSecondary)
+                }
+                Text(step.instruction)
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(LumioColor.textPrimary)
+                if step.distanceMeters >= 1 {
+                    Label(
+                        "Continúa \(SpokenDistance.text(meters: step.distanceMeters))",
+                        systemImage: "arrow.up"
+                    )
+                    .font(.headline)
+                    .foregroundStyle(LumioColor.textSecondary)
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Ahora, paso \(step.order + 1) de \(total): \(spokenText)")
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityFocused(focus)
+
+            Button(action: onRepeat) {
+                Label("Repetir indicación", systemImage: "speaker.wave.2.fill")
+            }
+            .buttonStyle(LumioPrimaryButtonStyle())
+            .accessibilityHint(
+                "La vuelve a leer en voz alta. También puedes tocar dos veces con dos dedos en esta pantalla."
+            )
+        }
+        .lumioCard()
+    }
+}
+
 /// Destino, distancia, duración y estado de guardado. También se usa en el inicio.
 struct RouteSummaryCard: View {
     let route: ActiveRoute
-    /// Permite llevar el foco de VoiceOver al encabezado (destino) de la tarjeta.
-    var headerFocus: AccessibilityFocusState<Bool>.Binding?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -115,7 +194,6 @@ struct RouteSummaryCard: View {
             }
             .accessibilityElement(children: .combine)
             .accessibilityAddTraits(.isHeader)
-            .modifier(OptionalAccessibilityFocus(binding: headerFocus))
 
             Rectangle()
                 .fill(LumioColor.controlBorder.opacity(0.3))
@@ -149,8 +227,8 @@ struct RouteSummaryCard: View {
         )
         RouteMetric(
             title: "Caminando",
-            value: SpokenDuration.text(seconds: route.expectedTravelTimeSeconds).map { "Unos \($0)" }
-                ?? "Sin estimación",
+            value: SpokenDuration.approximate(seconds: route.expectedTravelTimeSeconds)
+                .map { $0.prefix(1).uppercased() + $0.dropFirst() } ?? "Sin estimación",
             systemImage: "clock"
         )
         RouteMetric(
@@ -158,19 +236,6 @@ struct RouteSummaryCard: View {
             value: route.origin.name,
             systemImage: "location"
         )
-    }
-}
-
-private struct OptionalAccessibilityFocus: ViewModifier {
-    let binding: AccessibilityFocusState<Bool>.Binding?
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if let binding {
-            content.accessibilityFocused(binding)
-        } else {
-            content
-        }
     }
 }
 
@@ -222,7 +287,7 @@ private struct RouteStepRow: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 if isCurrent {
-                    Text("Siguiente")
+                    Text("Ahora")
                         .font(.caption.weight(.bold))
                         .textCase(.uppercase)
                         .tracking(0.8)
@@ -251,7 +316,7 @@ private struct RouteStepRow: View {
 
     private var accessibilityText: String {
         let position = "Paso \(step.order + 1) de \(total)"
-        return isCurrent ? "\(position), siguiente: \(spokenText)" : "\(position): \(spokenText)"
+        return isCurrent ? "\(position), ahora: \(spokenText)" : "\(position): \(spokenText)"
     }
 }
 

@@ -12,7 +12,10 @@ struct LumioApp: App {
                 sessionService: dependencies.sessionService,
                 authenticationService: dependencies.authenticationService,
                 routeCreator: dependencies.routeCreator,
-                destinationSuggester: dependencies.destinationSuggester
+                routeModifier: dependencies.routeModifier,
+                instructionRepeater: dependencies.instructionRepeater,
+                destinationSuggester: dependencies.destinationSuggester,
+                signOut: dependencies.signOut
             )
         }
     }
