@@ -52,7 +52,9 @@ Pantallas (un DestinationViewModel compartido):
   DestinationView    inicio del trayecto; una acción principal según haya o no ruta activa
   RoutePlannerView   hoja para indicar el destino (con sugerencias), calcular y
                      recuperarse de fallos; modo `.create` o `.changeDestination`
-  ActiveRouteView    resumen, estado de guardado y pasos como línea de tiempo
+  ActiveRouteView    indicación actual con «Repetir indicación» (también Magic Tap),
+                     resumen, estado de guardado, «Cambiar destino» y pasos como línea
+                     de tiempo. «Ruta actualizada» se muestra una sola vez.
 El ViewModel clasifica cada fallo por su salida (corregir destino, abrir Ajustes,
 reintentar) para que la pantalla ofrezca la acción adecuada.
 
@@ -77,6 +79,11 @@ DestinationViewModel -> RouteCreating / RouteModifying
     /places/routes/{remoteID}/destination (si el backend ya la cerró, 404/409, se guarda
     como ruta nueva). No sobrescribe una revisión local más nueva.
   En Linux y macOS (SwiftPM): UnavailableNavigationService.
+
+Repetir la indicación: DestinationViewModel -> InstructionRepeating ->
+RouteInstructionRepeater. Reenvía al árbitro el mismo mensaje del paso actual (contexto de
+la revisión vigente y clave `step-<n>`): si aún espera turno o está sonando no se duplica,
+y si ya terminó vuelve a sonar.
 
 Audio de las instrucciones: cada revisión del recorrido tiene su propio `contextID`
 (`route-<id>` y luego `route-<id>-r<n>`). El árbitro deja invalidados para siempre los
