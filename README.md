@@ -40,7 +40,11 @@ destino, el avance y la siguiente indicación con el Magic Tap de VoiceOver o «
 a partir de la copia local y del GPS, sin backend. Consultar Rutas Recientes (SCRUM-24)
 lista los destinos de rutas anteriores (agrupados por lugar, del más reciente al más
 antiguo) en su pantalla y en la hoja de destino; elegir uno calcula la ruta sin escribir.
-Sin conexión se muestra la última lista guardada en el teléfono. El destino se escribe (con sugerencias) mientras no exista el dictado
+Sin conexión se muestra la última lista guardada en el teléfono. Finalizar Ruta (SCRUM-10)
+detiene las indicaciones, borra la copia local y lo anuncia por audio y háptica, a mano
+(«Llegué a mi destino» o «Terminar sin llegar») o al detectar la llegada con el GPS,
+también con el teléfono bloqueado (modo de fondo `location`). La ruta queda en el
+historial del backend; sin red, se envía al volver la conexión. El destino se escribe (con sugerencias) mientras no exista el dictado
 (SCRUM-313); la guía de giros durante el trayecto es SCRUM-312.
 El registro y el inicio de sesión con correo están conectados a /users: los tokens se
 guardan en Keychain y se renuevan solos; Google sigue pendiente.

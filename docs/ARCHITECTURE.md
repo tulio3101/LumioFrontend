@@ -46,7 +46,7 @@ Se usa ObservableObject para conservar iOS 16. La vista posee su ViewModel con
 @StateObject; su estado publicado actualiza la presentación. No se añade Redux,
 un contenedor de inyección ni librerías de navegación para este scaffold.
 
-## Flujo de Crear Ruta (SCRUM-8), Modificar Ruta (SCRUM-9), Consultar Ruta (SCRUM-23) y Rutas Recientes (SCRUM-24)
+## Flujo de Crear Ruta (SCRUM-8), Modificar Ruta (SCRUM-9), Consultar Ruta (SCRUM-23), Rutas Recientes (SCRUM-24) y Finalizar Ruta (SCRUM-10)
 
 Pantallas (un DestinationViewModel compartido):
   DestinationView    inicio del trayecto; una acción principal según haya o no ruta activa
@@ -57,8 +57,9 @@ Pantallas (un DestinationViewModel compartido):
   RecentRoutesView   destinos recientes con fecha, cómo terminó y cuántas veces; elegir
                      uno crea la ruta o, con ruta activa, cambia su destino
   ActiveRouteView    indicación actual con «Repetir indicación», resumen, estado del
-                     trayecto («¿Cómo voy?»), estado de guardado, «Cambiar destino» y
-                     pasos como línea de tiempo. «Ruta actualizada» se muestra una sola vez.
+                     trayecto («¿Cómo voy?»), estado de guardado, «Cambiar destino»,
+                     «Finalizar ruta» y pasos como línea de tiempo. «Ruta actualizada» se
+                     muestra una sola vez. Al finalizar muestra FinishedRouteView.
 El ViewModel clasifica cada fallo por su salida (corregir destino, abrir Ajustes,
 reintentar) para que la pantalla ofrezca la acción adecuada.
 
@@ -123,6 +124,31 @@ Elegir un destino envía `DestinationRequest.place` (sin volver a geocodificar) 
 Ruta o, con ruta activa, a Modificar Ruta. El destino de la ruta activa no se ofrece en
 la hoja y en la pantalla aparece sin poder elegirse.
 
+Finalizar Ruta (SCRUM-10):
+  A mano: «Finalizar ruta» (o la acción de VoiceOver) pide confirmación con «Llegué a mi
+  destino» (completed) o «Terminar sin llegar» (cancelled) -> DestinationViewModel.finishRoute.
+  Al llegar: ArrivalMonitor -> LocationTracking (CoreLocationRouteTracker: lecturas
+  continuas, también con el teléfono bloqueado gracias a UIBackgroundModes = location;
+  sin esa clave solo sigue con la app abierta). Finaliza como completed cuando dos
+  lecturas seguidas con precisión <= 20 m caen a <= 25 m del destino; las imprecisas no
+  cuentan ni reinician, una precisa lejos reinicia y un cambio de destino también. Se
+  activa al crear, cambiar o restaurar la ruta y se detiene al finalizarla.
+  RouteFinishService (ambos casos):
+    1. AudioArbitrating.cancel(contextIDs:) corta la indicación que suena y descarta las
+       pendientes del contexto de la ruta.
+    2. PendingHistorySyncing.enqueue y después ActiveRouteStoring.clear(): deja de ser la
+       ruta activa sin perderse si la app se cierra en medio.
+    3. Anuncio (contexto `route-finished`) y HapticCue.routeFinished.
+    4. FinishedRouteSynchronizer.flush() sin esperar a la red.
+  FinishedRouteSynchronizer (cola en FileFinishedRoutesStore, en orden): ruta con remoteID
+  -> (cambio de destino pendiente primero) POST /places/routes/{id}/finish; sin remoteID,
+  404 o ya cerrada para cambiar el destino -> POST /places/routes/history con el id del
+  teléfono. Un fallo de red detiene la cola; un 4xx definitivo o un id ajeno descarta
+  esa ruta. Se vacía al abrir la app, al volver la conexión (NetworkConnectivityMonitor),
+  antes de subir una ruta nueva (si no, el backend cancelaría la anterior que sigue
+  abierta), antes de leer las rutas recientes y al cerrar sesión (lo que no llega se
+  descarta para no subirlo con otra cuenta).
+
 Audio de las instrucciones: cada revisión del recorrido tiene su propio `contextID`
 (`route-<id>` y luego `route-<id>-r<n>`). El árbitro deja invalidados para siempre los
 contextos y deduplica por clave dentro de un contexto, así que reutilizar el contexto
@@ -156,7 +182,8 @@ Contratos para las HUs siguientes:
   Al cambiar el destino `currentStep` vuelve a 0. Puede reutilizar
   `RouteProgressEstimator` para decidir cuándo avanzar `currentStep`; Consultar Ruta
   ya usa ese paso cuando no hay GPS.
-- Finalizar Ruta (SCRUM-10) borra la copia local con `ActiveRouteStoring.clear()`.
+- Guiar Giros (SCRUM-312) puede reutilizar `LocationTracking` (ya sigue la ubicación
+  durante la ruta) y debe finalizar con `RouteFinishing`, no borrando la copia local.
 
 Antes de empezar un trayecto con asistencia completa, hay que comprobar que la seguridad
 local esté disponible.
