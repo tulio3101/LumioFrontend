@@ -2,14 +2,54 @@
 import SwiftUI
 
 struct SettingsView: View {
+    let signOut: any SigningOut
+    /// Se llama después de cerrar la sesión para volver a la bienvenida.
+    let onSignedOut: () -> Void
+
+    @State private var confirmsSignOut = false
+    @State private var isSigningOut = false
+
     var body: some View {
         Form {
             FeatureStatusView(
                 title: "Preferencias de voz",
                 message: "Aquí se integrarán idioma, velocidad y configuración de voz."
             )
+            Section("Cuenta") {
+                Button(role: .destructive) {
+                    confirmsSignOut = true
+                } label: {
+                    HStack {
+                        Label("Cerrar sesión", systemImage: "rectangle.portrait.and.arrow.right")
+                        if isSigningOut {
+                            Spacer()
+                            ProgressView()
+                        }
+                    }
+                }
+                .disabled(isSigningOut)
+                .accessibilityHint("Pide confirmación antes de cerrar la sesión.")
+            }
         }
         .navigationTitle("Preferencias")
+        // Prevención de errores: la acción borra la ruta guardada en el teléfono.
+        .confirmationDialog(
+            "¿Cerrar sesión?",
+            isPresented: $confirmsSignOut,
+            titleVisibility: .visible
+        ) {
+            Button("Cerrar sesión", role: .destructive) {
+                Task {
+                    isSigningOut = true
+                    await signOut.signOut()
+                    isSigningOut = false
+                    onSignedOut()
+                }
+            }
+            Button("Cancelar", role: .cancel) {}
+        } message: {
+            Text("Se borrará la ruta guardada en este teléfono. Podrás volver a entrar con tu correo.")
+        }
     }
 }
 #endif

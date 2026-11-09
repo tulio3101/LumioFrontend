@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>es</string>
+	<key>CFBundleDisplayName</key>
+	<string>Lumio</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Lumio usa tu ubicación para calcular la ruta a pie desde donde estás hasta tu destino.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Lumio se conecta al servidor de desarrollo en tu red local para guardar tu ruta.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>LumioAPIBaseURL</key>
+	<string>http://localhost:8000</string>
+</dict>
+</plist>

@@ -13,7 +13,7 @@ let package = Package(
         ),
     ],
     targets: [
-        .target(name: "LumioFrontend"),
+        .target(name: "LumioFrontend", resources: [.process("Resources")]),
         .testTarget(name: "LumioFrontendTests", dependencies: ["LumioFrontend"]),
     ],
     swiftLanguageModes: [.v5]
