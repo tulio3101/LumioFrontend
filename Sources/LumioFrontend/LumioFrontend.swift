@@ -15,6 +15,7 @@ struct LumioApp: App {
                 routeModifier: dependencies.routeModifier,
                 instructionRepeater: dependencies.instructionRepeater,
                 routeStatus: dependencies.routeStatus,
+                recentRoutes: dependencies.recentRoutes,
                 destinationSuggester: dependencies.destinationSuggester,
                 signOut: dependencies.signOut
             )

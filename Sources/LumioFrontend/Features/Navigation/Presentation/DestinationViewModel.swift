@@ -1,7 +1,7 @@
 #if canImport(SwiftUI)
 import SwiftUI
 
-/// Presenta Crear Ruta, Modificar Ruta y Consultar Ruta. Los anuncios por audio los hacen
+/// Presenta Crear Ruta, Modificar Ruta, Consultar Ruta y Consultar Rutas Recientes. Los anuncios por audio los hacen
 /// los servicios a través del AudioArbiter; el ViewModel solo refleja el estado en pantalla.
 @MainActor
 final class DestinationViewModel: ObservableObject {
@@ -32,6 +32,15 @@ final class DestinationViewModel: ObservableObject {
         var id: Self { self }
     }
 
+    /// Carga de los destinos recientes (SCRUM-24).
+    enum RecentRoutesState: Equatable {
+        case idle
+        case loading
+        case loaded
+        /// Sin backend y sin copia guardada: se ofrece reintentar.
+        case unavailable
+    }
+
     /// Entrada provisional: Indicar Destino por Voz (SCRUM-313) entregará el destino confirmado.
     @Published var destination = "" {
         didSet {
@@ -57,11 +66,15 @@ final class DestinationViewModel: ObservableObject {
     /// Resultado de la última consulta del estado de la ruta y cuándo se hizo.
     @Published private(set) var routeStatus: RouteStatus?
     @Published private(set) var statusCheckedAt: Date?
+    @Published private(set) var recentDestinations: [RecentDestination] = []
+    @Published private(set) var recentRoutesSource: RecentRoutes.Source?
+    @Published private(set) var recentRoutesState: RecentRoutesState = .idle
 
     private let routeCreator: any RouteCreating
     private let routeModifier: any RouteModifying
     private let instructionRepeater: any InstructionRepeating
     private let routeStatusQuery: any RouteStatusQuerying
+    private let recentRoutes: any RecentRoutesQuerying
     private let suggester: any DestinationSuggesting
     private let instructions = NavigationInstructionBuilder()
     private var suggestionTask: Task<Void, Never>?
@@ -69,18 +82,21 @@ final class DestinationViewModel: ObservableObject {
 
     /// Sin `suggester` no hay autocompletado (el destino se escribe completo). Sin
     /// `routeModifier` no se puede cambiar el destino; sin `instructionRepeater`, no se
-    /// puede repetir la indicación; sin `routeStatusQuery`, no se puede consultar la ruta.
+    /// puede repetir la indicación; sin `routeStatusQuery`, no se puede consultar la ruta;
+    /// sin `recentRoutes`, no hay destinos recientes.
     init(
         routeCreator: any RouteCreating,
         routeModifier: (any RouteModifying)? = nil,
         instructionRepeater: (any InstructionRepeating)? = nil,
         routeStatusQuery: (any RouteStatusQuerying)? = nil,
+        recentRoutes: (any RecentRoutesQuerying)? = nil,
         suggester: (any DestinationSuggesting)? = nil
     ) {
         self.routeCreator = routeCreator
         self.routeModifier = routeModifier ?? UnavailableNavigationService()
         self.instructionRepeater = instructionRepeater ?? UnavailableNavigationService()
         self.routeStatusQuery = routeStatusQuery ?? UnavailableNavigationService()
+        self.recentRoutes = recentRoutes ?? UnavailableNavigationService()
         self.suggester = suggester ?? NoDestinationSuggestions()
     }
 
@@ -161,6 +177,52 @@ final class DestinationViewModel: ObservableObject {
         routeStatus = status
         statusCheckedAt = Date()
         return status
+    }
+
+    // MARK: Rutas recientes
+
+    /// Hasta 5 para la hoja de destino, sin el destino de la ruta activa.
+    var plannerRecents: [RecentDestination] {
+        RecentRoutesPolicy.plannerDestinations(recentDestinations, excluding: route?.destination)
+    }
+
+    /// El destino reciente es el de la ruta activa: elegirlo no cambiaría nada.
+    func isCurrentDestination(_ destination: RecentDestination) -> Bool {
+        route.map { RecentRoutesPolicy.isSamePlace(destination.place, $0.destination) } ?? false
+    }
+
+    /// Carga los destinos recientes. Con `announce`, el servicio locuta el resultado.
+    func loadRecentRoutes(announce: Bool) async {
+        guard recentRoutesState != .loading else { return }
+        recentRoutesState = .loading
+        do {
+            let result = try await recentRoutes.recentRoutes(announce: announce)
+            recentDestinations = result.destinations
+            recentRoutesSource = result.source
+            recentRoutesState = .loaded
+        } catch {
+            recentDestinations = []
+            recentRoutesSource = nil
+            recentRoutesState = .unavailable
+        }
+    }
+
+    /// Usar un destino reciente sin escribirlo: se calcula la ruta hasta ese lugar desde
+    /// donde estás. Sin `mode` (pantalla de rutas recientes), con ruta activa se cambia su
+    /// destino y sin ella se crea una; en la hoja se respeta el modo de la hoja.
+    @discardableResult
+    func useRecentDestination(_ recent: RecentDestination, mode: PlanningMode? = nil) async -> Bool {
+        guard !isLoading else { return false }
+        planningMode = mode ?? (route == nil ? .create : .changeDestination)
+        isApplyingSuggestion = true
+        destination = recent.place.name
+        isApplyingSuggestion = false
+        return await perform(displayName: recent.place.name) { .place(recent.place) }
+    }
+
+    /// Al entrar a una pantalla nueva no se arrastra el fallo de otra.
+    func dismissFailure() {
+        failure = nil
     }
 
     // MARK: Crear ruta

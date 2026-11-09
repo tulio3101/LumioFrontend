@@ -51,6 +51,7 @@ struct RoutePlannerView: View {
         .onChange(of: model.suggestions) { suggestions in
             announceSuggestionsIfNeeded(suggestions)
         }
+        .task { await model.loadRecentRoutes(announce: false) }
         .onAppear {
             model.beginPlanning(mode)
             // Tras la animación de la hoja, para que el teclado no la interrumpa.
@@ -66,6 +67,9 @@ struct RoutePlannerView: View {
                 header
                 destinationField
                 suggestionsSection
+                if !isTyping {
+                    recentsSection
+                }
                 if let failure = model.failure, failure.recovery != .editDestination {
                     failureBanner(failure)
                         .transition(.opacity)
@@ -219,6 +223,44 @@ struct RoutePlannerView: View {
         }
     }
 
+    /// Con el campo vacío: destinos usados antes (SCRUM-24). Reconocer es más fácil que
+    /// recordar, y elegir uno no requiere escribir.
+    @ViewBuilder
+    private var recentsSection: some View {
+        let recents = model.plannerRecents
+        if !recents.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Recientes")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(LumioColor.textSecondary)
+                    .accessibilityAddTraits(.isHeader)
+                VStack(spacing: 0) {
+                    ForEach(Array(recents.enumerated()), id: \.element.id) { index, recent in
+                        if index > 0 {
+                            Rectangle()
+                                .fill(LumioColor.controlBorder.opacity(0.3))
+                                .frame(height: 1)
+                                .padding(.leading, 66)
+                                .accessibilityHidden(true)
+                        }
+                        RecentDestinationRow(
+                            destination: recent,
+                            now: Date(),
+                            isCurrent: false,
+                            position: index + 1,
+                            total: recents.count,
+                            hint: "Calcula la ruta a pie hasta este lugar desde donde estás."
+                        ) {
+                            select(recent)
+                        }
+                    }
+                }
+                .lumioCard(padding: 0, cornerRadius: 18)
+            }
+            .transition(.opacity)
+        }
+    }
+
     private func failureBanner(_ failure: DestinationViewModel.Failure) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             LumioStatusBanner(.error, title: copy.failureTitle, message: failure.message)
@@ -269,6 +311,17 @@ struct RoutePlannerView: View {
                 onRouteReady()
             } else if model.failure?.recovery == .editDestination {
                 fieldIsFocused = true
+            }
+        }
+    }
+
+    private func select(_ recent: RecentDestination) {
+        guard !model.isLoading else { return }
+        fieldIsFocused = false
+        announceForAccessibility("\(copy.calculatingTitle) hacia \(recent.place.name).")
+        Task {
+            if await model.useRecentDestination(recent, mode: mode) {
+                onRouteReady()
             }
         }
     }
@@ -403,7 +456,8 @@ private struct SuggestionButtonStyle: ButtonStyle {
 }
 
 /// Estado de espera: el símbolo irradia mientras se calcula (sin movimiento si se reduce).
-private struct CalculatingRouteView: View {
+/// También lo usa la pantalla de rutas recientes.
+struct CalculatingRouteView: View {
     let title: String
     let destination: String
 

@@ -6,6 +6,7 @@ struct RootView: View {
     let routeModifier: any RouteModifying
     let instructionRepeater: any InstructionRepeating
     let routeStatus: any RouteStatusQuerying
+    let recentRoutes: any RecentRoutesQuerying
     let destinationSuggester: any DestinationSuggesting
     let authenticationService: any Authenticating
     let signOut: any SigningOut
@@ -19,6 +20,7 @@ struct RootView: View {
         routeModifier: any RouteModifying,
         instructionRepeater: any InstructionRepeating,
         routeStatus: any RouteStatusQuerying,
+        recentRoutes: any RecentRoutesQuerying,
         destinationSuggester: any DestinationSuggesting,
         signOut: any SigningOut
     ) {
@@ -26,6 +28,7 @@ struct RootView: View {
         self.routeModifier = routeModifier
         self.instructionRepeater = instructionRepeater
         self.routeStatus = routeStatus
+        self.recentRoutes = recentRoutes
         self.destinationSuggester = destinationSuggester
         self.signOut = signOut
         self.authenticationService = authenticationService
@@ -53,6 +56,7 @@ struct RootView: View {
                     routeModifier: routeModifier,
                     instructionRepeater: instructionRepeater,
                     routeStatusQuery: routeStatus,
+                    recentRoutes: recentRoutes,
                     suggester: destinationSuggester
                 )
             }

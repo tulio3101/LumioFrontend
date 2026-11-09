@@ -5,6 +5,7 @@ struct AppDependencies {
     let routeModifier: any RouteModifying
     let instructionRepeater: any InstructionRepeating
     let routeStatus: any RouteStatusQuerying
+    let recentRoutes: any RecentRoutesQuerying
     let destinationSuggester: any DestinationSuggesting
     let sessionService: any SessionRestoring
     let authenticationService: any Authenticating
@@ -47,8 +48,17 @@ struct AppDependencies {
         instructionRepeater = RouteInstructionRepeater(arbiter: arbiter)
         // Consultar Ruta: solo copia local y GPS, sin backend.
         routeStatus = RouteStatusService(store: store, location: location, arbiter: arbiter)
+        // Rutas recientes: backend con sesión y copia en el teléfono para usarla sin conexión.
+        let recentStore = FileRecentRoutesStore(fileURL: FileRecentRoutesStore.defaultFileURL())
+        recentRoutes = RecentRoutesService(
+            history: RemoteRouteHistoryService(client: routeClient, baseURL: configuration.apiBaseURL),
+            store: recentStore,
+            arbiter: arbiter
+        )
         destinationSuggester = MapKitDestinationSuggester()
-        signOut = SignOutService(session: session, routes: store, arbiter: arbiter)
+        signOut = SignOutService(
+            session: session, routes: store, arbiter: arbiter, recentRoutes: recentStore
+        )
         #else
         #if canImport(AVFoundation)
         audioArbiter = AudioArbiterService(player: SpeechAudioPlayer())
@@ -58,6 +68,7 @@ struct AppDependencies {
         routeModifier = navigation
         instructionRepeater = navigation
         routeStatus = navigation
+        recentRoutes = navigation
         destinationSuggester = NoDestinationSuggestions()
         sessionService = UnavailableSessionService()
         authenticationService = UnavailableAuthenticationService()
