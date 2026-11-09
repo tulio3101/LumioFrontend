@@ -17,6 +17,15 @@ protocol RouteModifying {
     func changeDestination(to destination: DestinationRequest) async throws -> ActiveRoute
 }
 
+/// Repetir la indicación actual cuando el usuario no la oyó (botón «Repetir indicación» o
+/// Magic Tap de VoiceOver). Se locuta por el AudioArbiter, nunca desde la vista.
+@MainActor
+protocol InstructionRepeating {
+    /// Vuelve a locutar la indicación actual. false si la ruta no tiene indicaciones.
+    @discardableResult
+    func repeatCurrentInstruction(of route: ActiveRoute) -> Bool
+}
+
 /// Posición actual con precisión suficiente para iniciar una ruta (SCRUM-105).
 /// Lanza RouteCreationError.locationPermissionDenied o .locationUnavailable.
 @MainActor

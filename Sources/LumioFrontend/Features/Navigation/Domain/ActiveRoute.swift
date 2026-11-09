@@ -57,6 +57,12 @@ struct ActiveRoute: Codable, Equatable, Identifiable {
 
     var isPendingBackendSync: Bool { remoteID == nil || hasPendingDestinationChange }
 
+    /// Indicación que el usuario debe seguir ahora. Si `currentStep` ya pasó del último
+    /// paso, es la llegada (el último). nil si la ruta no tiene pasos.
+    var currentInstruction: RouteStep? {
+        steps.first { $0.order == currentStep } ?? steps.last
+    }
+
     enum CodingKeys: String, CodingKey {
         case id, remoteID, origin, destination, steps, distanceMeters, expectedTravelTimeSeconds
         case createdAt, currentStep, revision, hasPendingDestinationChange
