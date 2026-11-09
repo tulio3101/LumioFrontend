@@ -27,6 +27,7 @@ final class RouteCreationService: RouteCreating {
         sync: any ActiveRouteSyncing,
         arbiter: any AudioArbitrating,
         haptics: (any HapticFeedbackPlaying)? = nil,
+        history: (any PendingHistorySyncing)? = nil,
         instructions: NavigationInstructionBuilder = NavigationInstructionBuilder(),
         now: @escaping () -> Date = Date.init,
         makeID: @escaping () -> UUID = UUID.init
@@ -35,7 +36,7 @@ final class RouteCreationService: RouteCreating {
             location: location, geocoder: geocoder, calculator: calculator, instructions: instructions
         )
         self.store = store
-        synchronizer = ActiveRouteSynchronizer(sync: sync, store: store)
+        synchronizer = ActiveRouteSynchronizer(sync: sync, store: store, history: history)
         self.arbiter = arbiter
         self.haptics = haptics ?? NoHapticFeedback()
         self.instructions = instructions

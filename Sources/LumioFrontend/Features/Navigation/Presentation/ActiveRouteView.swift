@@ -9,6 +9,8 @@ struct ActiveRouteView: View {
     @ObservedObject var model: DestinationViewModel
 
     @State private var isChangingDestination = false
+    @State private var confirmsFinish = false
+    @Environment(\.dismiss) private var dismiss
     @AccessibilityFocusState private var instructionHasFocus: Bool
 
     var body: some View {
@@ -17,6 +19,11 @@ struct ActiveRouteView: View {
             // «Repetir» digan lo mismo que se acaba de oír.
             if let route = model.guidanceRoute {
                 content(route)
+            } else if let finish = model.lastFinish {
+                FinishedRouteView(result: finish) {
+                    model.acknowledgeFinish()
+                    dismiss()
+                }
             } else {
                 Text("No hay una ruta activa.")
                     .foregroundStyle(LumioColor.textSecondary)
@@ -38,6 +45,14 @@ struct ActiveRouteView: View {
         .onAppear(perform: focusInstruction)
         // «Ruta actualizada» se confirma una sola vez: al volver a esta pantalla ya no está.
         .onDisappear { model.acknowledgeRouteUpdate() }
+        // Prevención de errores y estado honesto en el historial: el usuario dice si llegó.
+        .confirmationDialog("¿Finalizar la ruta?", isPresented: $confirmsFinish, titleVisibility: .visible) {
+            Button("Llegué a mi destino") { finish(.completed) }
+            Button("Terminar sin llegar", role: .destructive) { finish(.cancelled) }
+            Button("Cancelar", role: .cancel) {}
+        } message: {
+            Text("Se detienen las indicaciones y la ruta se guarda en tu historial.")
+        }
     }
 
     private func content(_ route: ActiveRoute) -> some View {
@@ -56,7 +71,8 @@ struct ActiveRouteView: View {
                         total: route.steps.count,
                         spokenText: model.spokenText(for: step),
                         focus: $instructionHasFocus,
-                        onQueryStatus: model.startRouteStatusQuery
+                        onQueryStatus: model.startRouteStatusQuery,
+                        onFinish: { confirmsFinish = true }
                     ) {
                         model.repeatCurrentInstruction()
                     }
@@ -84,6 +100,20 @@ struct ActiveRouteView: View {
                 }
                 .buttonStyle(LumioSecondaryButtonStyle())
                 .accessibilityHint("Calcula una ruta nueva desde donde estás. La actual sigue activa hasta que la nueva esté lista.")
+                Button {
+                    confirmsFinish = true
+                } label: {
+                    if model.isFinishing {
+                        ProgressView()
+                            .tint(LumioColor.actionPrimary)
+                    } else {
+                        Label("Finalizar ruta", systemImage: "flag.checkered")
+                    }
+                }
+                .buttonStyle(LumioSecondaryButtonStyle())
+                .disabled(model.isFinishing)
+                .accessibilityLabel("Finalizar ruta")
+                .accessibilityHint("Detiene las indicaciones y guarda la ruta en tu historial. Pide confirmación.")
                 stepsSection(route)
             }
             .padding(.horizontal, 16)
@@ -125,6 +155,10 @@ struct ActiveRouteView: View {
         }
     }
 
+    private func finish(_ outcome: RouteHistoryEntry.Outcome) {
+        Task { await model.finishRoute(outcome: outcome) }
+    }
+
     /// Al llegar (o al cambiar de ruta) VoiceOver empieza por la indicación actual, no por
     /// la barra de navegación.
     private func focusInstruction() {
@@ -141,6 +175,7 @@ private struct CurrentInstructionCard: View {
     let spokenText: String
     let focus: AccessibilityFocusState<Bool>.Binding
     let onQueryStatus: () -> Void
+    let onFinish: () -> Void
     let onRepeat: () -> Void
 
     var body: some View {
@@ -176,6 +211,7 @@ private struct CurrentInstructionCard: View {
             .accessibilityFocused(focus)
             // Desde el primer elemento que lee VoiceOver, en el menú de acciones.
             .accessibilityAction(named: "Consultar ruta", onQueryStatus)
+            .accessibilityAction(named: "Finalizar ruta", onFinish)
 
             Button(action: onRepeat) {
                 Label("Repetir indicación", systemImage: "speaker.wave.2.fill")
@@ -184,6 +220,54 @@ private struct CurrentInstructionCard: View {
             .accessibilityHint("La vuelve a leer en voz alta.")
         }
         .lumioCard()
+    }
+}
+
+/// Ruta finalizada: confirma cómo terminó y que se guarda en el historial. Mismos textos
+/// que el anuncio.
+struct FinishedRouteView: View {
+    let result: RouteFinishResult
+    let onDone: () -> Void
+
+    @AccessibilityFocusState private var titleHasFocus: Bool
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 24) {
+                LumioIconBadge(
+                    systemName: result.finished.outcome == .completed ? "flag.checkered" : "stop.circle",
+                    size: 72
+                )
+                .padding(.top, 24)
+                VStack(spacing: 10) {
+                    Text(RouteFinishAnnouncements.title(result))
+                        .font(.title.weight(.bold))
+                        .foregroundStyle(LumioColor.textPrimary)
+                        .accessibilityAddTraits(.isHeader)
+                        .accessibilityFocused($titleHasFocus)
+                    Text(RouteFinishAnnouncements.finished(result))
+                        .font(.headline)
+                        .foregroundStyle(LumioColor.textSecondary)
+                    Text(RouteFinishAnnouncements.historyNote)
+                        .font(.subheadline)
+                        .foregroundStyle(LumioColor.textSecondary)
+                }
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+
+                Button(action: onDone) {
+                    Label("Volver al inicio", systemImage: "house")
+                }
+                .buttonStyle(LumioPrimaryButtonStyle())
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 20)
+            .frame(maxWidth: 520)
+            .frame(maxWidth: .infinity)
+        }
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { titleHasFocus = true }
+        }
     }
 }
 

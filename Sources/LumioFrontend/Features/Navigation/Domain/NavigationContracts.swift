@@ -58,6 +58,74 @@ protocol RecentRoutesStoring {
     func clear() throws
 }
 
+/// Finalizar Ruta (SCRUM-10): detiene las instrucciones, borra la copia local, lo anuncia por
+/// audio y háptica y deja la ruta en el historial (o pendiente si no hay red).
+@MainActor
+protocol RouteFinishing {
+    /// nil si no hay ruta activa (también se anuncia).
+    func finishActiveRoute(outcome: RouteHistoryEntry.Outcome, trigger: RouteFinishTrigger) async
+        -> RouteFinishResult?
+}
+
+/// Rutas finalizadas que aún deben llegar al historial del backend. Se reintentan al abrir
+/// la app, al volver la conexión, antes de subir otra ruta y antes de leer el historial.
+@MainActor
+protocol PendingHistorySyncing: AnyObject {
+    func enqueue(_ finished: FinishedRoute) throws
+    /// true si no queda nada pendiente.
+    @discardableResult
+    func flush() async -> Bool
+    /// Al cerrar sesión: lo que no se pudo enviar no debe subirse con otra cuenta.
+    func discardPending()
+}
+
+/// Backend de Finalizar Ruta.
+@MainActor
+protocol FinishedRouteSyncing {
+    /// POST /places/routes/{remoteID}/finish. Lanza FinishedRouteSyncError.routeNotFound (404).
+    func finish(remoteID: UUID, outcome: RouteHistoryEntry.Outcome, finishedAt: Date) async throws
+    /// POST /places/routes/history: ruta que nunca llegó al backend. Lanza
+    /// FinishedRouteSyncError.idConflict (409).
+    func record(_ finished: FinishedRoute) async throws
+}
+
+enum FinishedRouteSyncError: Error, Equatable {
+    case routeNotFound
+    case idConflict
+}
+
+/// Cola en el teléfono de rutas finalizadas pendientes de enviar, en orden.
+@MainActor
+protocol FinishedRoutesStoring {
+    func load() throws -> [FinishedRoute]
+    func save(_ routes: [FinishedRoute]) throws
+}
+
+/// Lectura de GPS durante el trayecto.
+struct LocationFix: Equatable {
+    let coordinate: GeoCoordinate
+    /// Radio de incertidumbre en metros; negativo si la lectura no es válida.
+    let horizontalAccuracy: Double
+}
+
+/// Seguimiento continuo de la ubicación mientras hay ruta activa, también con el teléfono
+/// bloqueado.
+@MainActor
+protocol LocationTracking: AnyObject {
+    var onFix: ((LocationFix) -> Void)? { get set }
+    func start()
+    func stop()
+}
+
+/// Detecta la llegada al destino y finaliza la ruta (SCRUM-127).
+@MainActor
+protocol ArrivalMonitoring: AnyObject {
+    var onArrival: (@MainActor (RouteFinishResult) -> Void)? { get set }
+    /// Sin ruta activa no hace nada.
+    func startMonitoring()
+    func stopMonitoring()
+}
+
 /// Posición actual con precisión suficiente para iniciar una ruta (SCRUM-105).
 /// Lanza RouteCreationError.locationPermissionDenied o .locationUnavailable.
 @MainActor
@@ -106,6 +174,8 @@ enum ActiveRouteSyncError: Error, Equatable {
 enum HapticCue: Equatable {
     case routeReady
     case routeFailed
+    /// La navegación terminó (Finalizar Ruta).
+    case routeFinished
 }
 
 /// Acompaña los anuncios de Crear Ruta. Los patrones de giro pertenecen a Guiar Giros.

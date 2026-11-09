@@ -1,7 +1,8 @@
 #if os(iOS)
 import UIKit
 
-/// Háptica de resultado: éxito al tener la ruta lista, error si no se pudo crear.
+/// Háptica de resultado: éxito al tener la ruta lista o al terminar la navegación, error si
+/// no se pudo crear.
 @MainActor
 final class UIKitHapticFeedback: HapticFeedbackPlaying {
     private let generator = UINotificationFeedbackGenerator()
@@ -12,6 +13,8 @@ final class UIKitHapticFeedback: HapticFeedbackPlaying {
             generator.notificationOccurred(.success)
         case .routeFailed:
             generator.notificationOccurred(.error)
+        case .routeFinished:
+            generator.notificationOccurred(.success)
         }
     }
 }

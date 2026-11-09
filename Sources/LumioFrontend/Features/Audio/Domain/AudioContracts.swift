@@ -22,6 +22,9 @@ protocol AudioArbitrating: AnyObject {
     func discardIrrelevant()
     func resetSession()
     func updateContext(_ context: AudioDecisionContext)
+    /// Corta ya los mensajes de esos contextos: el que suena y los pendientes (por ejemplo,
+    /// las indicaciones de una ruta que se finalizó). Los demás mensajes siguen.
+    func cancel(contextIDs: Set<String>)
 }
 
 /// El productor proporciona el contexto; todavía no se fijan umbrales de giro.

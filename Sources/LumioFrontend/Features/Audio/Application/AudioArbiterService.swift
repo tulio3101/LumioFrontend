@@ -89,6 +89,22 @@ final class AudioArbiterService: AudioArbitrating {
         for message in messages { publish(message, status: .discarded) }
     }
 
+    func cancel(contextIDs: Set<String>) {
+        guard !contextIDs.isEmpty else { return }
+        let removed = queue.removeIrrelevant { message in
+            message.contextID.map { !contextIDs.contains($0) } ?? true
+        }
+        for message in removed { publish(message, status: .discarded) }
+        if let active = current, let contextID = active.message.contextID, contextIDs.contains(contextID) {
+            // Invalidar el token antes de stop: el callback de la cancelación es antiguo.
+            current = nil
+            token = nil
+            player.stop()
+            publish(active.message, status: .discarded)
+        }
+        processNext()
+    }
+
     func discardIrrelevant() {
         let timestamp = now()
         let discarded = queue.removeIrrelevant {
