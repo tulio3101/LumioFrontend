@@ -11,6 +11,7 @@ struct DestinationView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var planning: DestinationViewModel.PlanningMode?
     @State private var showsRoute = false
+    @State private var showsRecentRoutes = false
     /// La hoja se cierra antes de navegar para que ambas transiciones no se mezclen.
     @State private var opensRouteAfterPlanning = false
     @State private var hasAppeared = false
@@ -20,6 +21,7 @@ struct DestinationView: View {
         routeModifier: (any RouteModifying)? = nil,
         instructionRepeater: (any InstructionRepeating)? = nil,
         routeStatusQuery: (any RouteStatusQuerying)? = nil,
+        recentRoutes: (any RecentRoutesQuerying)? = nil,
         suggester: (any DestinationSuggesting)? = nil
     ) {
         _model = StateObject(wrappedValue: DestinationViewModel(
@@ -27,6 +29,7 @@ struct DestinationView: View {
             routeModifier: routeModifier,
             instructionRepeater: instructionRepeater,
             routeStatusQuery: routeStatusQuery,
+            recentRoutes: recentRoutes,
             suggester: suggester
         ))
     }
@@ -39,9 +42,13 @@ struct DestinationView: View {
                 if let route = model.route {
                     activeRouteSection(route)
                         .lumioEntrance(hasAppeared, delay: 0.1, reduceMotion: reduceMotion)
+                    recentRoutesEntry
+                        .lumioEntrance(hasAppeared, delay: 0.2, reduceMotion: reduceMotion)
                 } else {
                     emptyState
                         .lumioEntrance(hasAppeared, delay: 0.1, reduceMotion: reduceMotion)
+                    recentRoutesEntry
+                        .lumioEntrance(hasAppeared, delay: 0.15, reduceMotion: reduceMotion)
                     howItWorks
                         .lumioEntrance(hasAppeared, delay: 0.2, reduceMotion: reduceMotion)
                 }
@@ -64,6 +71,9 @@ struct DestinationView: View {
         #endif
         .navigationDestination(isPresented: $showsRoute) {
             ActiveRouteView(model: model)
+        }
+        .navigationDestination(isPresented: $showsRecentRoutes) {
+            RecentRoutesView(model: model)
         }
         .sheet(item: $planning, onDismiss: openRouteIfReady) { mode in
             RoutePlannerView(model: model, mode: mode) {
@@ -164,6 +174,36 @@ struct DestinationView: View {
                 .accessibilityHint("Calcula una ruta nueva desde donde estás. La actual sigue activa hasta que la nueva esté lista.")
             }
         }
+    }
+
+    /// Entrada a Consultar Rutas Recientes (SCRUM-24), con o sin ruta activa.
+    private var recentRoutesEntry: some View {
+        Button {
+            showsRecentRoutes = true
+        } label: {
+            HStack(spacing: 14) {
+                LumioIconBadge(systemName: "clock.arrow.circlepath", size: 44)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Rutas recientes")
+                        .font(.headline)
+                        .foregroundStyle(LumioColor.textPrimary)
+                    Text("Vuelve a un destino que ya usaste.")
+                        .font(.subheadline)
+                        .foregroundStyle(LumioColor.textSecondary)
+                }
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(LumioColor.controlBorder)
+                    .accessibilityHidden(true)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .lumioCard(padding: 16, cornerRadius: 18)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Muestra los destinos que usaste antes para volver a ir.")
     }
 
     /// Ayuda breve para el primer uso: tres pasos, nada más.

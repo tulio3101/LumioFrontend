@@ -37,7 +37,10 @@ destino de la ruta activa sin crear otra; si no se puede, se mantiene la anterio
 avisa por audio. En «Tu ruta», «Repetir indicación» (o el Magic Tap de VoiceOver)
 vuelve a leer la indicación actual. Consultar Ruta Actual (SCRUM-23) dice por audio el
 destino, el avance y la siguiente indicación con el Magic Tap de VoiceOver o «¿Cómo voy?»,
-a partir de la copia local y del GPS, sin backend. El destino se escribe (con sugerencias) mientras no exista el dictado
+a partir de la copia local y del GPS, sin backend. Consultar Rutas Recientes (SCRUM-24)
+lista los destinos de rutas anteriores (agrupados por lugar, del más reciente al más
+antiguo) en su pantalla y en la hoja de destino; elegir uno calcula la ruta sin escribir.
+Sin conexión se muestra la última lista guardada en el teléfono. El destino se escribe (con sugerencias) mientras no exista el dictado
 (SCRUM-313); la guía de giros durante el trayecto es SCRUM-312.
 El registro y el inicio de sesión con correo están conectados a /users: los tokens se
 guardan en Keychain y se renuevan solos; Google sigue pendiente.

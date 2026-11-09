@@ -33,6 +33,31 @@ protocol RouteStatusQuerying {
     func queryActiveRoute() async -> RouteStatus
 }
 
+/// Consultar Rutas Recientes (SCRUM-24): destinos de rutas anteriores, agrupados por lugar y
+/// de la más reciente a la más antigua. Si el backend no responde, usa la última lista
+/// guardada en el teléfono; sin ella, lanza RecentRoutesError.unavailable.
+@MainActor
+protocol RecentRoutesQuerying {
+    /// Con `announce`, la respuesta (también «No tienes rutas recientes» o el fallo) se
+    /// locuta por el AudioArbiter.
+    func recentRoutes(announce: Bool) async throws -> RecentRoutes
+}
+
+/// Historial del backend (GET /places/routes/history): rutas completadas o canceladas, de
+/// la más reciente a la más antigua.
+@MainActor
+protocol RouteHistoryFetching {
+    func recentHistory(limit: Int) async throws -> [RouteHistoryEntry]
+}
+
+/// Copia en el teléfono de la última lista de destinos recientes, para usarla sin conexión.
+@MainActor
+protocol RecentRoutesStoring {
+    func load() throws -> SavedRecentRoutes?
+    func save(_ routes: SavedRecentRoutes) throws
+    func clear() throws
+}
+
 /// Posición actual con precisión suficiente para iniciar una ruta (SCRUM-105).
 /// Lanza RouteCreationError.locationPermissionDenied o .locationUnavailable.
 @MainActor

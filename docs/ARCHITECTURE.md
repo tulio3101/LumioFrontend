@@ -46,12 +46,16 @@ Se usa ObservableObject para conservar iOS 16. La vista posee su ViewModel con
 @StateObject; su estado publicado actualiza la presentación. No se añade Redux,
 un contenedor de inyección ni librerías de navegación para este scaffold.
 
-## Flujo de Crear Ruta (SCRUM-8), Modificar Ruta (SCRUM-9) y Consultar Ruta (SCRUM-23)
+## Flujo de Crear Ruta (SCRUM-8), Modificar Ruta (SCRUM-9), Consultar Ruta (SCRUM-23) y Rutas Recientes (SCRUM-24)
 
 Pantallas (un DestinationViewModel compartido):
   DestinationView    inicio del trayecto; una acción principal según haya o no ruta activa
-  RoutePlannerView   hoja para indicar el destino (con sugerencias), calcular y
-                     recuperarse de fallos; modo `.create` o `.changeDestination`
+                     y la entrada a «Rutas recientes»
+  RoutePlannerView   hoja para indicar el destino (con sugerencias y, con el campo vacío,
+                     hasta 5 recientes), calcular y recuperarse de fallos; modo `.create`
+                     o `.changeDestination`
+  RecentRoutesView   destinos recientes con fecha, cómo terminó y cuántas veces; elegir
+                     uno crea la ruta o, con ruta activa, cambia su destino
   ActiveRouteView    indicación actual con «Repetir indicación», resumen, estado del
                      trayecto («¿Cómo voy?»), estado de guardado, «Cambiar destino» y
                      pasos como línea de tiempo. «Ruta actualizada» se muestra una sola vez.
@@ -101,6 +105,23 @@ DestinationViewModel.queryRouteStatus -> RouteStatusQuerying -> RouteStatusServi
      con clave `route-status`: no se duplica y se descarta si cambia el destino.
 No se guarda el paso estimado; el ViewModel solo lo usa para mostrar y repetir la misma
 indicación que se acaba de oír (`guidanceRoute`). Avanzar `currentStep` es de SCRUM-312.
+
+Consultar Rutas Recientes (SCRUM-24): DestinationViewModel.loadRecentRoutes ->
+RecentRoutesQuerying -> RecentRoutesService:
+  1. RouteHistoryFetching -> RemoteRouteHistoryService (con AuthorizedHTTPClient):
+     GET /places/routes/history?limit=50. El backend guarda cada ruta que deja de estar
+     abierta: completada o cancelada al iniciar otra. BackendDate lee las fechas de
+     Pydantic (`Z` o `+00:00`, con microsegundos).
+  2. RecentRoutesPolicy.grouped: un destino por lugar (mismo nombre sin mayúsculas ni
+     tildes, a 25 m o menos), con la vez más reciente, cómo terminó y cuántas veces.
+  3. RecentRoutesStoring -> FileRecentRoutesStore guarda cada lista recibida. Sin backend
+     se usa esa copia (`.savedCopy`, se avisa); sin copia, RecentRoutesError.unavailable.
+     Cerrar sesión la borra.
+  4. Al abrir la pantalla se locuta un resumen corto (contexto `recent-routes`): cuántos
+     destinos y el más reciente, o «No tienes rutas recientes». La hoja carga en silencio.
+Elegir un destino envía `DestinationRequest.place` (sin volver a geocodificar) a Crear
+Ruta o, con ruta activa, a Modificar Ruta. El destino de la ruta activa no se ofrece en
+la hoja y en la pantalla aparece sin poder elegirse.
 
 Audio de las instrucciones: cada revisión del recorrido tiene su propio `contextID`
 (`route-<id>` y luego `route-<id>-r<n>`). El árbitro deja invalidados para siempre los
