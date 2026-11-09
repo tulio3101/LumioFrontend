@@ -1,8 +1,8 @@
 #if canImport(SwiftUI)
 import SwiftUI
 
-/// Presenta Crear Ruta. Los anuncios por audio los hace RouteCreationService a través del
-/// AudioArbiter; el ViewModel solo refleja el estado en pantalla.
+/// Presenta Crear Ruta, Modificar Ruta y Consultar Ruta. Los anuncios por audio los hacen
+/// los servicios a través del AudioArbiter; el ViewModel solo refleja el estado en pantalla.
 @MainActor
 final class DestinationViewModel: ObservableObject {
     /// Fallo mostrado en pantalla junto con la forma de resolverlo.
@@ -53,10 +53,15 @@ final class DestinationViewModel: ObservableObject {
     /// Revisión de la ruta recién actualizada, para confirmarlo en pantalla una sola vez:
     /// se borra al salir de «Tu ruta» (`acknowledgeRouteUpdate`) o al volver a planificar.
     @Published private(set) var updatedRevision: Int?
+    @Published private(set) var isQueryingStatus = false
+    /// Resultado de la última consulta del estado de la ruta y cuándo se hizo.
+    @Published private(set) var routeStatus: RouteStatus?
+    @Published private(set) var statusCheckedAt: Date?
 
     private let routeCreator: any RouteCreating
     private let routeModifier: any RouteModifying
     private let instructionRepeater: any InstructionRepeating
+    private let routeStatusQuery: any RouteStatusQuerying
     private let suggester: any DestinationSuggesting
     private let instructions = NavigationInstructionBuilder()
     private var suggestionTask: Task<Void, Never>?
@@ -64,16 +69,18 @@ final class DestinationViewModel: ObservableObject {
 
     /// Sin `suggester` no hay autocompletado (el destino se escribe completo). Sin
     /// `routeModifier` no se puede cambiar el destino; sin `instructionRepeater`, no se
-    /// puede repetir la indicación.
+    /// puede repetir la indicación; sin `routeStatusQuery`, no se puede consultar la ruta.
     init(
         routeCreator: any RouteCreating,
         routeModifier: (any RouteModifying)? = nil,
         instructionRepeater: (any InstructionRepeating)? = nil,
+        routeStatusQuery: (any RouteStatusQuerying)? = nil,
         suggester: (any DestinationSuggesting)? = nil
     ) {
         self.routeCreator = routeCreator
         self.routeModifier = routeModifier ?? UnavailableNavigationService()
         self.instructionRepeater = instructionRepeater ?? UnavailableNavigationService()
+        self.routeStatusQuery = routeStatusQuery ?? UnavailableNavigationService()
         self.suggester = suggester ?? NoDestinationSuggestions()
     }
 
@@ -110,11 +117,50 @@ final class DestinationViewModel: ObservableObject {
 
     // MARK: Indicaciones
 
-    /// Vuelve a locutar la indicación actual (botón o Magic Tap de VoiceOver).
+    /// Vuelve a locutar la indicación actual (la estimada en la última consulta, si la hay).
     @discardableResult
     func repeatCurrentInstruction() -> Bool {
-        guard let route, !isLoading else { return false }
+        guard let route = guidanceRoute, !isLoading else { return false }
         return instructionRepeater.repeatCurrentInstruction(of: route)
+    }
+
+    // MARK: Consultar ruta
+
+    /// Avance de la última consulta, si corresponde a la ruta (y revisión) que se muestra.
+    var currentProgress: RouteProgress? {
+        guard case let .active(queried, progress)? = routeStatus, let route,
+              queried.id == route.id, queried.revision == route.revision else { return nil }
+        return progress
+    }
+
+    /// La ruta con el paso que la última consulta estimó como siguiente. Solo para mostrar
+    /// y repetir; no se guarda (avanzar el paso es de Guiar Giros, SCRUM-312).
+    var guidanceRoute: ActiveRoute? {
+        guard var route else { return nil }
+        if let next = currentProgress?.nextStep { route.currentStep = next.order }
+        return route
+    }
+
+    /// Consultar Ruta Actual (Magic Tap o «¿Cómo voy?»). El servicio locuta el resultado,
+    /// también cuando no hay ruta; aquí solo se refleja en pantalla.
+    @discardableResult
+    func queryRouteStatus() async -> RouteStatus? {
+        guard !isLoading, !isQueryingStatus else { return nil }
+        isQueryingStatus = true
+        defer { isQueryingStatus = false }
+        let status = await routeStatusQuery.queryActiveRoute()
+        // Si mientras se esperaba el GPS empezó a crearse o cambiarse la ruta, esa operación
+        // decide la ruta que se muestra.
+        guard !isLoading else { return status }
+        switch status {
+        case let .active(queried, _):
+            route = queried
+        case .noActiveRoute, .unreadable:
+            route = nil
+        }
+        routeStatus = status
+        statusCheckedAt = Date()
+        return status
     }
 
     // MARK: Crear ruta
