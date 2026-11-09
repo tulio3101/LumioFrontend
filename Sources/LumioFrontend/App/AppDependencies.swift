@@ -4,6 +4,7 @@ struct AppDependencies {
     let routeCreator: any RouteCreating
     let routeModifier: any RouteModifying
     let instructionRepeater: any InstructionRepeating
+    let routeStatus: any RouteStatusQuerying
     let destinationSuggester: any DestinationSuggesting
     let sessionService: any SessionRestoring
     let authenticationService: any Authenticating
@@ -44,6 +45,8 @@ struct AppDependencies {
             store: store, sync: sync, arbiter: arbiter, haptics: haptics
         )
         instructionRepeater = RouteInstructionRepeater(arbiter: arbiter)
+        // Consultar Ruta: solo copia local y GPS, sin backend.
+        routeStatus = RouteStatusService(store: store, location: location, arbiter: arbiter)
         destinationSuggester = MapKitDestinationSuggester()
         signOut = SignOutService(session: session, routes: store, arbiter: arbiter)
         #else
@@ -54,6 +57,7 @@ struct AppDependencies {
         routeCreator = navigation
         routeModifier = navigation
         instructionRepeater = navigation
+        routeStatus = navigation
         destinationSuggester = NoDestinationSuggestions()
         sessionService = UnavailableSessionService()
         authenticationService = UnavailableAuthenticationService()

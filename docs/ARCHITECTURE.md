@@ -46,15 +46,15 @@ Se usa ObservableObject para conservar iOS 16. La vista posee su ViewModel con
 @StateObject; su estado publicado actualiza la presentación. No se añade Redux,
 un contenedor de inyección ni librerías de navegación para este scaffold.
 
-## Flujo de Crear Ruta (SCRUM-8) y Modificar Ruta (SCRUM-9)
+## Flujo de Crear Ruta (SCRUM-8), Modificar Ruta (SCRUM-9) y Consultar Ruta (SCRUM-23)
 
 Pantallas (un DestinationViewModel compartido):
   DestinationView    inicio del trayecto; una acción principal según haya o no ruta activa
   RoutePlannerView   hoja para indicar el destino (con sugerencias), calcular y
                      recuperarse de fallos; modo `.create` o `.changeDestination`
-  ActiveRouteView    indicación actual con «Repetir indicación» (también Magic Tap),
-                     resumen, estado de guardado, «Cambiar destino» y pasos como línea
-                     de tiempo. «Ruta actualizada» se muestra una sola vez.
+  ActiveRouteView    indicación actual con «Repetir indicación», resumen, estado del
+                     trayecto («¿Cómo voy?»), estado de guardado, «Cambiar destino» y
+                     pasos como línea de tiempo. «Ruta actualizada» se muestra una sola vez.
 El ViewModel clasifica cada fallo por su salida (corregir destino, abrir Ajustes,
 reintentar) para que la pantalla ofrezca la acción adecuada.
 
@@ -84,6 +84,23 @@ Repetir la indicación: DestinationViewModel -> InstructionRepeating ->
 RouteInstructionRepeater. Reenvía al árbitro el mismo mensaje del paso actual (contexto de
 la revisión vigente y clave `step-<n>`): si aún espera turno o está sonando no se duplica,
 y si ya terminó vuelve a sonar.
+
+Consultar Ruta Actual (SCRUM-23): Magic Tap de VoiceOver en toda la pestaña Trayecto,
+«¿Cómo voy?» en el inicio y en «Tu ruta», o la acción «Consultar ruta» de VoiceOver ->
+DestinationViewModel.queryRouteStatus -> RouteStatusQuerying -> RouteStatusService:
+  1. ActiveRouteStoring.load(): la ruta sale solo de la copia local (sin backend). Sin
+     ruta: «No tienes una ruta activa…»; copia ilegible: «No se pudo leer la ruta…».
+  2. CurrentLocationProviding: una lectura de GPS (no necesita internet). Si falla, el
+     avance se calcula con `currentStep` y se avisa de que es aproximado.
+  3. RouteProgressEstimator: aproxima la ruta con tramos rectos (origen -> punto de cada
+     maniobra -> destino), proyecta la posición sobre el tramo más cercano y obtiene la
+     siguiente indicación, lo recorrido, lo que falta (tramo restante + pasos siguientes),
+     el porcentaje y el tiempo restante. A menos de 25 m del destino, «Estás llegando».
+  4. RouteStatusAnnouncements arma el texto (destino, avance, siguiente indicación); la
+     pantalla muestra las mismas frases. El mensaje P2 va en el contexto de la revisión
+     con clave `route-status`: no se duplica y se descarta si cambia el destino.
+No se guarda el paso estimado; el ViewModel solo lo usa para mostrar y repetir la misma
+indicación que se acaba de oír (`guidanceRoute`). Avanzar `currentStep` es de SCRUM-312.
 
 Audio de las instrucciones: cada revisión del recorrido tiene su propio `contextID`
 (`route-<id>` y luego `route-<id>-r<n>`). El árbitro deja invalidados para siempre los
@@ -115,7 +132,9 @@ Contratos para las HUs siguientes:
   `NavigationInstructionBuilder.message(for:in:now:)` para crear el mensaje P2. Usa
   siempre `NavigationInstructionBuilder.contextID(for: route)`: cambia con cada
   revisión; al crear una ruta o cambiar su destino se invalida el contexto anterior.
-  Al cambiar el destino `currentStep` vuelve a 0.
+  Al cambiar el destino `currentStep` vuelve a 0. Puede reutilizar
+  `RouteProgressEstimator` para decidir cuándo avanzar `currentStep`; Consultar Ruta
+  ya usa ese paso cuando no hay GPS.
 - Finalizar Ruta (SCRUM-10) borra la copia local con `ActiveRouteStoring.clear()`.
 
 Antes de empezar un trayecto con asistencia completa, hay que comprobar que la seguridad

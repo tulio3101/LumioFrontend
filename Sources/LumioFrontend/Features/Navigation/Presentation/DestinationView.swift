@@ -2,7 +2,8 @@
 import SwiftUI
 
 /// Inicio del trayecto. Una sola acción principal: sin ruta, «Indicar destino»; con ruta
-/// activa, «Ver indicaciones» (y «Cambiar destino» como secundaria). Planificar o cambiar el
+/// activa, «Ver indicaciones» (y «Cambiar destino» como secundaria). El Magic Tap de
+/// VoiceOver consulta la ruta actual en toda la pantalla, también sin ruta. Planificar o cambiar el
 /// destino ocurre en su propia hoja (RoutePlannerView) y el detalle de la ruta en su propia
 /// pantalla (ActiveRouteView).
 struct DestinationView: View {
@@ -18,12 +19,14 @@ struct DestinationView: View {
         routeCreator: any RouteCreating,
         routeModifier: (any RouteModifying)? = nil,
         instructionRepeater: (any InstructionRepeating)? = nil,
+        routeStatusQuery: (any RouteStatusQuerying)? = nil,
         suggester: (any DestinationSuggesting)? = nil
     ) {
         _model = StateObject(wrappedValue: DestinationViewModel(
             routeCreator: routeCreator,
             routeModifier: routeModifier,
             instructionRepeater: instructionRepeater,
+            routeStatusQuery: routeStatusQuery,
             suggester: suggester
         ))
     }
@@ -49,6 +52,10 @@ struct DestinationView: View {
             .padding(.vertical, 12)
             .frame(maxWidth: 560)
             .frame(maxWidth: .infinity)
+        }
+        // Consultar Ruta con el gesto de VoiceOver; sin ruta, se informa por audio.
+        .accessibilityAction(.magicTap) {
+            model.startRouteStatusQuery()
         }
         .background(LumioColor.background.ignoresSafeArea())
         .navigationTitle("Trayecto")
@@ -123,6 +130,14 @@ struct DestinationView: View {
                 .accessibilityAddTraits(.isHeader)
 
             RouteSummaryCard(route: route)
+
+            RouteProgressCard(
+                route: route,
+                progress: model.currentProgress,
+                checkedAt: model.statusCheckedAt,
+                isQuerying: model.isQueryingStatus,
+                onQuery: model.startRouteStatusQuery
+            )
 
             if route.isPendingBackendSync {
                 LumioStatusBanner(

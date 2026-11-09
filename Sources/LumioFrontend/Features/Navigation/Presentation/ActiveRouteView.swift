@@ -3,6 +3,7 @@ import SwiftUI
 
 /// Detalle de la ruta activa. Arriba, la indicación que se sigue ahora y la acción para
 /// volver a oírla (la principal de la pantalla mientras se camina); después el resumen,
+/// el estado del trayecto («¿Cómo voy?», también con el Magic Tap de VoiceOver),
 /// «Cambiar destino» y la lista completa de pasos.
 struct ActiveRouteView: View {
     @ObservedObject var model: DestinationViewModel
@@ -12,7 +13,9 @@ struct ActiveRouteView: View {
 
     var body: some View {
         Group {
-            if let route = model.route {
+            // Con el paso estimado en la última consulta, para que tarjeta, lista y
+            // «Repetir» digan lo mismo que se acaba de oír.
+            if let route = model.guidanceRoute {
                 content(route)
             } else {
                 Text("No hay una ruta activa.")
@@ -52,12 +55,20 @@ struct ActiveRouteView: View {
                         step: step,
                         total: route.steps.count,
                         spokenText: model.spokenText(for: step),
-                        focus: $instructionHasFocus
+                        focus: $instructionHasFocus,
+                        onQueryStatus: model.startRouteStatusQuery
                     ) {
                         model.repeatCurrentInstruction()
                     }
                 }
                 RouteSummaryCard(route: route)
+                RouteProgressCard(
+                    route: route,
+                    progress: model.currentProgress,
+                    checkedAt: model.statusCheckedAt,
+                    isQuerying: model.isQueryingStatus,
+                    onQuery: model.startRouteStatusQuery
+                )
                 if route.isPendingBackendSync {
                     LumioStatusBanner(
                         .warning,
@@ -80,10 +91,10 @@ struct ActiveRouteView: View {
             .frame(maxWidth: 560)
             .frame(maxWidth: .infinity)
         }
-        // Magic Tap (doble toque con dos dedos) repite la indicación sin buscar el botón,
-        // como en las apps de navegación.
+        // Magic Tap (doble toque con dos dedos): Consultar Ruta sin buscar el botón. La
+        // respuesta ya incluye la siguiente indicación.
         .accessibilityAction(.magicTap) {
-            model.repeatCurrentInstruction()
+            model.startRouteStatusQuery()
         }
     }
 
@@ -129,6 +140,7 @@ private struct CurrentInstructionCard: View {
     let total: Int
     let spokenText: String
     let focus: AccessibilityFocusState<Bool>.Binding
+    let onQueryStatus: () -> Void
     let onRepeat: () -> Void
 
     var body: some View {
@@ -162,16 +174,91 @@ private struct CurrentInstructionCard: View {
             .accessibilityLabel("Ahora, paso \(step.order + 1) de \(total): \(spokenText)")
             .accessibilityAddTraits(.isHeader)
             .accessibilityFocused(focus)
+            // Desde el primer elemento que lee VoiceOver, en el menú de acciones.
+            .accessibilityAction(named: "Consultar ruta", onQueryStatus)
 
             Button(action: onRepeat) {
                 Label("Repetir indicación", systemImage: "speaker.wave.2.fill")
             }
             .buttonStyle(LumioPrimaryButtonStyle())
+            .accessibilityHint("La vuelve a leer en voz alta.")
+        }
+        .lumioCard()
+    }
+}
+
+/// Estado del trayecto: resultado de la última consulta y la acción «¿Cómo voy?». Muestra
+/// los mismos textos que se locutan. También se usa en el inicio.
+struct RouteProgressCard: View {
+    let route: ActiveRoute
+    let progress: RouteProgress?
+    let checkedAt: Date?
+    let isQuerying: Bool
+    let onQuery: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text("Estado del trayecto")
+                        .font(.headline)
+                        .foregroundStyle(LumioColor.textPrimary)
+                    Spacer(minLength: 0)
+                    if progress != nil, let checkedAt {
+                        Text("Consultado a las \(checkedAt.formatted(date: .omitted, time: .shortened))")
+                            .font(.footnote)
+                            .foregroundStyle(LumioColor.textSecondary)
+                    }
+                }
+                if let progress {
+                    ProgressView(value: progress.fraction)
+                        .tint(LumioColor.actionPrimary)
+                        .accessibilityHidden(true)
+                    Text(RouteStatusAnnouncements.progressSentence(progress))
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(LumioColor.textPrimary)
+                    Text(nextText(progress))
+                        .font(.subheadline)
+                        .foregroundStyle(LumioColor.textSecondary)
+                    if progress.basis == .storedStep {
+                        Label(RouteStatusAnnouncements.approximateNote, systemImage: "location.slash")
+                            .font(.footnote)
+                            .foregroundStyle(LumioColor.warningText)
+                    }
+                } else {
+                    Text("Escucha cuánto llevas, cuánto te falta y la siguiente indicación.")
+                        .font(.subheadline)
+                        .foregroundStyle(LumioColor.textSecondary)
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityElement(children: .combine)
+
+            Button(action: onQuery) {
+                if isQuerying {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                            .tint(LumioColor.actionPrimary)
+                        Text("Consultando…")
+                    }
+                } else {
+                    Label("¿Cómo voy?", systemImage: "waveform")
+                }
+            }
+            .buttonStyle(LumioSecondaryButtonStyle())
+            .disabled(isQuerying)
+            .accessibilityLabel(isQuerying ? "Consultando tu ruta" : "¿Cómo voy?")
             .accessibilityHint(
-                "La vuelve a leer en voz alta. También puedes tocar dos veces con dos dedos en esta pantalla."
+                "Te dice por voz el destino, cuánto llevas y la siguiente indicación. "
+                    + "Con VoiceOver también puedes tocar dos veces con dos dedos."
             )
         }
         .lumioCard()
+    }
+
+    private func nextText(_ progress: RouteProgress) -> String {
+        if progress.isArriving, let step = progress.nextStep { return "\(step.instruction)." }
+        return RouteStatusAnnouncements.nextSentence(progress, in: route)
     }
 }
 
@@ -345,6 +432,16 @@ private struct ArrivalRow: View {
         .fixedSize(horizontal: false, vertical: true)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Llegada a \(destination)")
+    }
+}
+
+extension DestinationViewModel {
+    /// Lanza Consultar Ruta desde la vista. Con ruta, VoiceOver avisa de que empezó: la
+    /// lectura del GPS puede tardar un par de segundos.
+    func startRouteStatusQuery() {
+        guard !isQueryingStatus, !isLoading else { return }
+        if route != nil { announceForAccessibility("Consultando tu ruta.") }
+        Task { await queryRouteStatus() }
     }
 }
 #endif

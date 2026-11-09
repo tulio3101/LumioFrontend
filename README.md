@@ -35,7 +35,9 @@ con CoreLocation, destino y ruta a pie con MapKit, copia local en disco, persist
 en el backend y anuncios por audio (prioridad 2). Modificar Ruta (SCRUM-9) cambia el
 destino de la ruta activa sin crear otra; si no se puede, se mantiene la anterior y se
 avisa por audio. En «Tu ruta», «Repetir indicación» (o el Magic Tap de VoiceOver)
-vuelve a leer la indicación actual. El destino se escribe (con sugerencias) mientras no exista el dictado
+vuelve a leer la indicación actual. Consultar Ruta Actual (SCRUM-23) dice por audio el
+destino, el avance y la siguiente indicación con el Magic Tap de VoiceOver o «¿Cómo voy?»,
+a partir de la copia local y del GPS, sin backend. El destino se escribe (con sugerencias) mientras no exista el dictado
 (SCRUM-313); la guía de giros durante el trayecto es SCRUM-312.
 El registro y el inicio de sesión con correo están conectados a /users: los tokens se
 guardan en Keychain y se renuevan solos; Google sigue pendiente.
