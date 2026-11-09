@@ -22,6 +22,8 @@ struct DestinationView: View {
         instructionRepeater: (any InstructionRepeating)? = nil,
         routeStatusQuery: (any RouteStatusQuerying)? = nil,
         recentRoutes: (any RecentRoutesQuerying)? = nil,
+        routeFinisher: (any RouteFinishing)? = nil,
+        arrivalMonitor: (any ArrivalMonitoring)? = nil,
         suggester: (any DestinationSuggesting)? = nil
     ) {
         _model = StateObject(wrappedValue: DestinationViewModel(
@@ -30,6 +32,8 @@ struct DestinationView: View {
             instructionRepeater: instructionRepeater,
             routeStatusQuery: routeStatusQuery,
             recentRoutes: recentRoutes,
+            routeFinisher: routeFinisher,
+            arrivalMonitor: arrivalMonitor,
             suggester: suggester
         ))
     }
@@ -45,6 +49,13 @@ struct DestinationView: View {
                     recentRoutesEntry
                         .lumioEntrance(hasAppeared, delay: 0.2, reduceMotion: reduceMotion)
                 } else {
+                    if let finish = model.lastFinish {
+                        LumioStatusBanner(
+                            .success,
+                            title: "Navegación finalizada",
+                            message: "\(RouteFinishAnnouncements.finished(finish)) \(RouteFinishAnnouncements.historyNote)"
+                        )
+                    }
                     emptyState
                         .lumioEntrance(hasAppeared, delay: 0.1, reduceMotion: reduceMotion)
                     recentRoutesEntry

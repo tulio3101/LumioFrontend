@@ -7,7 +7,11 @@
 	<key>CFBundleDisplayName</key>
 	<string>Lumio</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Lumio usa tu ubicación para calcular la ruta a pie desde donde estás hasta tu destino.</string>
+	<string>Lumio usa tu ubicación para calcular la ruta a pie desde donde estás hasta tu destino y para avisarte al llegar, también con la pantalla bloqueada.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Lumio se conecta al servidor de desarrollo en tu red local para guardar tu ruta.</string>
 	<key>NSAppTransportSecurity</key>

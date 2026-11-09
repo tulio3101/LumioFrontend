@@ -1,7 +1,8 @@
 #if canImport(SwiftUI)
 import SwiftUI
 
-/// Presenta Crear Ruta, Modificar Ruta, Consultar Ruta y Consultar Rutas Recientes. Los anuncios por audio los hacen
+/// Presenta Crear Ruta, Modificar Ruta, Consultar Ruta, Consultar Rutas Recientes y
+/// Finalizar Ruta. Los anuncios por audio los hacen
 /// los servicios a través del AudioArbiter; el ViewModel solo refleja el estado en pantalla.
 @MainActor
 final class DestinationViewModel: ObservableObject {
@@ -69,12 +70,17 @@ final class DestinationViewModel: ObservableObject {
     @Published private(set) var recentDestinations: [RecentDestination] = []
     @Published private(set) var recentRoutesSource: RecentRoutes.Source?
     @Published private(set) var recentRoutesState: RecentRoutesState = .idle
+    /// Última ruta finalizada (a mano o al llegar), para confirmarlo en pantalla.
+    @Published private(set) var lastFinish: RouteFinishResult?
+    @Published private(set) var isFinishing = false
 
     private let routeCreator: any RouteCreating
     private let routeModifier: any RouteModifying
     private let instructionRepeater: any InstructionRepeating
     private let routeStatusQuery: any RouteStatusQuerying
     private let recentRoutes: any RecentRoutesQuerying
+    private let routeFinisher: any RouteFinishing
+    private let arrivalMonitor: any ArrivalMonitoring
     private let suggester: any DestinationSuggesting
     private let instructions = NavigationInstructionBuilder()
     private var suggestionTask: Task<Void, Never>?
@@ -83,13 +89,16 @@ final class DestinationViewModel: ObservableObject {
     /// Sin `suggester` no hay autocompletado (el destino se escribe completo). Sin
     /// `routeModifier` no se puede cambiar el destino; sin `instructionRepeater`, no se
     /// puede repetir la indicación; sin `routeStatusQuery`, no se puede consultar la ruta;
-    /// sin `recentRoutes`, no hay destinos recientes.
+    /// sin `recentRoutes`, no hay destinos recientes; sin `routeFinisher`, no se puede
+    /// finalizar; sin `arrivalMonitor`, no se detecta la llegada.
     init(
         routeCreator: any RouteCreating,
         routeModifier: (any RouteModifying)? = nil,
         instructionRepeater: (any InstructionRepeating)? = nil,
         routeStatusQuery: (any RouteStatusQuerying)? = nil,
         recentRoutes: (any RecentRoutesQuerying)? = nil,
+        routeFinisher: (any RouteFinishing)? = nil,
+        arrivalMonitor: (any ArrivalMonitoring)? = nil,
         suggester: (any DestinationSuggesting)? = nil
     ) {
         self.routeCreator = routeCreator
@@ -97,7 +106,11 @@ final class DestinationViewModel: ObservableObject {
         self.instructionRepeater = instructionRepeater ?? UnavailableNavigationService()
         self.routeStatusQuery = routeStatusQuery ?? UnavailableNavigationService()
         self.recentRoutes = recentRoutes ?? UnavailableNavigationService()
+        self.routeFinisher = routeFinisher ?? UnavailableNavigationService()
+        self.arrivalMonitor = arrivalMonitor ?? NoArrivalMonitoring()
         self.suggester = suggester ?? NoDestinationSuggestions()
+        // La llegada se detecta en cualquier pantalla, también con el teléfono bloqueado.
+        self.arrivalMonitor.onArrival = { [weak self] result in self?.didFinish(result) }
     }
 
     var errorMessage: String? { failure?.message }
@@ -113,6 +126,7 @@ final class DestinationViewModel: ObservableObject {
     func restoreActiveRoute() async {
         guard route == nil, !isLoading else { return }
         route = await routeCreator.restoreActiveRoute()
+        if route != nil { arrivalMonitor.startMonitoring() }
     }
 
     /// Prepara la hoja. Al cambiar de destino el campo empieza vacío: se pide uno nuevo.
@@ -120,6 +134,7 @@ final class DestinationViewModel: ObservableObject {
         guard !isLoading else { return }
         failure = nil
         updatedRevision = nil
+        lastFinish = nil
         if mode == .changeDestination {
             destination = ""
         }
@@ -177,6 +192,36 @@ final class DestinationViewModel: ObservableObject {
         routeStatus = status
         statusCheckedAt = Date()
         return status
+    }
+
+    // MARK: Finalizar ruta
+
+    /// Finalizar Ruta a mano: «Llegué a mi destino» (completada) o «Terminar sin llegar».
+    /// El servicio detiene las instrucciones, lo anuncia y lo guarda en el historial.
+    @discardableResult
+    func finishRoute(outcome: RouteHistoryEntry.Outcome) async -> Bool {
+        guard route != nil, !isLoading, !isFinishing else { return false }
+        isFinishing = true
+        defer { isFinishing = false }
+        arrivalMonitor.stopMonitoring()
+        guard let result = await routeFinisher.finishActiveRoute(outcome: outcome, trigger: .manual) else {
+            route = nil
+            return false
+        }
+        didFinish(result)
+        return true
+    }
+
+    /// La confirmación de ruta finalizada ya se vio.
+    func acknowledgeFinish() {
+        lastFinish = nil
+    }
+
+    private func didFinish(_ result: RouteFinishResult) {
+        route = nil
+        routeStatus = nil
+        updatedRevision = nil
+        lastFinish = result
     }
 
     // MARK: Rutas recientes
@@ -296,6 +341,9 @@ final class DestinationViewModel: ObservableObject {
                 route = changed
                 updatedRevision = changed.revision
             }
+            lastFinish = nil
+            // Empieza (o sigue, con el destino nuevo) la detección de llegada.
+            arrivalMonitor.startMonitoring()
             return true
         } catch let error as RouteCreationError {
             let message = mode == .changeDestination

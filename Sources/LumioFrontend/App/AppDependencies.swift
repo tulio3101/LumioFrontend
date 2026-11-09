@@ -6,6 +6,10 @@ struct AppDependencies {
     let instructionRepeater: any InstructionRepeating
     let routeStatus: any RouteStatusQuerying
     let recentRoutes: any RecentRoutesQuerying
+    let routeFinisher: any RouteFinishing
+    let arrivalMonitor: any ArrivalMonitoring
+    /// Se conserva mientras viva la app para reintentar el historial al volver la red.
+    private let connectivity: (any ConnectivityObserving)?
     let destinationSuggester: any DestinationSuggesting
     let sessionService: any SessionRestoring
     let authenticationService: any Authenticating
@@ -30,21 +34,30 @@ struct AppDependencies {
             AuthorizedHTTPClient(base: http, api: $0, store: tokens)
         } ?? http
 
-        // Crear Ruta y Modificar Ruta comparten copia local, backend, audio y háptica.
+        // Crear, Modificar y Finalizar Ruta comparten copia local, backend, audio y háptica.
         let store = FileActiveRouteStore(fileURL: FileActiveRouteStore.defaultFileURL())
         let sync = RemoteActiveRouteService(client: routeClient, baseURL: configuration.apiBaseURL)
+        // Rutas finalizadas pendientes de llegar al historial del backend.
+        let history = FinishedRouteSynchronizer(
+            store: FileFinishedRoutesStore(fileURL: FileFinishedRoutesStore.defaultFileURL()),
+            finishSync: RemoteFinishedRouteService(client: routeClient, baseURL: configuration.apiBaseURL),
+            routeSync: sync
+        )
         let location = CoreLocationCurrentLocationProvider()
         let geocoder = MapKitDestinationGeocoder()
         let calculator = MapKitWalkingRouteCalculator()
         let haptics = UIKitHapticFeedback()
         routeCreator = RouteCreationService(
             location: location, geocoder: geocoder, calculator: calculator,
-            store: store, sync: sync, arbiter: arbiter, haptics: haptics
+            store: store, sync: sync, arbiter: arbiter, haptics: haptics, history: history
         )
         routeModifier = RouteModificationService(
             location: location, geocoder: geocoder, calculator: calculator,
-            store: store, sync: sync, arbiter: arbiter, haptics: haptics
+            store: store, sync: sync, arbiter: arbiter, haptics: haptics, history: history
         )
+        let finisher = RouteFinishService(store: store, history: history, arbiter: arbiter, haptics: haptics)
+        routeFinisher = finisher
+        arrivalMonitor = ArrivalMonitor(tracker: CoreLocationRouteTracker(), store: store, finisher: finisher)
         instructionRepeater = RouteInstructionRepeater(arbiter: arbiter)
         // Consultar Ruta: solo copia local y GPS, sin backend.
         routeStatus = RouteStatusService(store: store, location: location, arbiter: arbiter)
@@ -53,12 +66,19 @@ struct AppDependencies {
         recentRoutes = RecentRoutesService(
             history: RemoteRouteHistoryService(client: routeClient, baseURL: configuration.apiBaseURL),
             store: recentStore,
-            arbiter: arbiter
+            arbiter: arbiter,
+            pendingHistory: history
         )
         destinationSuggester = MapKitDestinationSuggester()
         signOut = SignOutService(
-            session: session, routes: store, arbiter: arbiter, recentRoutes: recentStore
+            session: session, routes: store, arbiter: arbiter,
+            recentRoutes: recentStore, pendingHistory: history
         )
+        // El historial pendiente se envía al abrir la app y cada vez que vuelve la conexión.
+        let monitor = NetworkConnectivityMonitor()
+        monitor.start { Task { await history.flush() } }
+        connectivity = monitor
+        Task { await history.flush() }
         #else
         #if canImport(AVFoundation)
         audioArbiter = AudioArbiterService(player: SpeechAudioPlayer())
@@ -69,6 +89,9 @@ struct AppDependencies {
         instructionRepeater = navigation
         routeStatus = navigation
         recentRoutes = navigation
+        routeFinisher = navigation
+        arrivalMonitor = NoArrivalMonitoring()
+        connectivity = nil
         destinationSuggester = NoDestinationSuggestions()
         sessionService = UnavailableSessionService()
         authenticationService = UnavailableAuthenticationService()
