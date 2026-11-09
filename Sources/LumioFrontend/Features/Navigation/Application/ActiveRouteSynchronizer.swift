@@ -7,9 +7,13 @@ import Foundation
 struct ActiveRouteSynchronizer {
     let sync: any ActiveRouteSyncing
     let store: any ActiveRouteStoring
+    /// Rutas finalizadas sin red. Van antes que una ruta nueva: al subirla, el backend
+    /// cancelaría la anterior que sigue abierta y perdería que se completó.
+    var history: (any PendingHistorySyncing)?
 
     func synchronize(_ route: ActiveRoute) async -> ActiveRoute {
         guard route.isPendingBackendSync else { return route }
+        if let history { await history.flush() }
         var synced = route
         do {
             if let remoteID = route.remoteID {

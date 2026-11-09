@@ -14,21 +14,27 @@ final class RecentRoutesService: RecentRoutesQuerying {
     private let history: any RouteHistoryFetching
     private let store: any RecentRoutesStoring
     private let arbiter: any AudioArbitrating
+    private let pendingHistory: (any PendingHistorySyncing)?
     private let now: () -> Date
 
+    /// Con `pendingHistory`, antes de leer el historial se envían las rutas finalizadas sin
+    /// red: así aparecen en la lista en cuanto hay conexión.
     init(
         history: any RouteHistoryFetching,
         store: any RecentRoutesStoring,
         arbiter: any AudioArbitrating,
+        pendingHistory: (any PendingHistorySyncing)? = nil,
         now: @escaping () -> Date = Date.init
     ) {
         self.history = history
         self.store = store
         self.arbiter = arbiter
+        self.pendingHistory = pendingHistory
         self.now = now
     }
 
     func recentRoutes(announce: Bool) async throws -> RecentRoutes {
+        if let pendingHistory { await pendingHistory.flush() }
         let routes: RecentRoutes
         do {
             let entries = try await history.recentHistory(limit: RecentRoutesPolicy.fetchLimit)
