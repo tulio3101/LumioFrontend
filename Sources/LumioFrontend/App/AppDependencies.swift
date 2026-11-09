@@ -3,6 +3,7 @@
 struct AppDependencies {
     let routeCreator: any RouteCreating
     let routeModifier: any RouteModifying
+    let instructionRepeater: any InstructionRepeating
     let destinationSuggester: any DestinationSuggesting
     let sessionService: any SessionRestoring
     let authenticationService: any Authenticating
@@ -42,6 +43,7 @@ struct AppDependencies {
             location: location, geocoder: geocoder, calculator: calculator,
             store: store, sync: sync, arbiter: arbiter, haptics: haptics
         )
+        instructionRepeater = RouteInstructionRepeater(arbiter: arbiter)
         destinationSuggester = MapKitDestinationSuggester()
         signOut = SignOutService(session: session, routes: store, arbiter: arbiter)
         #else
@@ -51,6 +53,7 @@ struct AppDependencies {
         let navigation = UnavailableNavigationService()
         routeCreator = navigation
         routeModifier = navigation
+        instructionRepeater = navigation
         destinationSuggester = NoDestinationSuggestions()
         sessionService = UnavailableSessionService()
         authenticationService = UnavailableAuthenticationService()

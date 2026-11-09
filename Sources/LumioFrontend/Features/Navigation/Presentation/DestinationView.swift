@@ -17,10 +17,14 @@ struct DestinationView: View {
     init(
         routeCreator: any RouteCreating,
         routeModifier: (any RouteModifying)? = nil,
+        instructionRepeater: (any InstructionRepeating)? = nil,
         suggester: (any DestinationSuggesting)? = nil
     ) {
         _model = StateObject(wrappedValue: DestinationViewModel(
-            routeCreator: routeCreator, routeModifier: routeModifier, suggester: suggester
+            routeCreator: routeCreator,
+            routeModifier: routeModifier,
+            instructionRepeater: instructionRepeater,
+            suggester: suggester
         ))
     }
 

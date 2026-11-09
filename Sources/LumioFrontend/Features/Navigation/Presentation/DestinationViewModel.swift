@@ -50,25 +50,30 @@ final class DestinationViewModel: ObservableObject {
     /// Texto que produjo las sugerencias actuales; nil si no se ha completado una búsqueda.
     @Published private(set) var suggestionsQuery: String?
     @Published private(set) var planningMode: PlanningMode = .create
-    /// Revisión de la ruta recién actualizada, para confirmarlo en pantalla una vez.
+    /// Revisión de la ruta recién actualizada, para confirmarlo en pantalla una sola vez:
+    /// se borra al salir de «Tu ruta» (`acknowledgeRouteUpdate`) o al volver a planificar.
     @Published private(set) var updatedRevision: Int?
 
     private let routeCreator: any RouteCreating
     private let routeModifier: any RouteModifying
+    private let instructionRepeater: any InstructionRepeating
     private let suggester: any DestinationSuggesting
     private let instructions = NavigationInstructionBuilder()
     private var suggestionTask: Task<Void, Never>?
     private var isApplyingSuggestion = false
 
     /// Sin `suggester` no hay autocompletado (el destino se escribe completo). Sin
-    /// `routeModifier` no se puede cambiar el destino.
+    /// `routeModifier` no se puede cambiar el destino; sin `instructionRepeater`, no se
+    /// puede repetir la indicación.
     init(
         routeCreator: any RouteCreating,
         routeModifier: (any RouteModifying)? = nil,
+        instructionRepeater: (any InstructionRepeating)? = nil,
         suggester: (any DestinationSuggesting)? = nil
     ) {
         self.routeCreator = routeCreator
         self.routeModifier = routeModifier ?? UnavailableNavigationService()
+        self.instructionRepeater = instructionRepeater ?? UnavailableNavigationService()
         self.suggester = suggester ?? NoDestinationSuggestions()
     }
 
@@ -91,10 +96,25 @@ final class DestinationViewModel: ObservableObject {
     func beginPlanning(_ mode: PlanningMode) {
         guard !isLoading else { return }
         failure = nil
+        updatedRevision = nil
         if mode == .changeDestination {
             destination = ""
         }
         planningMode = mode
+    }
+
+    /// La confirmación «Ruta actualizada» ya se vio: no se vuelve a mostrar.
+    func acknowledgeRouteUpdate() {
+        updatedRevision = nil
+    }
+
+    // MARK: Indicaciones
+
+    /// Vuelve a locutar la indicación actual (botón o Magic Tap de VoiceOver).
+    @discardableResult
+    func repeatCurrentInstruction() -> Bool {
+        guard let route, !isLoading else { return false }
+        return instructionRepeater.repeatCurrentInstruction(of: route)
     }
 
     // MARK: Crear ruta

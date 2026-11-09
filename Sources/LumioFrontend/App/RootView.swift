@@ -4,6 +4,7 @@ import SwiftUI
 struct RootView: View {
     let routeCreator: any RouteCreating
     let routeModifier: any RouteModifying
+    let instructionRepeater: any InstructionRepeating
     let destinationSuggester: any DestinationSuggesting
     let authenticationService: any Authenticating
     let signOut: any SigningOut
@@ -15,11 +16,13 @@ struct RootView: View {
         authenticationService: any Authenticating,
         routeCreator: any RouteCreating,
         routeModifier: any RouteModifying,
+        instructionRepeater: any InstructionRepeating,
         destinationSuggester: any DestinationSuggesting,
         signOut: any SigningOut
     ) {
         self.routeCreator = routeCreator
         self.routeModifier = routeModifier
+        self.instructionRepeater = instructionRepeater
         self.destinationSuggester = destinationSuggester
         self.signOut = signOut
         self.authenticationService = authenticationService
@@ -45,6 +48,7 @@ struct RootView: View {
                 DestinationView(
                     routeCreator: routeCreator,
                     routeModifier: routeModifier,
+                    instructionRepeater: instructionRepeater,
                     suggester: destinationSuggester
                 )
             }
