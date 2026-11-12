@@ -135,11 +135,20 @@ final class DestinationViewModel: ObservableObject {
             return
         }
         let gate = obstacleGate
+        // En segundo plano: pedir el permiso de cámara no debe bloquear el cálculo de la ruta
+        // ni los giros.
         Task { @MainActor in
-            if let gate, await gate.canAssistWithObstacles() == false {
+            if let gate, await gate.prepareObstacleAssistance() == false {
+                // Denegado (o ya estaba denegado): la ruta sigue. Se avisa una sola vez que va
+                // sin detección y se ofrece abrir Ajustes, igual que con locationPermissionDenied.
                 gate.announceAssistanceUnavailable()
+                failure = Failure(
+                    message: "La detección de obstáculos no está disponible sin permiso de cámara.",
+                    recovery: .openSettings
+                )
                 return
             }
+            // Concedido (o sin compuerta): arranca de inmediato, sin reiniciar la ruta.
             try? await safetyMonitor.start()
         }
     }

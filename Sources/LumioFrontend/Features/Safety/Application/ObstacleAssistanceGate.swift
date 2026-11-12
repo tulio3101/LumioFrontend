@@ -1,12 +1,14 @@
 import Foundation
 
-/// Compuerta de la asistencia de obstáculos (SCRUM-315): decide si la cámara permite arrancar
-/// la detección y avisa una sola vez por sesión cuando la ruta va sin ella. Nunca bloquea la
+/// Compuerta de la asistencia de obstáculos (SCRUM-315 / SCRUM-33): prepara el permiso de
+/// cámara antes de arrancar la detección y avisa cuando la ruta va sin ella. Nunca bloquea la
 /// navegación: si no hay permiso, la ruta sigue y solo cambia que no habrá detección.
 @MainActor
 protocol CameraAssistanceGating: AnyObject {
-    /// true si la cámara está autorizada para la asistencia de obstáculos.
-    func canAssistWithObstacles() async -> Bool
+    /// Prepara la cámara para la detección. Si el permiso está sin pedir, lo solicita con el
+    /// flujo accesible (explica por audio y muestra el diálogo del sistema). Devuelve true si
+    /// la cámara queda autorizada. No reinicia la ruta; se llama en segundo plano.
+    func prepareObstacleAssistance() async -> Bool
     /// Avisa por audio, una sola vez, que la navegación va sin detección por falta de cámara.
     func announceAssistanceUnavailable()
     /// Si el modelo YOLO no cargó, avisa por audio que la detección no está disponible. Lo
@@ -14,22 +16,25 @@ protocol CameraAssistanceGating: AnyObject {
     func announceModelUnavailable()
 }
 
+#if os(iOS)
 @MainActor
 final class ObstacleAssistanceGate: CameraAssistanceGating {
-    private let permissions: PermissionService
+    private let permissions: PermissionsViewModel
     private let audio: any AudioArbitrating
     /// SCRUM-37: estado guardado del fallo de carga del modelo. Se decide en AppDependencies.
     private let modelAvailable: Bool
     private var announcedCameraUnavailable = false
 
-    init(permissions: PermissionService, audio: any AudioArbitrating, modelAvailable: Bool = true) {
+    init(permissions: PermissionsViewModel, audio: any AudioArbitrating, modelAvailable: Bool = true) {
         self.permissions = permissions
         self.audio = audio
         self.modelAvailable = modelAvailable
     }
 
-    func canAssistWithObstacles() async -> Bool {
-        await permissions.missing(for: .obstacleAssistance).isEmpty
+    func prepareObstacleAssistance() async -> Bool {
+        // Reutiliza el flujo accesible de Nestor (PermissionsViewModel / obstacleAssistance):
+        // explica por audio y, si está sin pedir, muestra el diálogo del sistema.
+        await permissions.requestForObstacleAssistance()
     }
 
     func announceAssistanceUnavailable() {
@@ -43,3 +48,4 @@ final class ObstacleAssistanceGate: CameraAssistanceGating {
         audio.receive(SafetyAudio.modelUnavailable())
     }
 }
+#endif

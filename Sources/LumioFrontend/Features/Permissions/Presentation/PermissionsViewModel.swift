@@ -73,6 +73,30 @@ final class PermissionsViewModel: ObservableObject {
         return false
     }
 
+    /// SCRUM-33: prepara los permisos de una función y los solicita si están sin pedir, con el
+    /// mismo flujo accesible de la pantalla de Permisos: primero explica por audio para qué es
+    /// (receiveAndWait) y luego muestra el diálogo del sistema. Devuelve true si todos quedan
+    /// concedidos. Pensado para llamarse en segundo plano (no bloquea la navegación).
+    func requestForObstacleAssistance() async -> Bool {
+        for permission in PermissionPurpose.obstacleAssistance.required {
+            let current = await service.status(for: permission)
+            statuses[permission] = current
+            switch current {
+            case .authorized:
+                continue
+            case .notDetermined:
+                // Explicar por audio para qué es antes de mostrar el diálogo del sistema.
+                await say(permission.purpose)
+                let status = (try? await service.request(permission)) ?? .denied
+                statuses[permission] = status
+                if status != .authorized { return false }
+            case .denied, .restricted, .unavailable:
+                return false
+            }
+        }
+        return true
+    }
+
     func feedback(for permission: AppPermission) -> String {
         switch statuses[permission] ?? .notDetermined {
         case .authorized: return "\(permission.title): permiso concedido."

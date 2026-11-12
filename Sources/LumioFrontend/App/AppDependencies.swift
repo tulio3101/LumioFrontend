@@ -127,11 +127,14 @@ struct AppDependencies {
             self.safetyService = nil
             modelAvailable = false
         }
-        // Un solo PermissionService para la pantalla de permisos y para la compuerta de cámara.
-        let permissionService = PermissionService(provider: IOSPermissionProvider())
-        self.permissions = PermissionsViewModel(service: permissionService, audio: audioArbiter)
+        // La compuerta reutiliza el PermissionsViewModel de la pantalla de permisos para el flujo
+        // accesible de solicitud de cámara.
+        let permissionsViewModel = PermissionsViewModel(
+            service: PermissionService(provider: IOSPermissionProvider()), audio: audioArbiter
+        )
+        self.permissions = permissionsViewModel
         self.obstacleGate = ObstacleAssistanceGate(
-            permissions: permissionService, audio: audioArbiter, modelAvailable: modelAvailable
+            permissions: permissionsViewModel, audio: audioArbiter, modelAvailable: modelAvailable
         )
         #endif
     }

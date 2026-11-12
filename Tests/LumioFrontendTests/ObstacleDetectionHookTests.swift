@@ -41,11 +41,12 @@ final class SpySafetyMonitor: SafetyMonitoring {
 
 @MainActor
 final class FakeCameraGate: CameraAssistanceGating {
-    var authorized: Bool
+    var prepareResult: Bool
+    private(set) var prepareCalls = 0
     private(set) var announcements = 0
     private(set) var modelAnnouncements = 0
-    init(authorized: Bool) { self.authorized = authorized }
-    func canAssistWithObstacles() async -> Bool { authorized }
+    init(prepareResult: Bool) { self.prepareResult = prepareResult }
+    func prepareObstacleAssistance() async -> Bool { prepareCalls += 1; return prepareResult }
     func announceAssistanceUnavailable() { announcements += 1 }
     func announceModelUnavailable() { modelAnnouncements += 1 }
 }
@@ -56,14 +57,6 @@ final class StubRouteFinisher: RouteFinishing {
     func finishActiveRoute(outcome: RouteHistoryEntry.Outcome, trigger: RouteFinishTrigger) async -> RouteFinishResult? {
         result
     }
-}
-
-@MainActor
-final class StubPermissionProvider: PermissionProviding {
-    var status: PermissionStatus
-    init(status: PermissionStatus) { self.status = status }
-    func status(for permission: AppPermission) async -> PermissionStatus { status }
-    func request(_ permission: AppPermission) async throws -> PermissionStatus { status }
 }
 
 @MainActor
@@ -79,7 +72,7 @@ private func makeViewModel(
         routeFinisher: finisher ?? StubRouteFinisher(),
         arrivalMonitor: arrival ?? SpyArrivalMonitor(),
         safetyMonitor: safety,
-        obstacleGate: gate ?? FakeCameraGate(authorized: true)
+        obstacleGate: gate ?? FakeCameraGate(prepareResult: true)
     )
 }
 
@@ -141,71 +134,134 @@ private func waitUntil(_ condition: () -> Bool, tries: Int = 200) async {
     #expect(safety.stops >= 1)
 }
 
-// MARK: - Req 5: sin permiso de cámara la ruta sigue y se avisa una vez
+// MARK: - Permiso de cámara: concede vs. niega (comportamiento en el ViewModel)
 
-@Test @MainActor func routeContinuesWithoutDetectionWhenCameraDenied() async {
+@Test @MainActor func cameraGrantedStartsDetectionWithoutFailure() async {
     let safety = SpySafetyMonitor()
-    let gate = FakeCameraGate(authorized: false)
+    let gate = FakeCameraGate(prepareResult: true)
+    let vm = makeViewModel(creator: FakeRouteCreator(created: activePharmacyRoute()), safety: safety, gate: gate)
+
+    _ = await vm.createRoute(to: .query("Farmacia"))
+    await waitUntil { safety.starts == 1 }
+
+    #expect(safety.starts == 1)       // concedido → arranca de inmediato, sin reiniciar la ruta
+    #expect(gate.announcements == 0)
+    #expect(vm.failure == nil)
+}
+
+@Test @MainActor func cameraDeniedContinuesRouteAnnouncesOnceAndOffersSettings() async {
+    let safety = SpySafetyMonitor()
+    let gate = FakeCameraGate(prepareResult: false)
     let vm = makeViewModel(creator: FakeRouteCreator(created: activePharmacyRoute()), safety: safety, gate: gate)
 
     let created = await vm.createRoute(to: .query("Farmacia"))
     await waitUntil { gate.announcements == 1 }
 
-    #expect(created)              // la ruta sigue
-    #expect(safety.starts == 0)   // no se arrancó la detección
-    #expect(gate.announcements == 1)
+    #expect(created)                                // la ruta sigue
+    #expect(safety.starts == 0)                     // no se arrancó la detección
+    #expect(gate.announcements == 1)                // avisado una sola vez
+    #expect(vm.failure?.recovery == .openSettings)  // se ofrece abrir Ajustes
 }
 
-@Test @MainActor func gateAnnouncesOnceAndChecksCameraPermission() async {
-    let arbiter = SpyArbiter()
-    let denied = ObstacleAssistanceGate(
-        permissions: PermissionService(provider: StubPermissionProvider(status: .denied)),
-        audio: arbiter
-    )
-    #expect(await denied.canAssistWithObstacles() == false)
-    denied.announceAssistanceUnavailable()
-    denied.announceAssistanceUnavailable()
-    #expect(arbiter.received.filter { $0.deduplicationKey == "safety-no-camera" }.count == 1)
+// MARK: - Flujo accesible del permiso de cámara en los 4 estados (PermissionsViewModel)
 
-    let granted = ObstacleAssistanceGate(
-        permissions: PermissionService(provider: StubPermissionProvider(status: .authorized)),
-        audio: SpyArbiter()
+@MainActor
+final class ScriptedPermissionProvider: PermissionProviding {
+    private var current: PermissionStatus
+    private let afterRequest: PermissionStatus
+    private(set) var requests = 0
+    init(initial: PermissionStatus, afterRequest: PermissionStatus) {
+        current = initial
+        self.afterRequest = afterRequest
+    }
+    func status(for permission: AppPermission) async -> PermissionStatus { current }
+    func request(_ permission: AppPermission) async throws -> PermissionStatus {
+        requests += 1
+        current = afterRequest
+        return afterRequest
+    }
+}
+
+/// Reproductor que completa cada mensaje enseguida, para que `receiveAndWait` de `say` no cuelgue.
+@MainActor
+final class ImmediatePlayer: AudioPlaying {
+    var onFinished: ((PlaybackToken) -> Void)?
+    private(set) var played: [AudioMessage] = []
+    func play(_ message: AudioMessage, token: PlaybackToken) throws {
+        played.append(message)
+        Task { @MainActor in self.onFinished?(token) }
+    }
+    func stop() {}
+}
+
+@MainActor
+private func permissionsViewModel(initial: PermissionStatus, afterRequest: PermissionStatus)
+    -> (PermissionsViewModel, ScriptedPermissionProvider, ImmediatePlayer) {
+    let provider = ScriptedPermissionProvider(initial: initial, afterRequest: afterRequest)
+    let player = ImmediatePlayer()
+    let vm = PermissionsViewModel(
+        service: PermissionService(provider: provider), audio: AudioArbiterService(player: player)
     )
-    #expect(await granted.canAssistWithObstacles() == true)
+    return (vm, provider, player)
+}
+
+@Test @MainActor func cameraNotDeterminedThenGrantedExplainsAsksAndAssists() async {
+    let (pvm, provider, player) = permissionsViewModel(initial: .notDetermined, afterRequest: .authorized)
+    let granted = await pvm.requestForObstacleAssistance()
+    #expect(granted)
+    #expect(provider.requests == 1)                                 // mostró el diálogo del sistema
+    #expect(player.played.contains { $0.text.contains("cámara") })  // explicó por audio primero
+}
+
+@Test @MainActor func cameraNotDeterminedThenDeniedDoesNotAssist() async {
+    let (pvm, provider, _) = permissionsViewModel(initial: .notDetermined, afterRequest: .denied)
+    let granted = await pvm.requestForObstacleAssistance()
+    #expect(!granted)
+    #expect(provider.requests == 1)
+}
+
+@Test @MainActor func cameraAlreadyDeniedDoesNotAskNorExplain() async {
+    let (pvm, provider, player) = permissionsViewModel(initial: .denied, afterRequest: .denied)
+    let granted = await pvm.requestForObstacleAssistance()
+    #expect(!granted)
+    #expect(provider.requests == 0)   // no vuelve a mostrar el diálogo
+    #expect(player.played.isEmpty)    // ni explica
+}
+
+@Test @MainActor func cameraAlreadyAuthorizedAssistsWithoutAsking() async {
+    let (pvm, provider, player) = permissionsViewModel(initial: .authorized, afterRequest: .authorized)
+    let granted = await pvm.requestForObstacleAssistance()
+    #expect(granted)
+    #expect(provider.requests == 0)
+    #expect(player.played.isEmpty)    // no pregunta nada
 }
 
 // MARK: - El aviso de "modelo no disponible" suena al iniciar la ruta, no al abrir la app
 
 @Test @MainActor func modelUnavailableIsAnnouncedWhenRouteStartsNotAtLaunch() async {
-    let gate = FakeCameraGate(authorized: true)
+    let gate = FakeCameraGate(prepareResult: true)
     let vm = DestinationViewModel(
         routeCreator: FakeRouteCreator(created: activePharmacyRoute()),
         safetyMonitor: nil,     // modelo no cargó → sin monitor
         obstacleGate: gate
     )
-    // Construir el ViewModel (abrir la app) no anuncia nada.
-    #expect(gate.modelAnnouncements == 0)
+    #expect(gate.modelAnnouncements == 0)   // abrir la app no anuncia
 
     _ = await vm.createRoute(to: .query("Farmacia"))
 
-    #expect(gate.modelAnnouncements == 1)
+    #expect(gate.modelAnnouncements == 1)   // al iniciar la ruta, sí
 }
 
 @Test @MainActor func gateAnnouncesModelUnavailableOnlyWhenModelFailed() {
+    let (pvm, _, _) = permissionsViewModel(initial: .authorized, afterRequest: .authorized)
     let failedArbiter = SpyArbiter()
-    let failed = ObstacleAssistanceGate(
-        permissions: PermissionService(provider: StubPermissionProvider(status: .authorized)),
-        audio: failedArbiter, modelAvailable: false
-    )
+    let failed = ObstacleAssistanceGate(permissions: pvm, audio: failedArbiter, modelAvailable: false)
     #expect(failedArbiter.received.isEmpty)   // no suena al construir (abrir la app)
     failed.announceModelUnavailable()
     #expect(failedArbiter.received.filter { $0.deduplicationKey == "safety-unavailable" }.count == 1)
 
     let okArbiter = SpyArbiter()
-    let ok = ObstacleAssistanceGate(
-        permissions: PermissionService(provider: StubPermissionProvider(status: .authorized)),
-        audio: okArbiter, modelAvailable: true
-    )
+    let ok = ObstacleAssistanceGate(permissions: pvm, audio: okArbiter, modelAvailable: true)
     ok.announceModelUnavailable()
     #expect(okArbiter.received.isEmpty)       // modelo OK: nunca anuncia
 }

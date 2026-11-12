@@ -73,6 +73,10 @@ final class PermissionService {
     private var requesting = false
     init(provider: any PermissionProviding) { self.provider = provider }
 
+    func status(for permission: AppPermission) async -> PermissionStatus {
+        await provider.status(for: permission)
+    }
+
     func statuses() async -> [AppPermission: PermissionStatus] {
         var result: [AppPermission: PermissionStatus] = [:]
         for permission in AppPermission.allCases {
