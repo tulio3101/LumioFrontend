@@ -15,6 +15,39 @@ struct RootView: View {
     /// Se decide antes del primer frame para no mostrar la bienvenida de forma transitoria.
     @State private var entry: AppEntry
 
+    #if os(iOS)
+    /// SCRUM-315: permisos accesibles (micrófono, voz, ubicación, cámara) para el destino por
+    /// voz y la detección de obstáculos. Se comparte con DestinationView y SettingsView.
+    let permissions: PermissionsViewModel
+
+    init(
+        sessionService: any SessionRestoring,
+        authenticationService: any Authenticating,
+        routeCreator: any RouteCreating,
+        routeModifier: any RouteModifying,
+        instructionRepeater: any InstructionRepeating,
+        routeStatus: any RouteStatusQuerying,
+        recentRoutes: any RecentRoutesQuerying,
+        routeFinisher: any RouteFinishing,
+        arrivalMonitor: any ArrivalMonitoring,
+        destinationSuggester: any DestinationSuggesting,
+        signOut: any SigningOut,
+        permissions: PermissionsViewModel
+    ) {
+        self.routeCreator = routeCreator
+        self.routeModifier = routeModifier
+        self.instructionRepeater = instructionRepeater
+        self.routeStatus = routeStatus
+        self.recentRoutes = recentRoutes
+        self.routeFinisher = routeFinisher
+        self.arrivalMonitor = arrivalMonitor
+        self.destinationSuggester = destinationSuggester
+        self.signOut = signOut
+        self.authenticationService = authenticationService
+        self.permissions = permissions
+        _entry = State(initialValue: AppEntry(session: sessionService))
+    }
+    #else
     init(
         sessionService: any SessionRestoring,
         authenticationService: any Authenticating,
@@ -40,6 +73,7 @@ struct RootView: View {
         self.authenticationService = authenticationService
         _entry = State(initialValue: AppEntry(session: sessionService))
     }
+    #endif
 
     var body: some View {
         switch entry {
@@ -71,7 +105,11 @@ struct RootView: View {
             .tabItem { Label("Trayecto", systemImage: "figure.walk") }
 
             NavigationStack {
+                #if os(iOS)
+                SettingsView(signOut: signOut, onSignedOut: { entry = .welcome }, permissions: permissions)
+                #else
                 SettingsView(signOut: signOut) { entry = .welcome }
+                #endif
             }
             .tabItem { Label("Preferencias", systemImage: "gearshape") }
         }

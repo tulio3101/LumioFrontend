@@ -21,6 +21,9 @@ struct AppDependencies {
     /// nil si el modelo YOLO no está en el bundle (añadir yolo26n_640_int8.mlpackage a Copy Bundle Resources).
     let safetyService: SafetyService?
     #endif
+    #if os(iOS)
+    let permissions: PermissionsViewModel
+    #endif
 
     init(configuration: AppConfiguration = .main) {
         #if os(iOS)
@@ -114,6 +117,11 @@ struct AppDependencies {
         } else {
             self.safetyService = nil
         }
+        #endif
+        #if os(iOS)
+        self.permissions = PermissionsViewModel(
+            service: PermissionService(provider: IOSPermissionProvider()), audio: audioArbiter
+        )
         #endif
     }
 }

@@ -11,6 +11,32 @@ struct LumioApp: App {
 
     var body: some Scene {
         WindowGroup {
+            #if os(iOS)
+            RootView(
+                sessionService: dependencies.sessionService,
+                authenticationService: dependencies.authenticationService,
+                routeCreator: dependencies.routeCreator,
+                routeModifier: dependencies.routeModifier,
+                instructionRepeater: dependencies.instructionRepeater,
+                routeStatus: dependencies.routeStatus,
+                recentRoutes: dependencies.recentRoutes,
+                routeFinisher: dependencies.routeFinisher,
+                arrivalMonitor: dependencies.arrivalMonitor,
+                destinationSuggester: dependencies.destinationSuggester,
+                signOut: dependencies.signOut,
+                permissions: dependencies.permissions
+            )
+            .onAppear {
+                // onChange(of: scenePhase) misses the first .active because the scene is
+                // already active when the view is built. Fire it manually here instead.
+                handleScenePhase(.active)
+            }
+            // View.environmentObject() is iOS 13+; Scene.environmentObject() requires iOS 17.
+            // Keeping this on the View avoids the availability constraint.
+            #if DEBUG
+            .environmentObject(DebugSafetyContainer(service: dependencies.safetyService))
+            #endif
+            #else
             RootView(
                 sessionService: dependencies.sessionService,
                 authenticationService: dependencies.authenticationService,
@@ -24,17 +50,6 @@ struct LumioApp: App {
                 destinationSuggester: dependencies.destinationSuggester,
                 signOut: dependencies.signOut
             )
-            .onAppear {
-                // onChange(of: scenePhase) misses the first .active because the scene is
-                // already active when the view is built. Fire it manually here instead.
-                #if os(iOS)
-                handleScenePhase(.active)
-                #endif
-            }
-            // View.environmentObject() is iOS 13+; Scene.environmentObject() requires iOS 17.
-            // Keeping this on the View avoids the availability constraint.
-            #if os(iOS) && DEBUG
-            .environmentObject(DebugSafetyContainer(service: dependencies.safetyService))
             #endif
         }
         // Handles subsequent foreground/background transitions after the first launch.

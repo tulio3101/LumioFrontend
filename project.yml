@@ -31,6 +31,10 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         # Se combina con las claves generadas: permisos y configuración de Lumio.
         INFOPLIST_FILE: Resources/Info.plist
+        # SCRUM-315: destino por voz. Cámara va arriba (INFOPLIST_KEY) y ubicación ya está
+        # en Resources/Info.plist, así que aquí solo añadimos micrófono y reconocimiento de voz.
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "Lumio utiliza el micrófono para escuchar el destino que indicas por voz."
+        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "Lumio utiliza el reconocimiento de voz para transcribir y confirmar tu destino."
         SWIFT_VERSION: "5.0"
 
   lumioTests:
