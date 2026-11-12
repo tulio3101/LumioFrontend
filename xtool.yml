@@ -1,0 +1,4 @@
+version: 1
+bundleID: com.lumio.app
+iconPath: Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png
+infoPath: Resources/Info.plist

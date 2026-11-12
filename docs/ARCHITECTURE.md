@@ -46,16 +46,147 @@ Se usa ObservableObject para conservar iOS 16. La vista posee su ViewModel con
 @StateObject; su estado publicado actualiza la presentación. No se añade Redux,
 un contenedor de inyección ni librerías de navegación para este scaffold.
 
-## Flujo de ejemplo
+## Flujo de Crear Ruta (SCRUM-8), Modificar Ruta (SCRUM-9), Consultar Ruta (SCRUM-23), Rutas Recientes (SCRUM-24) y Finalizar Ruta (SCRUM-10)
 
-DestinationView -> DestinationViewModel -> NavigationPlanning
-                                      -> UnavailableNavigationService (actual)
-                                      -> MapKitNavigationService (por implementar)
+Pantallas (un DestinationViewModel compartido):
+  DestinationView    inicio del trayecto; una acción principal según haya o no ruta activa
+                     y la entrada a «Rutas recientes»
+  RoutePlannerView   hoja para indicar el destino (con sugerencias y, con el campo vacío,
+                     hasta 5 recientes), calcular y recuperarse de fallos; modo `.create`
+                     o `.changeDestination`
+  RecentRoutesView   destinos recientes con fecha, cómo terminó y cuántas veces; elegir
+                     uno crea la ruta o, con ruta activa, cambia su destino
+  ActiveRouteView    indicación actual con «Repetir indicación», resumen, estado del
+                     trayecto («¿Cómo voy?»), estado de guardado, «Cambiar destino»,
+                     «Finalizar ruta» y pasos como línea de tiempo. «Ruta actualizada» se
+                     muestra una sola vez. Al finalizar muestra FinishedRouteView.
+El ViewModel clasifica cada fallo por su salida (corregir destino, abrir Ajustes,
+reintentar) para que la pantalla ofrezca la acción adecuada.
 
-AppDependencies selecciona la implementación. El servicio actual lanza un error
-explícito. Sustituirlo por un adaptador real o un fake de pruebas; no meter MapKit
-en la vista. El ejemplo solo calcula una ruta: empezar un trayecto requiere comprobar
-que la seguridad local esté disponible.
+Sugerencias: DestinationViewModel -> DestinationSuggesting -> MapKitDestinationSuggester
+(MKLocalSearchCompleter, espera 0,3 s tras la última tecla, mínimo 3 letras, máximo 5).
+Elegir una sugerencia confirma el destino como `DestinationRequest.place`; si no se puede
+ubicar, se usa su texto como `.query` para que el servicio locute el fallo.
+
+DestinationViewModel -> RouteCreating / RouteModifying
+  WalkingRoutePlanner (Application), común a crear y modificar:
+    1. CurrentLocationProviding  -> CoreLocationCurrentLocationProvider (lectura nueva cada vez)
+    2. DestinationGeocoding      -> MapKitDestinationGeocoder (MKLocalSearch cerca del usuario)
+    3. WalkingRouteCalculating   -> MapKitWalkingRouteCalculator (MKDirections, .walking)
+    4. NavigationInstructionBuilder normaliza los pasos
+  RouteCreationService: ruta nueva -> copia local -> "Ruta lista" + primera instrucción
+  RouteModificationService: misma ruta (mismo id), revisión +1, current_step 0 -> copia
+    local -> invalida el audio del recorrido anterior -> "Ruta actualizada" + primera
+    instrucción. Si falla antes de guardar, la ruta anterior queda intacta y se locuta
+    "No se pudo cambiar el destino… Sigues con la ruta hacia X".
+  ActiveRouteSynchronizer -> RemoteActiveRouteService (con AuthorizedHTTPClient):
+    ruta nueva: PUT /places/routes/active; cambio de destino: PUT
+    /places/routes/{remoteID}/destination (si el backend ya la cerró, 404/409, se guarda
+    como ruta nueva). No sobrescribe una revisión local más nueva.
+  En Linux y macOS (SwiftPM): UnavailableNavigationService.
+
+Repetir la indicación: DestinationViewModel -> InstructionRepeating ->
+RouteInstructionRepeater. Reenvía al árbitro el mismo mensaje del paso actual (contexto de
+la revisión vigente y clave `step-<n>`): si aún espera turno o está sonando no se duplica,
+y si ya terminó vuelve a sonar.
+
+Consultar Ruta Actual (SCRUM-23): Magic Tap de VoiceOver en toda la pestaña Trayecto,
+«¿Cómo voy?» en el inicio y en «Tu ruta», o la acción «Consultar ruta» de VoiceOver ->
+DestinationViewModel.queryRouteStatus -> RouteStatusQuerying -> RouteStatusService:
+  1. ActiveRouteStoring.load(): la ruta sale solo de la copia local (sin backend). Sin
+     ruta: «No tienes una ruta activa…»; copia ilegible: «No se pudo leer la ruta…».
+  2. CurrentLocationProviding: una lectura de GPS (no necesita internet). Si falla, el
+     avance se calcula con `currentStep` y se avisa de que es aproximado.
+  3. RouteProgressEstimator: aproxima la ruta con tramos rectos (origen -> punto de cada
+     maniobra -> destino), proyecta la posición sobre el tramo más cercano y obtiene la
+     siguiente indicación, lo recorrido, lo que falta (tramo restante + pasos siguientes),
+     el porcentaje y el tiempo restante. A menos de 25 m del destino, «Estás llegando».
+  4. RouteStatusAnnouncements arma el texto (destino, avance, siguiente indicación); la
+     pantalla muestra las mismas frases. El mensaje P2 va en el contexto de la revisión
+     con clave `route-status`: no se duplica y se descarta si cambia el destino.
+No se guarda el paso estimado; el ViewModel solo lo usa para mostrar y repetir la misma
+indicación que se acaba de oír (`guidanceRoute`). Avanzar `currentStep` es de SCRUM-312.
+
+Consultar Rutas Recientes (SCRUM-24): DestinationViewModel.loadRecentRoutes ->
+RecentRoutesQuerying -> RecentRoutesService:
+  1. RouteHistoryFetching -> RemoteRouteHistoryService (con AuthorizedHTTPClient):
+     GET /places/routes/history?limit=50. El backend guarda cada ruta que deja de estar
+     abierta: completada o cancelada al iniciar otra. BackendDate lee las fechas de
+     Pydantic (`Z` o `+00:00`, con microsegundos).
+  2. RecentRoutesPolicy.grouped: un destino por lugar (mismo nombre sin mayúsculas ni
+     tildes, a 25 m o menos), con la vez más reciente, cómo terminó y cuántas veces.
+  3. RecentRoutesStoring -> FileRecentRoutesStore guarda cada lista recibida. Sin backend
+     se usa esa copia (`.savedCopy`, se avisa); sin copia, RecentRoutesError.unavailable.
+     Cerrar sesión la borra.
+  4. Al abrir la pantalla se locuta un resumen corto (contexto `recent-routes`): cuántos
+     destinos y el más reciente, o «No tienes rutas recientes». La hoja carga en silencio.
+Elegir un destino envía `DestinationRequest.place` (sin volver a geocodificar) a Crear
+Ruta o, con ruta activa, a Modificar Ruta. El destino de la ruta activa no se ofrece en
+la hoja y en la pantalla aparece sin poder elegirse.
+
+Finalizar Ruta (SCRUM-10):
+  A mano: «Finalizar ruta» (o la acción de VoiceOver) pide confirmación con «Llegué a mi
+  destino» (completed) o «Terminar sin llegar» (cancelled) -> DestinationViewModel.finishRoute.
+  Al llegar: ArrivalMonitor -> LocationTracking (CoreLocationRouteTracker: lecturas
+  continuas, también con el teléfono bloqueado gracias a UIBackgroundModes = location;
+  sin esa clave solo sigue con la app abierta). Finaliza como completed cuando dos
+  lecturas seguidas con precisión <= 20 m caen a <= 25 m del destino; las imprecisas no
+  cuentan ni reinician, una precisa lejos reinicia y un cambio de destino también. Se
+  activa al crear, cambiar o restaurar la ruta y se detiene al finalizarla.
+  RouteFinishService (ambos casos):
+    1. AudioArbitrating.cancel(contextIDs:) corta la indicación que suena y descarta las
+       pendientes del contexto de la ruta.
+    2. PendingHistorySyncing.enqueue y después ActiveRouteStoring.clear(): deja de ser la
+       ruta activa sin perderse si la app se cierra en medio.
+    3. Anuncio (contexto `route-finished`) y HapticCue.routeFinished.
+    4. FinishedRouteSynchronizer.flush() sin esperar a la red.
+  FinishedRouteSynchronizer (cola en FileFinishedRoutesStore, en orden): ruta con remoteID
+  -> (cambio de destino pendiente primero) POST /places/routes/{id}/finish; sin remoteID,
+  404 o ya cerrada para cambiar el destino -> POST /places/routes/history con el id del
+  teléfono. Un fallo de red detiene la cola; un 4xx definitivo o un id ajeno descarta
+  esa ruta. Se vacía al abrir la app, al volver la conexión (NetworkConnectivityMonitor),
+  antes de subir una ruta nueva (si no, el backend cancelaría la anterior que sigue
+  abierta), antes de leer las rutas recientes y al cerrar sesión (lo que no llega se
+  descarta para no subirlo con otra cuenta).
+
+Audio de las instrucciones: cada revisión del recorrido tiene su propio `contextID`
+(`route-<id>` y luego `route-<id>-r<n>`). El árbitro deja invalidados para siempre los
+contextos y deduplica por clave dentro de un contexto, así que reutilizar el contexto
+silenciaría las instrucciones nuevas o las haría pasar por duplicadas de las viejas.
+
+## Sesión (JWT)
+
+RemoteAuthenticationService (POST /users, /users/login) guarda los tokens en
+KeychainTokenStore. AuthorizedHTTPClient añade `Authorization: Bearer`, ante un 401
+renueva una sola vez con /users/refresh y repite la petición; si el refresh se rechaza,
+borra la sesión (la ruta queda pendiente en el teléfono). StoredSessionService decide la
+pantalla inicial sin red. SignOutService (Preferencias) revoca la sesión, borra la ruta
+local y detiene el audio.
+
+La ruta está lista en cuanto existe la copia local: la guía no depende del backend.
+Si el backend falla, la ruta queda pendiente (remoteID nil o hasPendingDestinationChange)
+y restoreActiveRoute() reintenta guardarla al volver a la pantalla. Cada fallo es un RouteCreationError con
+su anuncio en RouteAnnouncements, y la pantalla muestra el mismo texto. Nunca se
+locuta desde la vista ni desde el ViewModel.
+
+Contratos para las HUs siguientes:
+- Indicar Destino por Voz (SCRUM-313) entrega `DestinationRequest.query` (texto
+  confirmado) o `.place` (ya geocodificado) a `DestinationViewModel.createRoute(to:)`
+  o, con una ruta activa, a `DestinationViewModel.changeDestination(to:)` (Modificar
+  Ruta exige pedir el cambio por voz con confirmación por audio).
+- Guiar Giros (SCRUM-312) lee la copia local (`ActiveRouteStoring`), usa
+  `RouteStep.maneuverCoordinate` para anunciar a tiempo y
+  `NavigationInstructionBuilder.message(for:in:now:)` para crear el mensaje P2. Usa
+  siempre `NavigationInstructionBuilder.contextID(for: route)`: cambia con cada
+  revisión; al crear una ruta o cambiar su destino se invalida el contexto anterior.
+  Al cambiar el destino `currentStep` vuelve a 0. Puede reutilizar
+  `RouteProgressEstimator` para decidir cuándo avanzar `currentStep`; Consultar Ruta
+  ya usa ese paso cuando no hay GPS.
+- Guiar Giros (SCRUM-312) puede reutilizar `LocationTracking` (ya sigue la ubicación
+  durante la ruta) y debe finalizar con `RouteFinishing`, no borrando la copia local.
+
+Antes de empezar un trayecto con asistencia completa, hay que comprobar que la seguridad
+local esté disponible.
 
 ## Trabajo por funcionalidad
 
@@ -63,9 +194,9 @@ que la seguridad local esté disponible.
 | --- | --- | --- |
 | Audio | Conectar productores y validar en dispositivo | Cola/árbitro implementados; AVSpeechSynthesizer mediante AudioPlaying |
 | Safety | Cámara, inferencia y distancia confiable | AVFoundation, Vision/Core ML, ARKit |
-| Navigation | Cálculo, seguimiento y eventos de giro | MapKit y CoreLocation |
+| Navigation | Seguimiento y eventos de giro (SCRUM-312) | Crear Ruta implementada con MapKit y CoreLocation |
 | Narration | Servicio remoto y control de frecuencia | HTTPClient, POST /narration |
-| Users | Sesión, DTOs y autenticación | API /users, tokens en Keychain |
+| Users | Inicio de sesión con Google | Correo, Keychain, Bearer y refresh implementados |
 | Places | Confirmar contrato de favoritos con backend | El backend actual expone rutas, no asumir CRUD de favoritos |
 | Settings | Preferencias y consumo por TTS | Persistencia local de preferencias si se requiere |
 

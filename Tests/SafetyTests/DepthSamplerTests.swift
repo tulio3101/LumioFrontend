@@ -52,7 +52,10 @@ import Foundation
 }
 
 @Test func distanceOneDecimalRounding() {
-    #expect(String(format: "%.1f", 1.45).replacingOccurrences(of: ".", with: ",") == "1,5")
+    // Valores fuera de la frontera binaria x.x5 para probar el redondeo, no la
+    // representación de punto flotante (1.45 ≈ 1.44999… y %.1f daría "1,4").
+    #expect(String(format: "%.1f", 1.46).replacingOccurrences(of: ".", with: ",") == "1,5")
+    #expect(String(format: "%.1f", 1.44).replacingOccurrences(of: ".", with: ",") == "1,4")
     #expect(String(format: "%.1f", 3.24).replacingOccurrences(of: ".", with: ",") == "3,2")
 }
 
