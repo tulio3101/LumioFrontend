@@ -2,18 +2,58 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Identidad del bundle (Xcode expande las variables $(...) de los build settings). -->
 	<key>CFBundleDevelopmentRegion</key>
 	<string>es</string>
 	<key>CFBundleDisplayName</key>
 	<string>Lumio</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+
+	<!-- Ciclo de vida SwiftUI (antes lo generaba GENERATE_INFOPLIST_FILE). -->
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<true/>
+		<key>UISceneConfigurations</key>
+		<dict/>
+	</dict>
+
+	<!-- Permisos. Textos pensados para una persona ciega: explican el uso por voz. -->
+	<key>NSCameraUsageDescription</key>
+	<string>Lumio usa la cámara para detectar obstáculos frente a ti y avisarte por voz mientras caminas.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Lumio usa el micrófono para que puedas indicar tu destino hablando.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Lumio usa el reconocimiento de voz para convertir lo que dices en el texto de tu destino.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Lumio usa tu ubicación para calcular la ruta a pie desde donde estás hasta tu destino y para avisarte al llegar, también con la pantalla bloqueada.</string>
+	<string>Lumio usa tu ubicación para calcular la ruta a pie desde donde estás, guiarte por voz y avisarte al llegar, también con la pantalla bloqueada.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Lumio se conecta al servidor en tu red local para guardar y sincronizar tus rutas.</string>
+
+	<!-- Seguimiento de ubicación durante la navegación, también con la pantalla bloqueada. -->
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
 	</array>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>Lumio se conecta al servidor de desarrollo en tu red local para guardar tu ruta.</string>
+
+	<!-- Servidor de desarrollo en red local. -->
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

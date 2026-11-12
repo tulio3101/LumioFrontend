@@ -23,18 +23,11 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.lumio.app
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         PRODUCT_NAME: lumio
-        INFOPLIST_KEY_CFBundleDisplayName: Lumio
         PRODUCT_MODULE_NAME: LumioFrontend
-        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
-        INFOPLIST_KEY_UILaunchScreen_Generation: YES
-        INFOPLIST_KEY_NSCameraUsageDescription: "Lumio usa la cámara para detectar obstáculos y avisarte por audio."
-        GENERATE_INFOPLIST_FILE: YES
-        # Se combina con las claves generadas: permisos y configuración de Lumio.
+        # Única fuente de verdad del Info.plist: el archivo Resources/Info.plist (incluye
+        # permisos, display name, región y ciclo de vida). Sin GENERATE_INFOPLIST_FILE ni
+        # INFOPLIST_KEY_* para que ningún build lo reescriba.
         INFOPLIST_FILE: Resources/Info.plist
-        # SCRUM-315: destino por voz. Cámara va arriba (INFOPLIST_KEY) y ubicación ya está
-        # en Resources/Info.plist, así que aquí solo añadimos micrófono y reconocimiento de voz.
-        INFOPLIST_KEY_NSMicrophoneUsageDescription: "Lumio utiliza el micrófono para escuchar el destino que indicas por voz."
-        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "Lumio utiliza el reconocimiento de voz para transcribir y confirmar tu destino."
         SWIFT_VERSION: "5.0"
 
   lumioTests:
