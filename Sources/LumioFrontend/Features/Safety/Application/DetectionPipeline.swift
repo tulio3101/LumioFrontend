@@ -8,6 +8,8 @@ import OSLog
 final class DetectionPipeline {
     let frameSource: FrameSource
     private let runner: YOLORunner
+    private let confidencePolicy: ClassConfidencePolicy
+    private let lowLightDetector: LowLightDetector?
 
     private(set) var detections: AsyncStream<[Detection]>
     private let detectionsContinuation: AsyncStream<[Detection]>.Continuation
@@ -19,9 +21,16 @@ final class DetectionPipeline {
     private static var lastFrameLogTime: Double = 0
     #endif
 
-    init(frameSource: FrameSource, runner: YOLORunner) {
+    init(
+        frameSource: FrameSource,
+        runner: YOLORunner,
+        confidencePolicy: ClassConfidencePolicy = .default,
+        lowLightDetector: LowLightDetector? = nil
+    ) {
         self.frameSource = frameSource
         self.runner = runner
+        self.confidencePolicy = confidencePolicy
+        self.lowLightDetector = lowLightDetector
         var cont: AsyncStream<[Detection]>.Continuation!
         detections = AsyncStream<[Detection]>(bufferingPolicy: .bufferingNewest(1)) { cont = $0 }
         detectionsContinuation = cont
@@ -49,12 +58,23 @@ final class DetectionPipeline {
     private func spawnProcessingLoop() {
         processingTask = Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
+            // One smoother per processing Task; resets automatically on restart (new Task).
+            var smoother = TemporalSmoother()
             for await frame in self.frameSource.frames {
                 // Always release the gate when done — even if Task is cancelled or detect() throws.
                 defer { self.frameSource.frameProcessingComplete() }
                 guard !Task.isCancelled else { return }
 
+                // Low-light check: plain Float from ARKit, no frame retention.
+                if let intensity = frame.ambientIntensity {
+                    self.lowLightDetector?.analyze(ambientIntensity: intensity)
+                }
+
                 let raw = (try? self.runner.detect(pixelBuffer: frame.pixelBuffer)) ?? []
+                // Drop detections below the per-class confidence threshold, then require
+                // temporal persistence before passing anything downstream.
+                let confident = raw.filter { $0.confidence >= self.confidencePolicy.threshold(for: $0.obstacleClass) }
+                let stable = smoother.filter(confident)
 
                 #if DEBUG
                 let ts = frame.timestamp
@@ -70,7 +90,7 @@ final class DetectionPipeline {
                 // SCRUM-220: enrich each detection with LiDAR depth when available.
                 let enriched: [Detection]
                 if self.frameSource.isDepthAvailable, let depth = frame.depthData {
-                    enriched = raw.map { det in
+                    enriched = stable.map { det in
                         var d = det
                         d.distanceMeters = DepthSampler.sampleDepth(
                             at: det.boundingBox,
@@ -79,7 +99,7 @@ final class DetectionPipeline {
                         return d
                     }
                 } else {
-                    enriched = raw
+                    enriched = stable
                 }
                 self.detectionsContinuation.yield(enriched)
                 // frame goes out of scope here — CVPixelBuffer/ARDepthData are released.

@@ -76,11 +76,15 @@ extension ARKitFrameSource: ARSessionDelegate {
         }
         #endif
 
+        // Read the light estimate as a Float here, before yielding — avoids retaining the ARFrame.
+        let ambientIntensity = frame.lightEstimate.map { Float($0.ambientIntensity) }
+
         continuation.yield(CapturedFrame(
             pixelBuffer: frame.capturedImage,
             depthData: frame.sceneDepth,
             camera: frame.camera,
-            timestamp: frame.timestamp
+            timestamp: frame.timestamp,
+            ambientIntensity: ambientIntensity
         ))
         // ARFrame is released here; CapturedFrame holds extracted data only.
     }

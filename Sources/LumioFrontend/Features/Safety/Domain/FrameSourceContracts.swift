@@ -8,6 +8,9 @@ struct CapturedFrame {
     let depthData: ARDepthData?
     let camera: ARCamera?
     let timestamp: TimeInterval
+    /// ARKit's estimated ambient intensity (lux). Read as a plain Float in the delegate so the
+    /// low-light check never retains the ARFrame. nil when ARKit has no light estimate yet.
+    let ambientIntensity: Float?
 }
 
 /// Abstraction over camera input (ARKit today, AVCapture dual in SCRUM-349).

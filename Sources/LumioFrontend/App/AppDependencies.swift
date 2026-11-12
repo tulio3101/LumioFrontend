@@ -20,7 +20,8 @@ struct AppDependencies {
         if let runner = try? YOLORunner() {
             let pipeline = DetectionPipeline(
                 frameSource: ARKitFrameSource(),
-                runner: runner
+                runner: runner,
+                lowLightDetector: LowLightDetector(audioArbiter: audioArbiter)
             )
             self.safetyService = SafetyService(pipeline: pipeline, audioArbiter: audioArbiter)
         } else {

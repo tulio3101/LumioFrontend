@@ -1,15 +1,20 @@
 #if os(iOS)
-import CoreVideo
 import UIKit
 
-/// Detects insufficient ambient light by analyzing the Y (luminance) plane of camera frames.
+/// Detects insufficient ambient light using ARKit's lightEstimate.ambientIntensity.
 /// SCRUM-249/250: configurable threshold. SCRUM-251: alerts via AudioArbiter + haptics.
 /// SCRUM-252: hysteresis prevents alert/recover flicker at the threshold boundary.
 /// SCRUM-253: fully on-device, no network dependency.
+///
+/// API note: analyze(ambientIntensity:) accepts a plain Float read inside session(_:didUpdate:)
+/// — no CVPixelBuffer, no ARFrame retention. Previous API (analyze(pixelBuffer:)) was removed
+/// because sampling the Y plane retained the IOSurface and contributed to
+/// "ARSession is retaining N ARFrames." ARKit's own lightEstimate is also more accurate.
 final class LowLightDetector {
-    /// Normalized luminance [0…1] below which low-light is declared.
+    /// ARKit ambient intensity (lux) below which low-light is declared.
+    /// Typical indoor range: 200–500. Dark room: < 100. Bright daylight: > 1000.
     let alertThreshold: Float
-    /// Luminance must exceed alertThreshold + hysteresisMargin to recover.
+    /// Intensity must exceed alertThreshold + hysteresisMargin to recover.
     let hysteresisMargin: Float
 
     private let audioArbiter: AudioArbiterService
@@ -18,8 +23,8 @@ final class LowLightDetector {
 
     init(
         audioArbiter: AudioArbiterService,
-        alertThreshold: Float = 0.15,
-        hysteresisMargin: Float = 0.05
+        alertThreshold: Float = 100.0,
+        hysteresisMargin: Float = 40.0
     ) {
         self.audioArbiter = audioArbiter
         self.alertThreshold = alertThreshold
@@ -27,13 +32,13 @@ final class LowLightDetector {
         feedbackGenerator.prepare()
     }
 
-    /// Call with each camera frame from the detection pipeline.
-    func analyze(pixelBuffer: CVPixelBuffer) {
-        let luminance = averageLuminance(pixelBuffer)
-        if !isAlertActive, luminance < alertThreshold {
+    /// Call with ARFrame.lightEstimate.ambientIntensity (read as a Float inside the delegate,
+    /// before any gate check). Safe to call from any thread.
+    func analyze(ambientIntensity: Float) {
+        if !isAlertActive, ambientIntensity < alertThreshold {
             isAlertActive = true
             emitAlert()
-        } else if isAlertActive, luminance >= alertThreshold + hysteresisMargin {
+        } else if isAlertActive, ambientIntensity >= alertThreshold + hysteresisMargin {
             isAlertActive = false
             emitRecovery()
         }
@@ -41,38 +46,7 @@ final class LowLightDetector {
 
     // MARK: - Private
 
-    private func averageLuminance(_ buffer: CVPixelBuffer) -> Float {
-        CVPixelBufferLockBaseAddress(buffer, .readOnly)
-        defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
-
-        // ARKit frames: 420YpCbCr8BiPlanarFullRange — plane 0 is Y (luminance), 8 bpp.
-        guard CVPixelBufferGetPlaneCount(buffer) >= 1 else { return 1.0 }
-        let base   = CVPixelBufferGetBaseAddressOfPlane(buffer, 0)!
-                         .assumingMemoryBound(to: UInt8.self)
-        let width  = CVPixelBufferGetWidthOfPlane(buffer, 0)
-        let height = CVPixelBufferGetHeightOfPlane(buffer, 0)
-        let stride = CVPixelBufferGetBytesPerRowOfPlane(buffer, 0)
-
-        // Sample every 8th pixel to keep CPU cost negligible.
-        var sum: UInt64 = 0
-        var count: UInt64 = 0
-        var y = 0
-        while y < height {
-            let row = base.advanced(by: y * stride)
-            var x = 0
-            while x < width {
-                sum += UInt64(row[x])
-                count += 1
-                x += 8
-            }
-            y += 8
-        }
-        guard count > 0 else { return 1.0 }
-        return Float(sum) / Float(count) / 255.0
-    }
-
     private func emitAlert() {
-        // analyze() is called from any thread; audio and haptics must run on main actor.
         Task { @MainActor [weak self] in
             guard let self else { return }
             self.audioArbiter.receive(AudioMessage(
