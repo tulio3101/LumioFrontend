@@ -27,7 +27,9 @@ struct DestinationView: View {
         recentRoutes: (any RecentRoutesQuerying)? = nil,
         routeFinisher: (any RouteFinishing)? = nil,
         arrivalMonitor: (any ArrivalMonitoring)? = nil,
-        suggester: (any DestinationSuggesting)? = nil
+        suggester: (any DestinationSuggesting)? = nil,
+        safetyMonitor: (any SafetyMonitoring)? = nil,
+        obstacleGate: (any CameraAssistanceGating)? = nil
     ) {
         _model = StateObject(wrappedValue: DestinationViewModel(
             routeCreator: routeCreator,
@@ -37,7 +39,9 @@ struct DestinationView: View {
             recentRoutes: recentRoutes,
             routeFinisher: routeFinisher,
             arrivalMonitor: arrivalMonitor,
-            suggester: suggester
+            suggester: suggester,
+            safetyMonitor: safetyMonitor,
+            obstacleGate: obstacleGate
         ))
     }
 

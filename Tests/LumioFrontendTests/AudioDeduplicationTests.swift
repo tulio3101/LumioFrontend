@@ -47,17 +47,27 @@ private func event(
     #expect(service.pendingMessages.map(\.id) == messages.map(\.id))
 }
 
-@Test @MainActor func safetyIsNeverDiscardedByKeyOrCaptureAge() {
+@Test @MainActor func safetyAlertsBypassKeyButStaleCapturesAreDiscarded() {
     let player = FakeAudioPlayer()
     let service = AudioArbiterService(player: player)
-    let first = event(.immediateRisk, sequence: 10)
-    let second = event(.immediateRisk, sequence: 1)
+    // (1) Sin captureSequence: una clave repetida no descarta un immediateRisk.
+    let first = event(.immediateRisk, key: "danger")
+    let second = event(.immediateRisk, key: "danger")
     service.receive(first)
-    service.receive(first)
+    service.receive(first) // UUID repetido no descarta el original.
     service.receive(second)
     #expect(service.pendingMessages.map(\.id) == [second.id])
     player.finish()
     #expect(service.currentMessage?.id == second.id)
+    player.finish()
+    // (2) Con captureSequence (alerta de obstáculo): una captura vieja se descarta aunque sea
+    // immediateRisk, mientras una más nueva se acepta (SCRUM-33).
+    let fresh = event(.immediateRisk, key: "obstacle", sequence: 10)
+    let stale = event(.immediateRisk, key: "obstacle", sequence: 3)
+    service.receive(fresh)
+    service.receive(stale)
+    #expect(service.currentMessage?.id == fresh.id)
+    #expect(service.pendingMessages.isEmpty)
 }
 
 @Test @MainActor func newerCaptureReplacesPendingEvenWithSameKey() {

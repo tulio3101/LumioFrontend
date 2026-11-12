@@ -75,8 +75,11 @@ final class AudioArbiterService: AudioArbitrating {
         }
         // Limpiar pendientes vencidos antes de usarlos como referencia de duplicidad.
         discardIrrelevant()
-        if message.priority == .environmentInformation,
-           let contextID = message.contextID, let sequence = message.captureSequence,
+        // Obsolescencia por captura: cualquier mensaje con captureSequence (p. ej. las alertas
+        // de obstáculo, incluidas las immediateRisk) se descarta si su captura es más vieja que
+        // la última procesada de su contexto. Los avisos de sistema no llevan captureSequence,
+        // así que nunca se descartan por esto.
+        if let contextID = message.contextID, let sequence = message.captureSequence,
            let latest = latestCaptureByContext[contextID], sequence < latest {
             publish(message, status: .discarded)
             return
@@ -92,8 +95,7 @@ final class AudioArbiterService: AudioArbitrating {
         let replaced = queue.removeIrrelevant {
             !deduplication.isNewerCapture(message, than: $0)
         }
-        if message.priority == .environmentInformation,
-           let contextID = message.contextID, let sequence = message.captureSequence {
+        if let contextID = message.contextID, let sequence = message.captureSequence {
             latestCaptureByContext[contextID] = sequence
         }
         queue.append(message)

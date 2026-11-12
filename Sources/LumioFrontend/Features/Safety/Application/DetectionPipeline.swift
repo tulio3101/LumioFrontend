@@ -5,11 +5,16 @@ import OSLog
 /// Connects a FrameSource to a YOLORunner and enriches detections with depth when available.
 /// Runs detection in a background task; "latest frame wins" is inherited from FrameSource.
 /// SCRUM-218: exposes [Detection] stream. SCRUM-220: associates depth. SCRUM-223: loop + restart.
-final class DetectionPipeline {
+final class DetectionPipeline: ObstacleDetectionPipeline {
     let frameSource: FrameSource
     private let runner: YOLORunner
     private let confidencePolicy: ClassConfidencePolicy
     private let lowLightDetector: LowLightDetector?
+
+    var isDepthAvailable: Bool { frameSource.isDepthAvailable }
+    #if DEBUG
+    var previewFrameSource: ARKitFrameSource? { frameSource as? ARKitFrameSource }
+    #endif
 
     private(set) var detections: AsyncStream<[Detection]>
     private let detectionsContinuation: AsyncStream<[Detection]>.Continuation

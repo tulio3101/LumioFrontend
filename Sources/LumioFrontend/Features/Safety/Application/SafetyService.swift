@@ -2,39 +2,20 @@
 import Foundation
 import OSLog
 
-/// Implements SafetyMonitoring: drives the DetectionPipeline, converts detections to
-/// SafetyEvents via onEvent, emits audio alerts through AudioArbiter (never direct TTS).
-/// SCRUM-349: announces operating mode at startup.
+/// Implements SafetyMonitoring: drives the detection pipeline, converts detections to
+/// SafetyEvents via onEvent and emits audio alerts through the AudioArbiter (never direct TTS).
+/// El armado de los mensajes (contextID, captura, throttle) vive en ObstacleAnnouncer.
 @MainActor
 final class SafetyService: ObservableObject, SafetyMonitoring {
     var onEvent: ((SafetyEvent) -> Void)?
 
-    private let pipeline: DetectionPipeline
-    private let audioArbiter: AudioArbiterService
+    private let pipeline: any ObstacleDetectionPipeline
+    private let audioArbiter: any AudioArbitrating
+    private var announcer: ObstacleAnnouncer
     private var consumptionTask: Task<Void, Never>?
     private var isRunning = false
 
     private let logger = Logger(subsystem: "com.lumio.app", category: "SafetyService")
-
-    // MARK: - Announcement throttle
-
-    // NOTE (desvío de ADR-307): ADR-307 usaba centímetros para < 1 m y silenciaba > 4 m.
-    // Decisión posterior: siempre en metros con un decimal y coma ("0,3 metros", "1,5 metros"),
-    // y para > 4 m anunciar "a más de 4 metros" con prioridad .environmentInformation.
-    private enum DistanceTier: Equatable {
-        case immediate   // < 1 m — interrupts with .immediateRisk
-        case normal      // 1–4 m — .environmentInformation
-        case far         // > 4 m — "a más de 4 metros", .environmentInformation
-        case noDistance  // LiDAR unavailable or no confident samples in bounding box
-    }
-
-    private struct AnnouncementState {
-        var tier: DistanceTier
-        var lastAnnounced: Date
-    }
-
-    private var announcementState: [ObstacleClass: AnnouncementState] = [:]
-    private let announcementInterval: TimeInterval = 4.0
 
     // MARK: - Debug state (Debug builds only)
 
@@ -50,12 +31,17 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
     private var debugFPSFrameCount = 0
     private var debugFPSWindowStart = Date()
 
-    var debugPipeline: DetectionPipeline { pipeline }
+    var debugPreviewFrameSource: ARKitFrameSource? { pipeline.previewFrameSource }
     #endif
 
-    init(pipeline: DetectionPipeline, audioArbiter: AudioArbiterService) {
+    init(
+        pipeline: any ObstacleDetectionPipeline,
+        audioArbiter: any AudioArbitrating,
+        announcer: ObstacleAnnouncer = ObstacleAnnouncer()
+    ) {
         self.pipeline = pipeline
         self.audioArbiter = audioArbiter
+        self.announcer = announcer
     }
 
     func start() async throws {
@@ -64,7 +50,7 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
             return
         }
         isRunning = true
-        logger.info("start() — isDepthAvailable=\(self.pipeline.frameSource.isDepthAvailable)")
+        logger.info("start() — isDepthAvailable=\(self.pipeline.isDepthAvailable)")
         do {
             try pipeline.start()
         } catch {
@@ -76,7 +62,7 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
         announceMode()
         #if DEBUG
         debugState.isActive = true
-        debugState.isFullMode = pipeline.frameSource.isDepthAvailable
+        debugState.isFullMode = pipeline.isDepthAvailable
         #endif
         consumptionTask = Task { [weak self] in
             await self?.consumeLoop()
@@ -90,7 +76,7 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
         }
         isRunning = false
         logger.info("stop()")
-        announcementState.removeAll()
+        announcer = ObstacleAnnouncer()
         #if DEBUG
         debugState.isActive = false
         debugState.fps = 0
@@ -99,18 +85,15 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
         consumptionTask?.cancel()
         consumptionTask = nil
         pipeline.stop()
-        audioArbiter.resetSession()
+        // Solo el contexto de seguridad: no pisar las instrucciones de navegación en curso.
+        audioArbiter.cancel(contextIDs: [SafetyAudio.context])
     }
 
     // MARK: - SCRUM-349: mode announcement
 
     private func announceMode() {
-        guard !pipeline.frameSource.isDepthAvailable else { return }
-        audioArbiter.receive(AudioMessage(
-            text: "Modo reducido. Los avisos de distancia son aproximados y de corto alcance.",
-            priority: .environmentInformation,
-            deduplicationKey: "safety-mode-reduced"
-        ))
+        guard !pipeline.isDepthAvailable else { return }
+        audioArbiter.receive(SafetyAudio.reducedMode())
     }
 
     // MARK: - Detection consumption loop
@@ -134,105 +117,9 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
             debugFPSWindowStart = Date()
         }
         #endif
-        guard !detections.isEmpty else { return }
-
-        let now = Date()
-
-        // One announcement per obstacle class — take the closest box when YOLO returns multiples.
-        var byClass: [ObstacleClass: Detection] = [:]
-        for det in detections {
-            if let existing = byClass[det.obstacleClass] {
-                let existingDist = existing.distanceMeters.map { Double($0) } ?? Double.greatestFiniteMagnitude
-                let newDist = det.distanceMeters.map { Double($0) } ?? Double.greatestFiniteMagnitude
-                if newDist < existingDist { byClass[det.obstacleClass] = det }
-            } else {
-                byClass[det.obstacleClass] = det
-            }
-        }
-
-        for (cls, det) in byClass {
-            let tier = distanceTier(for: det)
-
-            let shouldAnnounce: Bool
-            if let state = announcementState[cls] {
-                let tierChanged = state.tier != tier
-                let timedOut = now.timeIntervalSince(state.lastAnnounced) >= announcementInterval
-                shouldAnnounce = tierChanged || timedOut
-            } else {
-                shouldAnnounce = true  // first sighting of this class
-            }
-            guard shouldAnnounce else { continue }
-
-            announcementState[cls] = AnnouncementState(tier: tier, lastAnnounced: now)
-
-            let text = audioText(for: det, tier: tier)
-            let requiresImmediate = tier == .immediate
-            let event = SafetyEvent(
-                id: UUID(),
-                description: text,
-                detectedAt: now,
-                requiresImmediateAction: requiresImmediate
-            )
-            onEvent?(event)
-            audioArbiter.receive(AudioMessage(
-                text: text,
-                priority: requiresImmediate ? .immediateRisk : .environmentInformation,
-                expiresAt: now.addingTimeInterval(2),
-                deduplicationKey: "obstacle-\(cls.rawValue)"
-            ))
-        }
-    }
-
-    // MARK: - Distance helpers
-
-    private func distanceTier(for det: Detection) -> DistanceTier {
-        guard let dist = det.distanceMeters else { return .noDistance }
-        if dist < 1.0 { return .immediate }
-        if dist <= DepthSampler.maxAlertDistanceMeters { return .normal }
-        return .far
-    }
-
-    private func audioText(for det: Detection, tier: DistanceTier) -> String {
-        let cls = spanishName(for: det.obstacleClass)
-        switch tier {
-        case .immediate, .normal:
-            let dist = Double(det.distanceMeters!)
-            // Comma as decimal separator so es-MX TTS reads "cero coma tres" not "zero point three".
-            let formatted = String(format: "%.1f", dist).replacingOccurrences(of: ".", with: ",")
-            return "\(cls) a \(formatted) metros"
-        case .far:
-            return "\(cls) a más de 4 metros"
-        case .noDistance:
-            return cls
-        }
-    }
-
-    private func spanishName(for cls: ObstacleClass) -> String {
-        switch cls {
-        case .person:        return "persona"
-        case .bicycle:       return "bicicleta"
-        case .car:           return "carro"
-        case .motorcycle:    return "moto"
-        case .bus:           return "autobús"
-        case .truck:         return "camión"
-        case .trafficLight:  return "semáforo"
-        case .fireHydrant:   return "hidrante"
-        case .stopSign:      return "señal de pare"
-        case .parkingMeter:  return "parquímetro"
-        case .bench:         return "banca"
-        case .chair:         return "silla"
-        case .dog:           return "perro"
-        case .pottedPlant:   return "planta"
-        case .diningTable:   return "mesa"
-        case .bed:           return "cama"
-        case .couch:         return "sofá"
-        case .toilet:        return "inodoro"
-        case .refrigerator:  return "nevera"
-        case .tv:            return "televisor"
-        case .laptop:        return "portátil"
-        case .suitcase:      return "maleta"
-        case .backpack:      return "mochila"
-        case .umbrella:      return "sombrilla"
+        for output in announcer.announcements(for: detections, now: Date()) {
+            onEvent?(output.event)
+            audioArbiter.receive(output.message)
         }
     }
 }

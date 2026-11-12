@@ -82,6 +82,11 @@ final class DestinationViewModel: ObservableObject {
     private let routeFinisher: any RouteFinishing
     private let arrivalMonitor: any ArrivalMonitoring
     private let suggester: any DestinationSuggesting
+    /// Detección de obstáculos (SCRUM-33). Corre en paralelo a la detección de llegada: solo
+    /// mientras hay ruta activa. nil si la plataforma o el modelo no la ofrecen.
+    private let safetyMonitor: (any SafetyMonitoring)?
+    /// Compuerta de permiso de cámara (SCRUM-315). Sin ella no se comprueba el permiso.
+    private let obstacleGate: (any CameraAssistanceGating)?
     private let instructions = NavigationInstructionBuilder()
     private var suggestionTask: Task<Void, Never>?
     private var isApplyingSuggestion = false
@@ -99,7 +104,9 @@ final class DestinationViewModel: ObservableObject {
         recentRoutes: (any RecentRoutesQuerying)? = nil,
         routeFinisher: (any RouteFinishing)? = nil,
         arrivalMonitor: (any ArrivalMonitoring)? = nil,
-        suggester: (any DestinationSuggesting)? = nil
+        suggester: (any DestinationSuggesting)? = nil,
+        safetyMonitor: (any SafetyMonitoring)? = nil,
+        obstacleGate: (any CameraAssistanceGating)? = nil
     ) {
         self.routeCreator = routeCreator
         self.routeModifier = routeModifier ?? UnavailableNavigationService()
@@ -109,8 +116,36 @@ final class DestinationViewModel: ObservableObject {
         self.routeFinisher = routeFinisher ?? UnavailableNavigationService()
         self.arrivalMonitor = arrivalMonitor ?? NoArrivalMonitoring()
         self.suggester = suggester ?? NoDestinationSuggestions()
+        self.safetyMonitor = safetyMonitor
+        self.obstacleGate = obstacleGate
         // La llegada se detecta en cualquier pantalla, también con el teléfono bloqueado.
         self.arrivalMonitor.onArrival = { [weak self] result in self?.didFinish(result) }
+    }
+
+    // MARK: Detección de obstáculos (SCRUM-33, en paralelo a arrivalMonitor)
+
+    /// Arranca la detección si la cámara tiene permiso (SCRUM-315). Sin permiso, la ruta sigue
+    /// y se avisa por audio una sola vez; nunca bloquea la navegación. Se dispara en segundo
+    /// plano para no retrasar la confirmación de la ruta.
+    private func startObstacleDetection() {
+        guard let safetyMonitor else {
+            // Sin monitor en iOS = el modelo no cargó. Se avisa al iniciar la ruta (una vez por
+            // ruta), no al abrir la app. En otras plataformas obstacleGate es nil: no hace nada.
+            obstacleGate?.announceModelUnavailable()
+            return
+        }
+        let gate = obstacleGate
+        Task { @MainActor in
+            if let gate, await gate.canAssistWithObstacles() == false {
+                gate.announceAssistanceUnavailable()
+                return
+            }
+            try? await safetyMonitor.start()
+        }
+    }
+
+    private func stopObstacleDetection() {
+        safetyMonitor?.stop()
     }
 
     var errorMessage: String? { failure?.message }
@@ -126,7 +161,10 @@ final class DestinationViewModel: ObservableObject {
     func restoreActiveRoute() async {
         guard route == nil, !isLoading else { return }
         route = await routeCreator.restoreActiveRoute()
-        if route != nil { arrivalMonitor.startMonitoring() }
+        if route != nil {
+            arrivalMonitor.startMonitoring()
+            startObstacleDetection()
+        }
     }
 
     /// Prepara la hoja. Al cambiar de destino el campo empieza vacío: se pide uno nuevo.
@@ -204,6 +242,7 @@ final class DestinationViewModel: ObservableObject {
         isFinishing = true
         defer { isFinishing = false }
         arrivalMonitor.stopMonitoring()
+        stopObstacleDetection()
         guard let result = await routeFinisher.finishActiveRoute(outcome: outcome, trigger: .manual) else {
             route = nil
             return false
@@ -222,6 +261,9 @@ final class DestinationViewModel: ObservableObject {
         routeStatus = nil
         updatedRevision = nil
         lastFinish = result
+        // Cubre la llegada automática (onArrival) y el fin manual: la detección se detiene
+        // junto con la ruta.
+        stopObstacleDetection()
     }
 
     // MARK: Rutas recientes
@@ -342,8 +384,9 @@ final class DestinationViewModel: ObservableObject {
                 updatedRevision = changed.revision
             }
             lastFinish = nil
-            // Empieza (o sigue, con el destino nuevo) la detección de llegada.
+            // Empieza (o sigue, con el destino nuevo) la detección de llegada y de obstáculos.
             arrivalMonitor.startMonitoring()
+            startObstacleDetection()
             return true
         } catch let error as RouteCreationError {
             let message = mode == .changeDestination

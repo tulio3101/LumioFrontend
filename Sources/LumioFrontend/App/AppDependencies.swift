@@ -23,6 +23,8 @@ struct AppDependencies {
     #endif
     #if os(iOS)
     let permissions: PermissionsViewModel
+    /// SCRUM-315: compuerta de permiso de cámara para arrancar la detección (SCRUM-33).
+    let obstacleGate: (any CameraAssistanceGating)?
     #endif
 
     init(configuration: AppConfiguration = .main) {
@@ -107,20 +109,29 @@ struct AppDependencies {
         )
         #endif
         #if os(iOS)
-        if let runner = try? YOLORunner() {
+        // SCRUM-37 (punto de extensión para Nestor): si el modelo YOLO no carga, aquí se
+        // decide el manejo del error. Por ahora: guardar el fallo (modelAvailable) para que
+        // la compuerta lo anuncie al iniciar la ruta, no al abrir la app, y seguir con la
+        // navegación. Un reintento o un diagnóstico por tipo de error van en este catch.
+        let modelAvailable: Bool
+        do {
+            let runner = try YOLORunner()
             let pipeline = DetectionPipeline(
                 frameSource: ARKitFrameSource(),
                 runner: runner,
                 lowLightDetector: LowLightDetector(audioArbiter: audioArbiter)
             )
             self.safetyService = SafetyService(pipeline: pipeline, audioArbiter: audioArbiter)
-        } else {
+            modelAvailable = true
+        } catch {
             self.safetyService = nil
+            modelAvailable = false
         }
-        #endif
-        #if os(iOS)
-        self.permissions = PermissionsViewModel(
-            service: PermissionService(provider: IOSPermissionProvider()), audio: audioArbiter
+        // Un solo PermissionService para la pantalla de permisos y para la compuerta de cámara.
+        let permissionService = PermissionService(provider: IOSPermissionProvider())
+        self.permissions = PermissionsViewModel(service: permissionService, audio: audioArbiter)
+        self.obstacleGate = ObstacleAssistanceGate(
+            permissions: permissionService, audio: audioArbiter, modelAvailable: modelAvailable
         )
         #endif
     }

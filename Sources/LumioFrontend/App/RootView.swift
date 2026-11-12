@@ -12,6 +12,10 @@ struct RootView: View {
     let destinationSuggester: any DestinationSuggesting
     let authenticationService: any Authenticating
     let signOut: any SigningOut
+    /// SCRUM-33: detección de obstáculos y su compuerta de permiso de cámara. nil fuera de iOS
+    /// o si el modelo YOLO no cargó. Se pasa a DestinationView para arrancarla con la ruta.
+    let safetyMonitor: (any SafetyMonitoring)?
+    let obstacleGate: (any CameraAssistanceGating)?
     /// Se decide antes del primer frame para no mostrar la bienvenida de forma transitoria.
     @State private var entry: AppEntry
 
@@ -32,7 +36,9 @@ struct RootView: View {
         arrivalMonitor: any ArrivalMonitoring,
         destinationSuggester: any DestinationSuggesting,
         signOut: any SigningOut,
-        permissions: PermissionsViewModel
+        permissions: PermissionsViewModel,
+        safetyMonitor: (any SafetyMonitoring)? = nil,
+        obstacleGate: (any CameraAssistanceGating)? = nil
     ) {
         self.routeCreator = routeCreator
         self.routeModifier = routeModifier
@@ -45,6 +51,8 @@ struct RootView: View {
         self.signOut = signOut
         self.authenticationService = authenticationService
         self.permissions = permissions
+        self.safetyMonitor = safetyMonitor
+        self.obstacleGate = obstacleGate
         _entry = State(initialValue: AppEntry(session: sessionService))
     }
     #else
@@ -59,7 +67,9 @@ struct RootView: View {
         routeFinisher: any RouteFinishing,
         arrivalMonitor: any ArrivalMonitoring,
         destinationSuggester: any DestinationSuggesting,
-        signOut: any SigningOut
+        signOut: any SigningOut,
+        safetyMonitor: (any SafetyMonitoring)? = nil,
+        obstacleGate: (any CameraAssistanceGating)? = nil
     ) {
         self.routeCreator = routeCreator
         self.routeModifier = routeModifier
@@ -71,6 +81,8 @@ struct RootView: View {
         self.destinationSuggester = destinationSuggester
         self.signOut = signOut
         self.authenticationService = authenticationService
+        self.safetyMonitor = safetyMonitor
+        self.obstacleGate = obstacleGate
         _entry = State(initialValue: AppEntry(session: sessionService))
     }
     #endif
@@ -99,7 +111,9 @@ struct RootView: View {
                     recentRoutes: recentRoutes,
                     routeFinisher: routeFinisher,
                     arrivalMonitor: arrivalMonitor,
-                    suggester: destinationSuggester
+                    suggester: destinationSuggester,
+                    safetyMonitor: safetyMonitor,
+                    obstacleGate: obstacleGate
                 )
             }
             .tabItem { Label("Trayecto", systemImage: "figure.walk") }

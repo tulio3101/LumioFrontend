@@ -49,7 +49,7 @@ struct DebugSafetySection: View {
 
     @ViewBuilder
     private var cameraWithBoxes: some View {
-        if let source = service.debugPipeline.frameSource as? ARKitFrameSource {
+        if let source = service.debugPreviewFrameSource {
             ZStack(alignment: .topLeading) {
                 ARCameraPreview(session: source.arSession)
                     .frame(height: 280)
