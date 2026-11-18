@@ -60,7 +60,8 @@ enum RouteAnnouncements {
             + "Sigues con la ruta hacia \(route.destination.name)."
     }
 
-    private static func summary(_ route: ActiveRoute) -> String {
+    /// Distancia y duración a pie. También la usa Recalcular Ruta.
+    static func summary(_ route: ActiveRoute) -> String {
         var text = "Son \(SpokenDistance.text(meters: route.distanceMeters))"
         if let duration = SpokenDuration.approximate(seconds: route.expectedTravelTimeSeconds) {
             text += ", \(duration) caminando"
@@ -101,6 +102,9 @@ struct NavigationInstructionBuilder {
     static let modificationFailureContextID = "route-modification"
     /// Respuestas de Consultar Ruta cuando no hay ruta (o no se puede leer).
     static let statusContextID = "route-status"
+    /// Avisos de Recalcular Ruta que no son instrucciones: desviación, sin conexión y fallos.
+    /// No van en el contexto de la ruta para que el aviso no se corte al invalidarlo.
+    static let rerouteContextID = "route-reroute"
 
     /// Agrupa los mensajes de las instrucciones vigentes. Cada cambio de destino crea un
     /// contexto nuevo (`-r<revision>`): invalidar el anterior no silencia las nuevas
@@ -160,6 +164,29 @@ struct NavigationInstructionBuilder {
             createdAt: now,
             contextID: Self.contextID(for: route),
             deduplicationKey: "route-updated"
+        )
+    }
+
+    /// «Ruta recalculada…» en el contexto de la revisión nueva (Recalcular Ruta).
+    func reroutedMessage(for route: ActiveRoute, now: Date) -> AudioMessage {
+        AudioMessage(
+            text: RerouteAnnouncements.rerouted(route),
+            priority: .routeInformation,
+            createdAt: now,
+            contextID: Self.contextID(for: route),
+            deduplicationKey: "route-rerouted"
+        )
+    }
+
+    /// Aviso de Recalcular Ruta (desviación, sin conexión, fallo). Un aviso igual que aún
+    /// espera o suena no se duplica.
+    func rerouteNotice(_ text: String, key: String, now: Date) -> AudioMessage {
+        AudioMessage(
+            text: text,
+            priority: .routeInformation,
+            createdAt: now,
+            contextID: Self.rerouteContextID,
+            deduplicationKey: key
         )
     }
 

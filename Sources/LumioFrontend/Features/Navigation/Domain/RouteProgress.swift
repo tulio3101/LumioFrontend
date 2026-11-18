@@ -65,6 +65,17 @@ struct RouteProgressEstimator {
         )
     }
 
+    /// Metros de `position` al tramo más cercano de la ruta, con la misma aproximación de
+    /// tramos rectos. Recalcular Ruta (SCRUM-26) lo compara con su umbral de desviación.
+    static func distance(from position: GeoCoordinate, to route: ActiveRoute) -> Double {
+        let nodes = nodes(of: route)
+        var nearest = Double.infinity
+        for index in 0..<(nodes.count - 1) {
+            nearest = min(nearest, project(position, from: nodes[index].coordinate, to: nodes[index + 1].coordinate).offset)
+        }
+        return nearest
+    }
+
     // MARK: Sin ubicación
 
     /// Lo recorrido hasta el paso guardado. En el primer paso se cuenta como el inicio.
