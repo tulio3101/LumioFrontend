@@ -31,7 +31,19 @@ struct RemoteActiveRouteService: ActiveRouteSyncing {
         }
     }
 
-    private func request(_ path: String, body: RouteCreateDTO) throws -> URLRequest {
+    /// PUT /places/routes/{id}/reroute (Recalcular Ruta).
+    func reroute(_ route: ActiveRoute, remoteID: UUID, reroutedAt: Date) async throws {
+        let path = "places/routes/\(remoteID.uuidString.lowercased())/reroute"
+        do {
+            _ = try await client.send(request(path, body: RouteRerouteDTO(route, reroutedAt: reroutedAt)))
+        } catch HTTPClientError.statusCode(404) {
+            throw ActiveRouteSyncError.routeNoLongerOpen
+        } catch HTTPClientError.statusCode(409) {
+            throw ActiveRouteSyncError.rerouteRejected
+        }
+    }
+
+    private func request(_ path: String, body: some Encodable) throws -> URLRequest {
         guard let baseURL else { throw RemoteRouteError.notConfigured }
         var request = URLRequest(url: baseURL.appendingPathComponent(path), timeoutInterval: timeout)
         request.httpMethod = "PUT"

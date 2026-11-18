@@ -164,11 +164,56 @@ protocol ActiveRouteSyncing {
     /// PUT /places/routes/{remoteID}/destination. Lanza ActiveRouteSyncError.routeNoLongerOpen
     /// si el backend ya no tiene esa ruta abierta.
     func updateDestination(of route: ActiveRoute, remoteID: UUID) async throws
+    /// PUT /places/routes/{remoteID}/reroute (Recalcular Ruta). Lanza
+    /// ActiveRouteSyncError.routeNoLongerOpen (404) o .rerouteRejected (409: ya no está
+    /// abierta o el backend tiene otro destino).
+    func reroute(_ route: ActiveRoute, remoteID: UUID, reroutedAt: Date) async throws
 }
 
 enum ActiveRouteSyncError: Error, Equatable {
     /// La ruta del backend terminó, se canceló o no existe (404/409).
     case routeNoLongerOpen
+    /// El backend rechazó el recálculo (409). Se reenvía el recorrido completo como cambio de
+    /// destino, que distingue si la ruta sigue abierta.
+    case rerouteRejected
+}
+
+extension ActiveRouteSyncing {
+    /// Lleva al backend el último cambio pendiente de una ruta que ya existe allí: el cambio
+    /// de destino (que sustituye el recorrido completo) o, si no hay, el recálculo. Lanza
+    /// ActiveRouteSyncError.routeNoLongerOpen si la ruta ya no está abierta en el backend.
+    func pushPendingChanges(of route: ActiveRoute, remoteID: UUID) async throws {
+        if route.hasPendingDestinationChange {
+            try await updateDestination(of: route, remoteID: remoteID)
+        } else if route.hasPendingReroute {
+            do {
+                try await reroute(route, remoteID: remoteID, reroutedAt: route.reroutedAt ?? route.createdAt)
+            } catch ActiveRouteSyncError.rerouteRejected {
+                try await updateDestination(of: route, remoteID: remoteID)
+            }
+        }
+    }
+}
+
+/// Recalcular Ruta (SCRUM-26): nuevo recorrido hacia el mismo destino desde la ubicación
+/// actual. Necesita red; anuncia por audio el resultado según el disparador.
+@MainActor
+protocol RouteRerouting {
+    func reroute(trigger: RerouteTrigger) async -> RerouteOutcome
+}
+
+/// Vigila la posición durante la ruta y recalcula al desviarse (SCRUM-26).
+@MainActor
+protocol RouteDeviationMonitoring: AnyObject {
+    /// nil cuando ya no hay nada que mostrar (volvió al trayecto o la ruta cambió).
+    var onStatusChange: (@MainActor (RerouteStatus?) -> Void)? { get set }
+    /// Sin ruta activa no hace nada.
+    func startMonitoring()
+    func stopMonitoring()
+    /// «Recalcular ruta» a mano: sin esperas ni límite de intentos. nil si ya hay un
+    /// recálculo en curso.
+    @discardableResult
+    func rerouteNow() async -> RerouteOutcome?
 }
 
 enum HapticCue: Equatable {
