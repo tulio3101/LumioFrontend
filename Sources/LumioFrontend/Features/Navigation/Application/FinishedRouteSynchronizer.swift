@@ -5,8 +5,8 @@ import FoundationNetworking
 
 /// Lleva al historial del backend las rutas finalizadas en el teléfono, en orden (SCRUM-130).
 ///
-/// - Ruta que ya estaba en el backend: si su último cambio de destino no había llegado, se
-///   envía primero; después POST /places/routes/{id}/finish. Si el backend ya no la tiene
+/// - Ruta que ya estaba en el backend: si su último cambio de destino o recálculo no había
+///   llegado, se envía primero; después POST /places/routes/{id}/finish. Si el backend ya no la tiene
 ///   (404) o ya no está abierta para cambiar el destino, se guarda como ruta finalizada.
 /// - Ruta que nunca llegó: POST /places/routes/history con el id del teléfono (reenviarla
 ///   no la duplica).
@@ -68,9 +68,9 @@ final class FinishedRouteSynchronizer: PendingHistorySyncing {
             try await record(finished)
             return
         }
-        if route.hasPendingDestinationChange {
+        if route.hasPendingDestinationChange || route.hasPendingReroute {
             do {
-                try await routeSync.updateDestination(of: route, remoteID: remoteID)
+                try await routeSync.pushPendingChanges(of: route, remoteID: remoteID)
             } catch ActiveRouteSyncError.routeNoLongerOpen {
                 try await record(finished)
                 return

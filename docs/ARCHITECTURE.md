@@ -46,7 +46,7 @@ Se usa ObservableObject para conservar iOS 16. La vista posee su ViewModel con
 @StateObject; su estado publicado actualiza la presentación. No se añade Redux,
 un contenedor de inyección ni librerías de navegación para este scaffold.
 
-## Flujo de Crear Ruta (SCRUM-8), Modificar Ruta (SCRUM-9), Consultar Ruta (SCRUM-23), Rutas Recientes (SCRUM-24) y Finalizar Ruta (SCRUM-10)
+## Flujo de Crear Ruta (SCRUM-8), Modificar Ruta (SCRUM-9), Consultar Ruta (SCRUM-23), Rutas Recientes (SCRUM-24), Finalizar Ruta (SCRUM-10) y Recalcular Ruta (SCRUM-26)
 
 Pantallas (un DestinationViewModel compartido):
   DestinationView    inicio del trayecto; una acción principal según haya o no ruta activa
@@ -149,6 +149,41 @@ Finalizar Ruta (SCRUM-10):
   abierta), antes de leer las rutas recientes y al cerrar sesión (lo que no llega se
   descarta para no subirlo con otra cuenta).
 
+Recalcular Ruta (SCRUM-26):
+  GPS: SharedLocationTracker reparte las lecturas de un solo CoreLocationRouteTracker entre
+  ArrivalMonitor y RouteDeviationMonitor; sigue mientras alguno lo necesite.
+  RouteDeviationMonitor (se activa y detiene junto con ArrivalMonitor):
+    1. DeviationPolicy: una lectura con precisión <= 20 m está desviada si queda a más de
+       30 m del trayecto (RouteProgressEstimator.distance: tramos rectos origen ->
+       maniobras -> destino). A <= 25 m del destino nunca está desviada (decide la
+       llegada). Las imprecisas no cuentan ni reinician; una precisa en el trayecto
+       reinicia todo. Valores iniciales a validar en pruebas de campo.
+    2. Tres lecturas seguidas desviadas -> RouteRerouting.reroute(.deviation). Espera de
+       20 s entre recálculos automáticos; tras 3 fallos seguidos deja de intentar hasta
+       volver al trayecto. Una ruta nueva, otro destino o un recálculo reinician la cuenta.
+    3. Sin red (ConnectivityObserving.isConnected, NWPathMonitor) espera; al volver la
+       conexión (aviso o siguiente lectura) recalcula con `.reconnected` si sigue desviado.
+    4. Publica RerouteStatus (recalculando, recalculada, sin conexión, fallo) para la pantalla.
+  RouteRerouteService:
+    1. Sin red no llama a MapKit: «Sin conexión: no se puede recalcular…» y la guía sigue
+       con la copia local.
+    2. Aviso según el disparador: «Te saliste de la ruta. Recalculando.» (desviación),
+       «Recalculando la ruta.» (a mano), «Volvió la conexión…» (reconexión); los
+       reintentos no repiten avisos ni el fallo. Van en el contexto `route-reroute`.
+    3. WalkingRoutePlanner con `.place(destino)`: misma ruta (mismo id y destino), revisión
+       +1, current_step 0, `hasPendingReroute` y `reroutedAt`. Si mientras calculaba la
+       ruta cambió o terminó, se descarta (`.superseded`).
+    4. Invalida el contexto de la revisión anterior, «Ruta recalculada hacia X…» y la
+       primera instrucción, HapticCue.routeReady.
+    5. Fallo: la ruta anterior sigue, «No se pudo recalcular la ruta… Sigues con la ruta
+       hacia X», HapticCue.routeFailed.
+  Backend: PUT /places/routes/{remoteID}/reroute con `rerouted_at` (404 -> se sube como
+  ruta nueva; 409 -> se reenvía como cambio de destino, que decide si sigue abierta). Un
+  cambio de destino pendiente gana sobre un recálculo pendiente. Finalizar Ruta envía el
+  recálculo pendiente antes de cerrarla.
+  Pantalla: aviso de estado en «Tu ruta» y en el inicio, botón «Recalcular ruta» y acción
+  de VoiceOver con el mismo nombre (sin esperas ni límite de intentos).
+
 Audio de las instrucciones: cada revisión del recorrido tiene su propio `contextID`
 (`route-<id>` y luego `route-<id>-r<n>`). El árbitro deja invalidados para siempre los
 contextos y deduplica por clave dentro de un contexto, así que reutilizar el contexto
@@ -182,8 +217,9 @@ Contratos para las HUs siguientes:
   Al cambiar el destino `currentStep` vuelve a 0. Puede reutilizar
   `RouteProgressEstimator` para decidir cuándo avanzar `currentStep`; Consultar Ruta
   ya usa ese paso cuando no hay GPS.
-- Guiar Giros (SCRUM-312) puede reutilizar `LocationTracking` (ya sigue la ubicación
-  durante la ruta) y debe finalizar con `RouteFinishing`, no borrando la copia local.
+- Guiar Giros (SCRUM-312) puede pedir otro cliente a `SharedLocationTracker` (ya sigue la
+  ubicación durante la ruta) y debe finalizar con `RouteFinishing`, no borrando la copia
+  local. Tras un recálculo (SCRUM-26) la revisión cambia y `currentStep` vuelve a 0.
 
 Antes de empezar un trayecto con asistencia completa, hay que comprobar que la seguridad
 local esté disponible.

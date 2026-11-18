@@ -3,8 +3,8 @@ import SwiftUI
 
 /// Detalle de la ruta activa. Arriba, la indicación que se sigue ahora y la acción para
 /// volver a oírla (la principal de la pantalla mientras se camina); después el resumen,
-/// el estado del trayecto («¿Cómo voy?», también con el Magic Tap de VoiceOver),
-/// «Cambiar destino» y la lista completa de pasos.
+/// el estado del trayecto («¿Cómo voy?», también con el Magic Tap de VoiceOver), el estado
+/// del recálculo, «Cambiar destino», «Recalcular ruta» y la lista completa de pasos.
 struct ActiveRouteView: View {
     @ObservedObject var model: DestinationViewModel
 
@@ -65,6 +65,9 @@ struct ActiveRouteView: View {
                         message: "Estas son las nuevas indicaciones desde donde estabas al cambiar el destino."
                     )
                 }
+                if let reroute = model.rerouteStatus {
+                    RerouteStatusBanner(status: reroute)
+                }
                 if let step = route.currentInstruction {
                     CurrentInstructionCard(
                         step: step,
@@ -72,6 +75,7 @@ struct ActiveRouteView: View {
                         spokenText: model.spokenText(for: step),
                         focus: $instructionHasFocus,
                         onQueryStatus: model.startRouteStatusQuery,
+                        onReroute: recalculate,
                         onFinish: { confirmsFinish = true }
                     ) {
                         model.repeatCurrentInstruction()
@@ -100,6 +104,18 @@ struct ActiveRouteView: View {
                 }
                 .buttonStyle(LumioSecondaryButtonStyle())
                 .accessibilityHint("Calcula una ruta nueva desde donde estás. La actual sigue activa hasta que la nueva esté lista.")
+                Button(action: recalculate) {
+                    if model.isRerouting {
+                        ProgressView()
+                            .tint(LumioColor.actionPrimary)
+                    } else {
+                        Label("Recalcular ruta", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                }
+                .buttonStyle(LumioSecondaryButtonStyle())
+                .disabled(model.isRerouting || model.isFinishing)
+                .accessibilityLabel("Recalcular ruta")
+                .accessibilityHint("Calcula de nuevo la ruta al mismo destino desde donde estás. Necesita conexión.")
                 Button {
                     confirmsFinish = true
                 } label: {
@@ -159,6 +175,10 @@ struct ActiveRouteView: View {
         Task { await model.finishRoute(outcome: outcome) }
     }
 
+    private func recalculate() {
+        Task { await model.recalculateRoute() }
+    }
+
     /// Al llegar (o al cambiar de ruta) VoiceOver empieza por la indicación actual, no por
     /// la barra de navegación.
     private func focusInstruction() {
@@ -175,6 +195,7 @@ private struct CurrentInstructionCard: View {
     let spokenText: String
     let focus: AccessibilityFocusState<Bool>.Binding
     let onQueryStatus: () -> Void
+    let onReroute: () -> Void
     let onFinish: () -> Void
     let onRepeat: () -> Void
 
@@ -211,6 +232,7 @@ private struct CurrentInstructionCard: View {
             .accessibilityFocused(focus)
             // Desde el primer elemento que lee VoiceOver, en el menú de acciones.
             .accessibilityAction(named: "Consultar ruta", onQueryStatus)
+            .accessibilityAction(named: "Recalcular ruta", onReroute)
             .accessibilityAction(named: "Finalizar ruta", onFinish)
 
             Button(action: onRepeat) {
@@ -220,6 +242,33 @@ private struct CurrentInstructionCard: View {
             .accessibilityHint("La vuelve a leer en voz alta.")
         }
         .lumioCard()
+    }
+}
+
+/// Estado de Recalcular Ruta (SCRUM-26), con los mismos textos que se locutan.
+struct RerouteStatusBanner: View {
+    let status: RerouteStatus
+
+    var body: some View {
+        switch status {
+        case .rerouting:
+            HStack(spacing: 12) {
+                ProgressView()
+                    .tint(LumioColor.actionPrimary)
+                Text(status.message)
+                    .font(.headline)
+                    .foregroundStyle(LumioColor.textPrimary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .lumioCard(padding: 16)
+            .accessibilityElement(children: .combine)
+        case .rerouted:
+            LumioStatusBanner(.success, title: "Ruta recalculada", message: status.message)
+        case .waitingForConnection:
+            LumioStatusBanner(.warning, title: "Sin conexión", message: status.message)
+        case .failed:
+            LumioStatusBanner(.error, title: "No se pudo recalcular", message: status.message)
+        }
     }
 }
 
