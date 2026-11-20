@@ -1,4 +1,6 @@
-#if canImport(SwiftUI)
+// Ejercita el wiring iOS de la detección (PermissionsViewModel, ObstacleAssistanceGate,
+// ARKit): solo iOS, igual que SafetyServiceStopTests. En la compilación portable (macOS) se omite.
+#if os(iOS)
 import Testing
 import Foundation
 @testable import LumioFrontend

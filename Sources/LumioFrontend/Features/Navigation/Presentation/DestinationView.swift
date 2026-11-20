@@ -94,9 +94,12 @@ struct DestinationView: View {
             .frame(maxWidth: .infinity)
         }
         // Consultar Ruta con el gesto de VoiceOver; sin ruta, se informa por audio.
+        // Magic Tap solo existe en iOS (no disponible en macOS; la compilación portable lo omite).
+        #if os(iOS)
         .accessibilityAction(.magicTap) {
             model.startRouteStatusQuery()
         }
+        #endif
         .background(LumioColor.background.ignoresSafeArea())
         .navigationTitle("Trayecto")
         #if os(iOS)

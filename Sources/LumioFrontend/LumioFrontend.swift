@@ -1,3 +1,7 @@
+// El punto de entrada @main solo se compila para la app (target ejecutable de Xcode/xcodegen).
+// En SwiftPM (el paso "Portable tests": `swift test`) se excluye: una librería con @main choca
+// con el `_main` que genera el runner de XCTest ("duplicate symbol _main").
+#if !SWIFT_PACKAGE
 #if canImport(SwiftUI)
 import SwiftUI
 
@@ -63,4 +67,5 @@ struct LumioFrontend {
         print("Lumio: abre el proyecto generado con Xcode para ejecutar la app iOS.")
     }
 }
+#endif
 #endif

@@ -139,9 +139,12 @@ struct ActiveRouteView: View {
         }
         // Magic Tap (doble toque con dos dedos): Consultar Ruta sin buscar el botón. La
         // respuesta ya incluye la siguiente indicación.
+        // Magic Tap solo existe en iOS (no disponible en macOS; la compilación portable lo omite).
+        #if os(iOS)
         .accessibilityAction(.magicTap) {
             model.startRouteStatusQuery()
         }
+        #endif
     }
 
     private func stepsSection(_ route: ActiveRoute) -> some View {
