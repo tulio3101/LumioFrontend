@@ -1,0 +1,66 @@
+import CoreGraphics
+import Foundation
+
+/// Parámetros del "foco de detección": rastreo por objeto, corredor de marcha, persistencia,
+/// acercamiento e inclinación del teléfono. Un único lugar para ajustar el comportamiento sin
+/// tocar la lógica (SCRUM-33). Todas las coordenadas son normalizadas 0…1, origen arriba-izquierda.
+struct DetectionFocusConfig: Equatable {
+    // MARK: Rastreo (IoU) e IDs estables
+    /// IoU mínima para considerar que una detección es el mismo objeto que un track existente.
+    var iouMatchThreshold: Float = 0.3
+    /// Frames consecutivos sin ver un objeto antes de olvidarlo (su ID se libera).
+    var maxMissedFrames: Int = 5
+
+    // MARK: Persistencia
+    /// El objeto debe aparecer en `minAppearances` de los últimos `windowFrames` frames antes de alertar.
+    var minAppearances: Int = 3
+    var windowFrames: Int = 5
+
+    // MARK: Corredor de marcha
+    /// Fracción central del ancho que se considera "en el camino" (0.40 = 40% central).
+    var corridorWidthFraction: CGFloat = 0.40
+    /// Borde superior de la franja (0.5 = mitad inferior de la imagen).
+    var corridorVerticalStart: CGFloat = 0.5
+    /// Desplazamiento vertical de la franja por grado de inclinación (compensa apuntar arriba/abajo).
+    var corridorShiftPerDegree: CGFloat = 0.01
+
+    // MARK: Inclinación (pitch en grados; 0 = horizonte, + mira arriba, − mira abajo)
+    var minPitchDegrees: Float = -35
+    var maxPitchDegrees: Float = 35
+    /// Segundos entre recordatorios de "levanta/baja el teléfono".
+    var pitchReminderCooldown: TimeInterval = 6.0
+
+    // MARK: Acercamiento y peligro
+    /// Cuánto debe bajar la distancia (m) entre frames para contar como "se acerca".
+    var approachingDeltaMeters: Float = 0.15
+    /// Por debajo de esta distancia (m) el objeto es peligro: reanuncia aunque esté quieto.
+    var dangerDistanceMeters: Float = 1.0
+
+    // MARK: Anuncio por objeto
+    /// Tiempo mínimo entre anuncios del mismo objeto rastreado (cuando se sigue acercando).
+    var perTrackCooldownSeconds: TimeInterval = 4.0
+
+    // MARK: Obstáculos por profundidad (independientes de la clase) y desniveles
+    /// Un obstáculo por profundidad / desnivel debe aparecer en `depthMinAppearances` de los
+    /// últimos `depthWindowFrames` frames antes de alertar (filtra ruido de un solo frame).
+    var depthMinAppearances: Int = 3
+    var depthWindowFrames: Int = 5
+    /// Tiempo mínimo entre anuncios del mismo tipo de obstáculo/desnivel por profundidad.
+    var depthCooldownSeconds: TimeInterval = 4.0
+    /// Altura (m) sobre el plano de piso por debajo de la cual un punto se considera "piso" y se
+    /// descarta al buscar obstáculos (no es un obstáculo, es el suelo).
+    var floorBandMeters: Float = 0.12
+    /// Zona del corredor analizada para desniveles (metros adelante del usuario).
+    var elevationNearMeters: Float = 0.5
+    var elevationFarMeters: Float = 3.0
+    /// Muestras de piso válido (confianza alta) que deben preceder a un hueco para confirmarlo
+    /// como bajada/bordillo, y longitud mínima del hueco. Evita interpretar reflejos/vidrio/sol.
+    var minFloorSamplesBeforeDrop: Int = 3
+    var minHoleRun: Int = 2
+    /// Caída (m) respecto al plano de piso que confirma un escalón/bordillo hacia abajo.
+    var dropStepMeters: Float = 0.10
+    /// Subida (m) que confirma un escalón hacia arriba.
+    var riseStepMeters: Float = 0.10
+
+    init() {}
+}

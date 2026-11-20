@@ -15,11 +15,17 @@ import Testing
     }
 }
 
-@Test func staticObstaclesHaveLowestThreshold() {
+@Test func confusingObjectsHaveRaisedThreshold() {
+    // Objetos pequeños / fáciles de confundir: umbral alto para cortar falsos positivos.
     let policy = ClassConfidencePolicy.default
-    for cls: ObstacleClass in [.chair, .bench, .pottedPlant] {
-        #expect(policy.threshold(for: cls) == 0.45, "expected 0.45 for \(cls)")
+    for cls: ObstacleClass in [.chair, .pottedPlant, .backpack, .suitcase, .umbrella] {
+        #expect(policy.threshold(for: cls) == 0.55, "expected 0.55 for \(cls)")
     }
+}
+
+@Test func benchHasModerateThreshold() {
+    let policy = ClassConfidencePolicy.default
+    #expect(policy.threshold(for: .bench) == 0.50)
 }
 
 @Test func unllistedClassGetsFallback() {
@@ -35,7 +41,7 @@ import Testing
     #expect(policy.threshold(for: .person) > policy.threshold(for: .car))
 }
 
-@Test func vehicleThresholdHigherThanStaticObstacle() {
+@Test func confusingObjectThresholdHigherThanVehicle() {
     let policy = ClassConfidencePolicy.default
-    #expect(policy.threshold(for: .car) > policy.threshold(for: .chair))
+    #expect(policy.threshold(for: .chair) > policy.threshold(for: .car))
 }

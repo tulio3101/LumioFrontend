@@ -37,4 +37,34 @@ enum SafetyAudio {
             deduplicationKey: "safety-mode-reduced"
         )
     }
+
+    /// SCRUM-320: modo completo (con LiDAR), distancias exactas. Se anuncia una vez al iniciar.
+    static func fullMode() -> AudioMessage {
+        AudioMessage(
+            text: "Modo completo. Las distancias a los obstáculos son exactas.",
+            priority: .environmentInformation,
+            contextID: context,
+            deduplicationKey: "safety-mode-full"
+        )
+    }
+
+    /// SCRUM-33: la cámara apunta demasiado al piso. Se pide levantar el teléfono.
+    static func raisePhone() -> AudioMessage {
+        AudioMessage(
+            text: "Levanta el teléfono para detectar mejor lo que tienes delante.",
+            priority: .environmentInformation,
+            contextID: context,
+            deduplicationKey: "safety-pitch-raise"
+        )
+    }
+
+    /// SCRUM-33: la cámara apunta demasiado al cielo. Se pide bajar el teléfono.
+    static func lowerPhone() -> AudioMessage {
+        AudioMessage(
+            text: "Baja el teléfono para detectar mejor lo que tienes delante.",
+            priority: .environmentInformation,
+            contextID: context,
+            deduplicationKey: "safety-pitch-lower"
+        )
+    }
 }

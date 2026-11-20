@@ -20,14 +20,6 @@ import CoreGraphics
         ("chair",         .chair),
         ("dog",           .dog),
         ("potted plant",  .pottedPlant),
-        // Interior COCO classes added for indoor navigation
-        ("dining table",  .diningTable),
-        ("bed",           .bed),
-        ("couch",         .couch),
-        ("toilet",        .toilet),
-        ("refrigerator",  .refrigerator),
-        ("tv",            .tv),
-        ("laptop",        .laptop),
         ("suitcase",      .suitcase),
         ("backpack",      .backpack),
         ("umbrella",      .umbrella),
@@ -37,8 +29,21 @@ import CoreGraphics
     }
 }
 
+@Test func activeClassSetIsSeventeenOutdoorClasses() {
+    #expect(ObstacleClass.allCases.count == 17)
+}
+
+@Test func removedIndoorClassesReturnNil() {
+    // Clases de interior puro: quitadas de la lista de exteriores (fuente de falsos positivos).
+    let removed = [
+        "toilet", "refrigerator", "tv", "laptop", "bed", "couch", "dining table",
+    ]
+    for label in removed {
+        #expect(ObstacleClass.from(cocoLabel: label) == nil, "\(label) debería estar fuera")
+    }
+}
+
 @Test func nonMobilityCocoClassesReturnNil() {
-    // couch/bed/refrigerator removed — they are now mobility classes.
     let nonMobility = [
         "airplane", "cat", "toothbrush", "boat", "sheep", "cow", "horse", "",
     ]

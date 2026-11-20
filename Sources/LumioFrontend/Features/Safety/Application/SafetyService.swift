@@ -89,37 +89,48 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
         audioArbiter.cancel(contextIDs: [SafetyAudio.context])
     }
 
-    // MARK: - SCRUM-349: mode announcement
+    // MARK: - SCRUM-320/349: mode announcement
 
     private func announceMode() {
-        guard !pipeline.isDepthAvailable else { return }
-        audioArbiter.receive(SafetyAudio.reducedMode())
+        // El usuario sabe por audio si opera en modo completo (LiDAR) o reducido (sin LiDAR).
+        audioArbiter.receive(
+            pipeline.isDepthAvailable ? SafetyAudio.fullMode() : SafetyAudio.reducedMode()
+        )
     }
 
     // MARK: - Detection consumption loop
 
     private func consumeLoop() async {
-        for await detections in pipeline.detections {
+        for await output in pipeline.detections {
             guard !Task.isCancelled else { return }
-            handle(detections)
+            handle(output)
         }
     }
 
-    private func handle(_ detections: [Detection]) {
+    private func handle(_ output: SafetyFrameOutput) {
+        let now = Date()
         #if DEBUG
-        debugState.lastDetections = detections
-        debugState.lastDetectionDate = Date()
+        debugState.lastDetections = output.tracked.map(\.detection)
+        debugState.lastDetectionDate = now
         debugFPSFrameCount += 1
-        let elapsed = Date().timeIntervalSince(debugFPSWindowStart)
+        let elapsed = now.timeIntervalSince(debugFPSWindowStart)
         if elapsed >= 1.0 {
             debugState.fps = Double(debugFPSFrameCount) / elapsed
             debugFPSFrameCount = 0
-            debugFPSWindowStart = Date()
+            debugFPSWindowStart = now
         }
         #endif
-        for output in announcer.announcements(for: detections, now: Date()) {
-            onEvent?(output.event)
-            audioArbiter.receive(output.message)
+        for out in announcer.announcements(for: output.tracked, now: now) {
+            onEvent?(out.event)
+            audioArbiter.receive(out.message)
+        }
+        // SCRUM-33: obstáculos por profundidad (ya filtrados/persistidos en el pipeline).
+        for obstacle in output.depthObstacles {
+            let out = announcer.depthObstacleOutput(
+                kind: obstacle.kind, distanceMeters: obstacle.distanceMeters, now: now
+            )
+            onEvent?(out.event)
+            audioArbiter.receive(out.message)
         }
     }
 }

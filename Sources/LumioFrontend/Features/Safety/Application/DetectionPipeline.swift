@@ -10,14 +10,16 @@ final class DetectionPipeline: ObstacleDetectionPipeline {
     private let runner: YOLORunner
     private let confidencePolicy: ClassConfidencePolicy
     private let lowLightDetector: LowLightDetector?
+    private let focusConfig: DetectionFocusConfig
+    private let pitchReminder: PhonePitchReminder?
 
     var isDepthAvailable: Bool { frameSource.isDepthAvailable }
     #if DEBUG
     var previewFrameSource: ARKitFrameSource? { frameSource as? ARKitFrameSource }
     #endif
 
-    private(set) var detections: AsyncStream<[Detection]>
-    private let detectionsContinuation: AsyncStream<[Detection]>.Continuation
+    private(set) var detections: AsyncStream<SafetyFrameOutput>
+    private let detectionsContinuation: AsyncStream<SafetyFrameOutput>.Continuation
     private var processingTask: Task<Void, Never>?
 
     private let logger = Logger(subsystem: "com.lumio.app", category: "DetectionPipeline")
@@ -30,14 +32,18 @@ final class DetectionPipeline: ObstacleDetectionPipeline {
         frameSource: FrameSource,
         runner: YOLORunner,
         confidencePolicy: ClassConfidencePolicy = .default,
-        lowLightDetector: LowLightDetector? = nil
+        lowLightDetector: LowLightDetector? = nil,
+        focusConfig: DetectionFocusConfig = DetectionFocusConfig(),
+        pitchReminder: PhonePitchReminder? = nil
     ) {
         self.frameSource = frameSource
         self.runner = runner
         self.confidencePolicy = confidencePolicy
         self.lowLightDetector = lowLightDetector
-        var cont: AsyncStream<[Detection]>.Continuation!
-        detections = AsyncStream<[Detection]>(bufferingPolicy: .bufferingNewest(1)) { cont = $0 }
+        self.focusConfig = focusConfig
+        self.pitchReminder = pitchReminder
+        var cont: AsyncStream<SafetyFrameOutput>.Continuation!
+        detections = AsyncStream<SafetyFrameOutput>(bufferingPolicy: .bufferingNewest(1)) { cont = $0 }
         detectionsContinuation = cont
     }
 
@@ -63,8 +69,20 @@ final class DetectionPipeline: ObstacleDetectionPipeline {
     private func spawnProcessingLoop() {
         processingTask = Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
-            // One smoother per processing Task; resets automatically on restart (new Task).
+            // One smoother + tracker + depth gate per processing Task; reset on restart (new Task).
             var smoother = TemporalSmoother()
+            var tracker = ObstacleTracker(config: self.focusConfig)
+            let corridor = WalkingCorridor(config: self.focusConfig)
+            let halfWidth = Float(self.focusConfig.corridorWidthFraction / 2)
+            let depthDetector = DepthObstacleDetector(
+                maxAlertDistance: ObstacleAnnouncer.farThresholdMeters,
+                corridorXRange: (0.5 - halfWidth)...(0.5 + halfWidth)
+            )
+            var depthGate = PersistenceGate(
+                minAppearances: self.focusConfig.depthMinAppearances,
+                windowFrames: self.focusConfig.depthWindowFrames,
+                cooldown: self.focusConfig.depthCooldownSeconds
+            )
             for await frame in self.frameSource.frames {
                 // Always release the gate when done — even if Task is cancelled or detect() throws.
                 defer { self.frameSource.frameProcessingComplete() }
@@ -73,6 +91,20 @@ final class DetectionPipeline: ObstacleDetectionPipeline {
                 // Low-light check: plain Float from ARKit, no frame retention.
                 if let intensity = frame.ambientIntensity {
                     self.lowLightDetector?.analyze(ambientIntensity: intensity)
+                }
+
+                // Inclinación del teléfono (ARKit está alineado a gravedad): si apunta al piso
+                // o al cielo, avisa una vez y no detecta ruido ese frame.
+                // eulerAngles.x es el pitch en radianes; el eje/signo puede calibrarse en campo.
+                let pitchDegrees: Float? = frame.camera.map { $0.eulerAngles.x * 180 / .pi }
+                let tilt = pitchState(
+                    pitchDegrees ?? 0,
+                    minDegrees: self.focusConfig.minPitchDegrees,
+                    maxDegrees: self.focusConfig.maxPitchDegrees
+                )
+                if self.pitchReminder?.analyze(tilt, now: Date()) == true {
+                    self.detectionsContinuation.yield(SafetyFrameOutput())
+                    continue
                 }
 
                 let raw = (try? self.runner.detect(pixelBuffer: frame.pixelBuffer)) ?? []
@@ -106,7 +138,37 @@ final class DetectionPipeline: ObstacleDetectionPipeline {
                 } else {
                     enriched = stable
                 }
-                self.detectionsContinuation.yield(enriched)
+                // SCRUM-33: corredor de marcha + rastreo por objeto (IDs estables, persistencia,
+                // acercamiento). Las alertas pasan a ser por objeto, no por frame.
+                let tracked = tracker.update(enriched, pitchDegrees: pitchDegrees)
+
+                // SCRUM-33: obstáculo por profundidad (independiente de la clase). Solo con LiDAR y
+                // con el piso estimado (para descontarlo). Fusiona con YOLO (gana el nombre YOLO),
+                // y pasa por persistencia N-de-M + cooldown (igual que las cajas).
+                var depthObstacles: [DepthObstacleSignal] = []
+                if self.frameSource.isDepthAvailable, let depth = frame.depthData,
+                   let camera = frame.camera, let floorHeight = frame.floorHeight {
+                    let rect = corridor.rect(pitchDegrees: pitchDegrees ?? 0)
+                    let hit = CorridorDepthSampler.grid(
+                        from: depth, corridor: rect, camera: camera,
+                        floorHeight: floorHeight, floorBand: self.focusConfig.floorBandMeters
+                    ).flatMap { depthDetector.detect($0) }
+                    let kind = DepthObstacleKind(meshClass: frame.meshClassification?.dominantClass ?? .none)
+                    let surviving = DepthObstacleFusion.survivingObstacle(
+                        hit, kind: kind, yoloBoxes: tracked.map(\.boundingBox)
+                    )
+                    let present: Set<String> = surviving.map { [$0.kind.rawValue] } ?? []
+                    let announce = depthGate.update(present: present, now: Date())
+                    if let surviving, announce.contains(surviving.kind.rawValue) {
+                        depthObstacles.append(
+                            DepthObstacleSignal(kind: surviving.kind, distanceMeters: surviving.hit.distance)
+                        )
+                    }
+                }
+
+                self.detectionsContinuation.yield(
+                    SafetyFrameOutput(tracked: tracked, depthObstacles: depthObstacles)
+                )
                 // frame goes out of scope here — CVPixelBuffer/ARDepthData are released.
             }
         }

@@ -116,12 +116,24 @@ struct AppDependencies {
         let modelAvailable: Bool
         do {
             let runner = try YOLORunner()
+            let focusConfig = DetectionFocusConfig()
             let pipeline = DetectionPipeline(
                 frameSource: ARKitFrameSource(),
                 runner: runner,
-                lowLightDetector: LowLightDetector(audioArbiter: audioArbiter)
+                lowLightDetector: LowLightDetector(audioArbiter: audioArbiter),
+                focusConfig: focusConfig,
+                pitchReminder: PhonePitchReminder(
+                    audioArbiter: audioArbiter, cooldown: focusConfig.pitchReminderCooldown
+                )
             )
-            self.safetyService = SafetyService(pipeline: pipeline, audioArbiter: audioArbiter)
+            self.safetyService = SafetyService(
+                pipeline: pipeline,
+                audioArbiter: audioArbiter,
+                announcer: ObstacleAnnouncer(
+                    announcementInterval: focusConfig.perTrackCooldownSeconds,
+                    dangerDistanceMeters: focusConfig.dangerDistanceMeters
+                )
+            )
             modelAvailable = true
         } catch {
             self.safetyService = nil

@@ -13,10 +13,15 @@ struct ClassConfidencePolicy {
         .motorcycle:  0.50,
         .bus:         0.50,
         .truck:       0.50,
-        // Static obstacles with simpler silhouettes — allow lower confidence.
-        .chair:       0.45,
-        .bench:       0.45,
-        .pottedPlant: 0.45,
+        // Benches have a clear silhouette on the street.
+        .bench:       0.50,
+        // Small / easily-confused objects (chair, plant, bags, umbrella): raise threshold to
+        // cut false positives seen in street tests.
+        .chair:       0.55,
+        .pottedPlant: 0.55,
+        .backpack:    0.55,
+        .suitcase:    0.55,
+        .umbrella:    0.55,
     ]
 
     /// Applied to any class not listed above.

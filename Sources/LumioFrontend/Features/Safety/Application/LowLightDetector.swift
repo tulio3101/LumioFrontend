@@ -17,12 +17,12 @@ final class LowLightDetector {
     /// Intensity must exceed alertThreshold + hysteresisMargin to recover.
     let hysteresisMargin: Float
 
-    private let audioArbiter: AudioArbiterService
+    private let audioArbiter: any AudioArbitrating
     private var isAlertActive = false
     private let feedbackGenerator = UINotificationFeedbackGenerator()
 
     init(
-        audioArbiter: AudioArbiterService,
+        audioArbiter: any AudioArbitrating,
         alertThreshold: Float = 100.0,
         hysteresisMargin: Float = 40.0
     ) {

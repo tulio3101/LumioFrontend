@@ -1,7 +1,9 @@
 import Foundation
 
-/// Subconjunto de clases COCO relevantes para la movilidad de peatones.
+/// Subconjunto de clases COCO relevantes para la movilidad de peatones EN EXTERIORES.
 /// Solo estas clases se propagan como detecciones; el resto se descarta en el decoder.
+/// Las clases de interior puro (toilet, refrigerator, tv, laptop, bed, couch, dining table) se
+/// excluyeron: no aparecen en la banqueta y eran fuente de falsos positivos.
 enum ObstacleClass: String, CaseIterable, Equatable {
     // Personas y vehículos
     case person        = "person"
@@ -15,20 +17,13 @@ enum ObstacleClass: String, CaseIterable, Equatable {
     case fireHydrant   = "fire hydrant"
     case stopSign      = "stop sign"
     case parkingMeter  = "parking meter"
-    // Mobiliario exterior
+    // Mobiliario de exterior
     case bench         = "bench"
-    // Animales
-    case dog           = "dog"
-    // Objetos de interior relevantes para navegación en espacios cerrados
     case chair         = "chair"
     case pottedPlant   = "potted plant"
-    case diningTable   = "dining table"
-    case bed           = "bed"
-    case couch         = "couch"
-    case toilet        = "toilet"
-    case refrigerator  = "refrigerator"
-    case tv            = "tv"
-    case laptop        = "laptop"
+    // Animales
+    case dog           = "dog"
+    // Objetos portátiles que aparecen en la vía
     case suitcase      = "suitcase"
     case backpack      = "backpack"
     case umbrella      = "umbrella"
