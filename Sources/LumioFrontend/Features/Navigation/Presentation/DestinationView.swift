@@ -18,6 +18,10 @@ struct DestinationView: View {
     #if os(iOS) && DEBUG
     @EnvironmentObject var debugContainer: DebugSafetyContainer
     #endif
+    #if os(iOS)
+    /// SCRUM-37: estado de la detección y «Reintentar detección» durante la ruta.
+    private let safetyService: SafetyService?
+    #endif
 
     init(
         routeCreator: any RouteCreating,
@@ -32,6 +36,9 @@ struct DestinationView: View {
         safetyMonitor: (any SafetyMonitoring)? = nil,
         obstacleGate: (any CameraAssistanceGating)? = nil
     ) {
+        #if os(iOS)
+        self.safetyService = safetyMonitor as? SafetyService
+        #endif
         _model = StateObject(wrappedValue: DestinationViewModel(
             routeCreator: routeCreator,
             routeModifier: routeModifier,
@@ -181,6 +188,12 @@ struct DestinationView: View {
             }
 
             RouteSummaryCard(route: route)
+
+            #if os(iOS)
+            if let safetyService {
+                SafetyStatusView(service: safetyService)
+            }
+            #endif
 
             RouteProgressCard(
                 route: route,
