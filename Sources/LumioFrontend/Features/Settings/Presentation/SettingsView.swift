@@ -3,7 +3,9 @@ import SwiftUI
 
 struct SettingsView: View {
     let signOut: any SigningOut
-    /// Se llama después de cerrar la sesión para volver a la bienvenida.
+    /// Eliminar Cuenta (SCRUM-7).
+    let accountDeleter: any AccountDeleting
+    /// Se llama después de cerrar la sesión o eliminar la cuenta para volver a la bienvenida.
     let onSignedOut: () -> Void
     #if os(iOS)
     let permissions: PermissionsViewModel
@@ -35,6 +37,15 @@ struct SettingsView: View {
                 }
                 .disabled(isSigningOut)
                 .accessibilityHint("Pide confirmación antes de cerrar la sesión.")
+
+                NavigationLink {
+                    DeleteAccountView(deleter: accountDeleter, onAccountClosed: onSignedOut)
+                } label: {
+                    Label("Eliminar cuenta", systemImage: "person.crop.circle.badge.xmark")
+                        .foregroundStyle(LumioColor.errorText)
+                }
+                .disabled(isSigningOut)
+                .accessibilityHint("Explica qué se borra y pide dos confirmaciones antes de eliminarla.")
             }
         }
         .navigationTitle("Preferencias")
