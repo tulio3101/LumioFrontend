@@ -19,6 +19,15 @@ struct AppDependencies {
     #if canImport(AVFoundation)
     let audioArbiter: AudioArbiterService
     #endif
+    #if os(iOS)
+    /// nil si el modelo YOLO no está en el bundle (añadir yolo26n_640_int8.mlpackage a Copy Bundle Resources).
+    let safetyService: SafetyService?
+    #endif
+    #if os(iOS)
+    let permissions: PermissionsViewModel
+    /// SCRUM-315: compuerta de permiso de cámara para arrancar la detección (SCRUM-33).
+    let obstacleGate: (any CameraAssistanceGating)?
+    #endif
 
     init(configuration: AppConfiguration = .main) {
         #if os(iOS)
@@ -111,6 +120,47 @@ struct AppDependencies {
         authenticationService = UnavailableAuthenticationService()
         signOut = SignOutService(
             session: UnavailableSessionService(), routes: NoActiveRouteStore(), arbiter: nil
+        )
+        #endif
+        #if os(iOS)
+        // SCRUM-37 (punto de extensión para Nestor): si el modelo YOLO no carga, aquí se
+        // decide el manejo del error. Por ahora: guardar el fallo (modelAvailable) para que
+        // la compuerta lo anuncie al iniciar la ruta, no al abrir la app, y seguir con la
+        // navegación. Un reintento o un diagnóstico por tipo de error van en este catch.
+        let modelAvailable: Bool
+        do {
+            let runner = try YOLORunner()
+            let focusConfig = DetectionFocusConfig()
+            let pipeline = DetectionPipeline(
+                frameSource: ARKitFrameSource(),
+                runner: runner,
+                lowLightDetector: LowLightDetector(audioArbiter: audioArbiter),
+                focusConfig: focusConfig,
+                pitchReminder: PhonePitchReminder(
+                    audioArbiter: audioArbiter, cooldown: focusConfig.pitchReminderCooldown
+                )
+            )
+            self.safetyService = SafetyService(
+                pipeline: pipeline,
+                audioArbiter: audioArbiter,
+                announcer: ObstacleAnnouncer(
+                    announcementInterval: focusConfig.perTrackCooldownSeconds,
+                    dangerDistanceMeters: focusConfig.dangerDistanceMeters
+                )
+            )
+            modelAvailable = true
+        } catch {
+            self.safetyService = nil
+            modelAvailable = false
+        }
+        // La compuerta reutiliza el PermissionsViewModel de la pantalla de permisos para el flujo
+        // accesible de solicitud de cámara.
+        let permissionsViewModel = PermissionsViewModel(
+            service: PermissionService(provider: IOSPermissionProvider()), audio: audioArbiter
+        )
+        self.permissions = permissionsViewModel
+        self.obstacleGate = ObstacleAssistanceGate(
+            permissions: permissionsViewModel, audio: audioArbiter, modelAvailable: modelAvailable
         )
         #endif
     }

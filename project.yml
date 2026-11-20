@@ -14,18 +14,19 @@ targets:
     sources:
       - path: Sources/LumioFrontend
       - path: Resources/Assets.xcassets
+      # Xcode compiles .mlpackage → .mlmodelc via coremlc (Compile Sources build phase).
+      # Loaded at runtime with Bundle.main.url(forResource:withExtension:"mlmodelc").
+      - path: Resources/yolo26n_640_int8.mlpackage
 
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.lumio.app
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         PRODUCT_NAME: lumio
-        INFOPLIST_KEY_CFBundleDisplayName: Lumio
         PRODUCT_MODULE_NAME: LumioFrontend
-        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
-        INFOPLIST_KEY_UILaunchScreen_Generation: YES
-        GENERATE_INFOPLIST_FILE: YES
-        # Se combina con las claves generadas: permisos y configuración de Lumio.
+        # Única fuente de verdad del Info.plist: el archivo Resources/Info.plist (incluye
+        # permisos, display name, región y ciclo de vida). Sin GENERATE_INFOPLIST_FILE ni
+        # INFOPLIST_KEY_* para que ningún build lo reescriba.
         INFOPLIST_FILE: Resources/Info.plist
         SWIFT_VERSION: "5.0"
 
@@ -35,6 +36,9 @@ targets:
     deploymentTarget: "16.0"
     sources:
       - path: Tests/LumioFrontendTests
+      # Pruebas de la pila de detección (Safety): deben correr en el build de Xcode,
+      # igual que el testTarget SafetyTests declarado en Package.swift (xtool).
+      - path: Tests/SafetyTests
     dependencies:
       - target: lumio
     settings:

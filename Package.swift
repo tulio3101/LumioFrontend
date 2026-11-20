@@ -15,6 +15,7 @@ let package = Package(
     targets: [
         .target(name: "LumioFrontend", resources: [.process("Resources")]),
         .testTarget(name: "LumioFrontendTests", dependencies: ["LumioFrontend"]),
+        .testTarget(name: "SafetyTests", dependencies: ["LumioFrontend"]),
     ],
     swiftLanguageModes: [.v5]
 )

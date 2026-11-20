@@ -9,6 +9,7 @@ final class AudioArbiterService: AudioArbitrating {
     private var current: AudioMessageQueue.Entry?
     private var token: PlaybackToken?
     private var context = AudioDecisionContext()
+    private var completionWaiters: [UUID: CheckedContinuation<Bool, Never>] = [:]
     private let deduplication = AudioDeduplicationPolicy()
     private var latestCaptureByContext: [String: UInt64] = [:]
 
@@ -33,6 +34,37 @@ final class AudioArbiterService: AudioArbitrating {
         }
     }
 
+    /// Espera a que la explicación termine. No abre diálogos sobre una locución pendiente.
+    /// P1 puede interrumpir P2; el árbitro lo reanuda según su política habitual.
+    func receiveAndWait(_ message: AudioMessage) async -> Bool {
+        guard !Task.isCancelled, message.status == .pending,
+              current?.message.id != message.id,
+              !queue.entries.contains(where: { $0.message.id == message.id }),
+              completionWaiters[message.id] == nil else { return false }
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                completionWaiters[message.id] = continuation
+                receive(message)
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in self?.cancelWaitingMessage(message.id) }
+        }
+    }
+
+    private func cancelWaitingMessage(_ id: UUID) {
+        completionWaiters.removeValue(forKey: id)?.resume(returning: false)
+        let removed = queue.removeIrrelevant { $0.id != id }
+        for message in removed { publish(message, status: .discarded) }
+        if current?.message.id == id {
+            let message = current!.message
+            current = nil
+            token = nil
+            player.stop()
+            publish(message, status: .discarded)
+        }
+        processNext()
+    }
+
     func receive(_ message: AudioMessage) {
         guard message.status == .pending,
               current?.message.id != message.id,
@@ -43,8 +75,11 @@ final class AudioArbiterService: AudioArbitrating {
         }
         // Limpiar pendientes vencidos antes de usarlos como referencia de duplicidad.
         discardIrrelevant()
-        if message.priority == .environmentInformation,
-           let contextID = message.contextID, let sequence = message.captureSequence,
+        // Obsolescencia por captura: cualquier mensaje con captureSequence (p. ej. las alertas
+        // de obstáculo, incluidas las immediateRisk) se descarta si su captura es más vieja que
+        // la última procesada de su contexto. Los avisos de sistema no llevan captureSequence,
+        // así que nunca se descartan por esto.
+        if let contextID = message.contextID, let sequence = message.captureSequence,
            let latest = latestCaptureByContext[contextID], sequence < latest {
             publish(message, status: .discarded)
             return
@@ -60,8 +95,7 @@ final class AudioArbiterService: AudioArbitrating {
         let replaced = queue.removeIrrelevant {
             !deduplication.isNewerCapture(message, than: $0)
         }
-        if message.priority == .environmentInformation,
-           let contextID = message.contextID, let sequence = message.captureSequence {
+        if let contextID = message.contextID, let sequence = message.captureSequence {
             latestCaptureByContext[contextID] = sequence
         }
         queue.append(message)
@@ -166,6 +200,9 @@ final class AudioArbiterService: AudioArbitrating {
     private func publish(_ original: AudioMessage, status: AudioMessageStatus) {
         var message = original
         message.status = status
+        if status == .completed || status == .discarded {
+            completionWaiters.removeValue(forKey: message.id)?.resume(returning: status == .completed)
+        }
         onMessageChanged?(message)
     }
 }

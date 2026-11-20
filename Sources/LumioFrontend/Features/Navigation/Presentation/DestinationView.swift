@@ -15,6 +15,9 @@ struct DestinationView: View {
     /// La hoja se cierra antes de navegar para que ambas transiciones no se mezclen.
     @State private var opensRouteAfterPlanning = false
     @State private var hasAppeared = false
+    #if os(iOS) && DEBUG
+    @EnvironmentObject var debugContainer: DebugSafetyContainer
+    #endif
 
     init(
         routeCreator: any RouteCreating,
@@ -25,7 +28,9 @@ struct DestinationView: View {
         routeFinisher: (any RouteFinishing)? = nil,
         arrivalMonitor: (any ArrivalMonitoring)? = nil,
         deviationMonitor: (any RouteDeviationMonitoring)? = nil,
-        suggester: (any DestinationSuggesting)? = nil
+        suggester: (any DestinationSuggesting)? = nil,
+        safetyMonitor: (any SafetyMonitoring)? = nil,
+        obstacleGate: (any CameraAssistanceGating)? = nil
     ) {
         _model = StateObject(wrappedValue: DestinationViewModel(
             routeCreator: routeCreator,
@@ -36,7 +41,9 @@ struct DestinationView: View {
             routeFinisher: routeFinisher,
             arrivalMonitor: arrivalMonitor,
             deviationMonitor: deviationMonitor,
-            suggester: suggester
+            suggester: suggester,
+            safetyMonitor: safetyMonitor,
+            obstacleGate: obstacleGate
         ))
     }
 
@@ -67,6 +74,19 @@ struct DestinationView: View {
                 }
                 upcomingFeatures
                     .lumioEntrance(hasAppeared, delay: 0.3, reduceMotion: reduceMotion)
+                // Panel de diagnóstico de la detección (solo builds Debug en iOS).
+                #if os(iOS) && DEBUG
+                if let service = debugContainer.service {
+                    DebugSafetySection(service: service)
+                        .lumioEntrance(hasAppeared, delay: 0.35, reduceMotion: reduceMotion)
+                } else {
+                    FeatureStatusView(
+                        title: "SafetyService no disponible",
+                        message: "Falta yolo26n_640_int8.mlpackage en Copy Bundle Resources del target lumio."
+                    )
+                    .lumioEntrance(hasAppeared, delay: 0.35, reduceMotion: reduceMotion)
+                }
+                #endif
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
@@ -74,9 +94,12 @@ struct DestinationView: View {
             .frame(maxWidth: .infinity)
         }
         // Consultar Ruta con el gesto de VoiceOver; sin ruta, se informa por audio.
+        // Magic Tap solo existe en iOS (no disponible en macOS; la compilación portable lo omite).
+        #if os(iOS)
         .accessibilityAction(.magicTap) {
             model.startRouteStatusQuery()
         }
+        #endif
         .background(LumioColor.background.ignoresSafeArea())
         .navigationTitle("Trayecto")
         #if os(iOS)

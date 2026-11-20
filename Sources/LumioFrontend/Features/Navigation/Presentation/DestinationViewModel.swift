@@ -85,6 +85,11 @@ final class DestinationViewModel: ObservableObject {
     private let arrivalMonitor: any ArrivalMonitoring
     private let deviationMonitor: any RouteDeviationMonitoring
     private let suggester: any DestinationSuggesting
+    /// Detección de obstáculos (SCRUM-33). Corre en paralelo a la detección de llegada: solo
+    /// mientras hay ruta activa. nil si la plataforma o el modelo no la ofrecen.
+    private let safetyMonitor: (any SafetyMonitoring)?
+    /// Compuerta de permiso de cámara (SCRUM-315). Sin ella no se comprueba el permiso.
+    private let obstacleGate: (any CameraAssistanceGating)?
     private let instructions = NavigationInstructionBuilder()
     private var suggestionTask: Task<Void, Never>?
     private var isApplyingSuggestion = false
@@ -104,7 +109,9 @@ final class DestinationViewModel: ObservableObject {
         routeFinisher: (any RouteFinishing)? = nil,
         arrivalMonitor: (any ArrivalMonitoring)? = nil,
         deviationMonitor: (any RouteDeviationMonitoring)? = nil,
-        suggester: (any DestinationSuggesting)? = nil
+        suggester: (any DestinationSuggesting)? = nil,
+        safetyMonitor: (any SafetyMonitoring)? = nil,
+        obstacleGate: (any CameraAssistanceGating)? = nil
     ) {
         self.routeCreator = routeCreator
         self.routeModifier = routeModifier ?? UnavailableNavigationService()
@@ -115,10 +122,47 @@ final class DestinationViewModel: ObservableObject {
         self.arrivalMonitor = arrivalMonitor ?? NoArrivalMonitoring()
         self.deviationMonitor = deviationMonitor ?? NoDeviationMonitoring()
         self.suggester = suggester ?? NoDestinationSuggestions()
+        self.safetyMonitor = safetyMonitor
+        self.obstacleGate = obstacleGate
         // La llegada se detecta en cualquier pantalla, también con el teléfono bloqueado.
         self.arrivalMonitor.onArrival = { [weak self] result in self?.didFinish(result) }
         // El recálculo automático también ocurre en cualquier pantalla.
         self.deviationMonitor.onStatusChange = { [weak self] status in self?.didChangeReroute(status) }
+    }
+
+    // MARK: Detección de obstáculos (SCRUM-33, en paralelo a arrivalMonitor)
+
+    /// Arranca la detección si la cámara tiene permiso (SCRUM-315). Sin permiso, la ruta sigue
+    /// y se avisa por audio una sola vez; nunca bloquea la navegación. Se dispara en segundo
+    /// plano para no retrasar la confirmación de la ruta.
+    private func startObstacleDetection() {
+        guard let safetyMonitor else {
+            // Sin monitor en iOS = el modelo no cargó. Se avisa al iniciar la ruta (una vez por
+            // ruta), no al abrir la app. En otras plataformas obstacleGate es nil: no hace nada.
+            obstacleGate?.announceModelUnavailable()
+            return
+        }
+        let gate = obstacleGate
+        // En segundo plano: pedir el permiso de cámara no debe bloquear el cálculo de la ruta
+        // ni los giros.
+        Task { @MainActor in
+            if let gate, await gate.prepareObstacleAssistance() == false {
+                // Denegado (o ya estaba denegado): la ruta sigue. Se avisa una sola vez que va
+                // sin detección y se ofrece abrir Ajustes, igual que con locationPermissionDenied.
+                gate.announceAssistanceUnavailable()
+                failure = Failure(
+                    message: "La detección de obstáculos no está disponible sin permiso de cámara.",
+                    recovery: .openSettings
+                )
+                return
+            }
+            // Concedido (o sin compuerta): arranca de inmediato, sin reiniciar la ruta.
+            try? await safetyMonitor.start()
+        }
+    }
+
+    private func stopObstacleDetection() {
+        safetyMonitor?.stop()
     }
 
     var errorMessage: String? { failure?.message }
@@ -185,9 +229,21 @@ final class DestinationViewModel: ObservableObject {
         rerouteStatus = status
     }
 
+    /// Arranca los tres monitores que viven mientras hay ruta activa: llegada, desviación
+    /// (SCRUM-26) y detección de obstáculos (SCRUM-33). `safetyMonitor.start()` es idempotente,
+    /// así que cambiar el destino no reinicia la detección; recalcular ni siquiera pasa por aquí.
     private func startMonitoring() {
         arrivalMonitor.startMonitoring()
         deviationMonitor.startMonitoring()
+        startObstacleDetection()
+    }
+
+    /// Detiene los tres monitores. Solo se llama al finalizar o al llegar (ver `didFinish`),
+    /// nunca al recalcular la ruta.
+    private func stopMonitoring() {
+        arrivalMonitor.stopMonitoring()
+        deviationMonitor.stopMonitoring()
+        stopObstacleDetection()
     }
 
     // MARK: Indicaciones
@@ -247,8 +303,7 @@ final class DestinationViewModel: ObservableObject {
         guard route != nil, !isLoading, !isFinishing else { return false }
         isFinishing = true
         defer { isFinishing = false }
-        arrivalMonitor.stopMonitoring()
-        deviationMonitor.stopMonitoring()
+        stopMonitoring()
         guard let result = await routeFinisher.finishActiveRoute(outcome: outcome, trigger: .manual) else {
             route = nil
             return false
@@ -263,7 +318,9 @@ final class DestinationViewModel: ObservableObject {
     }
 
     private func didFinish(_ result: RouteFinishResult) {
-        deviationMonitor.stopMonitoring()
+        // Cubre la llegada automática (onArrival) y el fin manual: se detienen los tres
+        // monitores (llegada, desvío y detección) junto con la ruta.
+        stopMonitoring()
         route = nil
         routeStatus = nil
         updatedRevision = nil
@@ -390,7 +447,7 @@ final class DestinationViewModel: ObservableObject {
             }
             lastFinish = nil
             rerouteStatus = nil
-            // Empieza (o sigue, con el destino nuevo) la detección de llegada y de desviación.
+            // Empieza (o sigue, con el destino nuevo) la llegada, la desviación y la detección.
             startMonitoring()
             return true
         } catch let error as RouteCreationError {

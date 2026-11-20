@@ -5,12 +5,18 @@ struct SettingsView: View {
     let signOut: any SigningOut
     /// Se llama después de cerrar la sesión para volver a la bienvenida.
     let onSignedOut: () -> Void
+    #if os(iOS)
+    let permissions: PermissionsViewModel
+    #endif
 
     @State private var confirmsSignOut = false
     @State private var isSigningOut = false
 
     var body: some View {
         Form {
+            #if os(iOS)
+            NavigationLink("Permisos y accesibilidad") { PermissionsView(model: permissions) }
+            #endif
             FeatureStatusView(
                 title: "Preferencias de voz",
                 message: "Aquí se integrarán idioma, velocidad y configuración de voz."
