@@ -21,7 +21,8 @@ struct AppDependencies {
     let audioArbiter: AudioArbiterService
     #endif
     #if os(iOS)
-    /// nil si el modelo YOLO no está en el bundle (añadir yolo26n_640_int8.mlpackage a Copy Bundle Resources).
+    /// SCRUM-37: se crea siempre. Si falta el modelo o falla, lo informa `SafetyService.status`.
+    /// Sigue siendo opcional para las vistas y pruebas que no usan detección.
     let safetyService: SafetyService?
     #endif
     #if os(iOS)
@@ -134,36 +135,29 @@ struct AppDependencies {
         )
         #endif
         #if os(iOS)
-        // SCRUM-37 (punto de extensión para Nestor): si el modelo YOLO no carga, aquí se
-        // decide el manejo del error. Por ahora: guardar el fallo (modelAvailable) para que
-        // la compuerta lo anuncie al iniciar la ruta, no al abrir la app, y seguir con la
-        // navegación. Un reintento o un diagnóstico por tipo de error van en este catch.
-        let modelAvailable: Bool
-        do {
-            let runner = try YOLORunner()
-            let focusConfig = DetectionFocusConfig()
-            let pipeline = DetectionPipeline(
-                frameSource: ARKitFrameSource(),
-                runner: runner,
-                lowLightDetector: LowLightDetector(audioArbiter: audioArbiter),
-                focusConfig: focusConfig,
-                pitchReminder: PhonePitchReminder(
-                    audioArbiter: audioArbiter, cooldown: focusConfig.pitchReminderCooldown
-                )
+        // SCRUM-37: SafetyService existe siempre, aunque el modelo falle. La carga de Core ML
+        // ya no ocurre aquí (hilo principal): el pipeline la hace en RecoveringModel al iniciar
+        // la detección (al iniciar la ruta), con reintentos 1/2/4 s para fallos recuperables.
+        // Un modelo ausente o que no se recupera se publica en SafetyService.status y se avisa
+        // por audio una sola vez; la navegación sigue y se ofrece «Reintentar detección».
+        let focusConfig = DetectionFocusConfig()
+        let pipeline = DetectionPipeline(
+            frameSource: ARKitFrameSource(),
+            runnerFactory: { try YOLORunner() },
+            lowLightDetector: LowLightDetector(audioArbiter: audioArbiter),
+            focusConfig: focusConfig,
+            pitchReminder: PhonePitchReminder(
+                audioArbiter: audioArbiter, cooldown: focusConfig.pitchReminderCooldown
             )
-            self.safetyService = SafetyService(
-                pipeline: pipeline,
-                audioArbiter: audioArbiter,
-                announcer: ObstacleAnnouncer(
-                    announcementInterval: focusConfig.perTrackCooldownSeconds,
-                    dangerDistanceMeters: focusConfig.dangerDistanceMeters
-                )
+        )
+        self.safetyService = SafetyService(
+            pipeline: pipeline,
+            audioArbiter: audioArbiter,
+            announcer: ObstacleAnnouncer(
+                announcementInterval: focusConfig.perTrackCooldownSeconds,
+                dangerDistanceMeters: focusConfig.dangerDistanceMeters
             )
-            modelAvailable = true
-        } catch {
-            self.safetyService = nil
-            modelAvailable = false
-        }
+        )
         // La compuerta reutiliza el PermissionsViewModel de la pantalla de permisos para el flujo
         // accesible de solicitud de cámara.
         let permissionsViewModel = PermissionsViewModel(
@@ -171,7 +165,7 @@ struct AppDependencies {
         )
         self.permissions = permissionsViewModel
         self.obstacleGate = ObstacleAssistanceGate(
-            permissions: permissionsViewModel, audio: audioArbiter, modelAvailable: modelAvailable
+            permissions: permissionsViewModel, audio: audioArbiter
         )
         #endif
     }

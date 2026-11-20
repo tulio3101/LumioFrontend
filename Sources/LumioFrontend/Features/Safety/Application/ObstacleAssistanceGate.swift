@@ -11,8 +11,9 @@ protocol CameraAssistanceGating: AnyObject {
     func prepareObstacleAssistance() async -> Bool
     /// Avisa por audio, una sola vez, que la navegación va sin detección por falta de cámara.
     func announceAssistanceUnavailable()
-    /// Si el modelo YOLO no cargó, avisa por audio que la detección no está disponible. Lo
-    /// llama el ViewModel al iniciar la ruta (una vez por ruta), no al abrir la app.
+    /// Si no hay SafetyService, avisa por audio que la detección no está disponible. Lo llama
+    /// el ViewModel al iniciar la ruta (una vez por ruta), no al abrir la app. SCRUM-37: en la
+    /// app SafetyService siempre existe y los fallos del modelo los avisa el propio servicio.
     func announceModelUnavailable()
 }
 
@@ -21,7 +22,8 @@ protocol CameraAssistanceGating: AnyObject {
 final class ObstacleAssistanceGate: CameraAssistanceGating {
     private let permissions: PermissionsViewModel
     private let audio: any AudioArbitrating
-    /// SCRUM-37: estado guardado del fallo de carga del modelo. Se decide en AppDependencies.
+    /// false solo cuando no hay detección configurada. SCRUM-37: los fallos del modelo en
+    /// ejecución (ausente, carga, inferencia) los publica y anuncia SafetyService.
     private let modelAvailable: Bool
     private var announcedCameraUnavailable = false
 
