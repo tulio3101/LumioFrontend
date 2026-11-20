@@ -40,6 +40,19 @@ final class SpySafetyMonitor: SafetyMonitoring {
 }
 
 @MainActor
+final class SpyDeviationMonitor: RouteDeviationMonitoring {
+    var onStatusChange: (@MainActor (RerouteStatus?) -> Void)?
+    private(set) var starts = 0
+    private(set) var stops = 0
+    var rerouteNowResult: RerouteOutcome?
+    func startMonitoring() { starts += 1 }
+    func stopMonitoring() { stops += 1 }
+    func rerouteNow() async -> RerouteOutcome? { rerouteNowResult }
+    /// Simula que el monitor detectó un desvío y recalculó (SCRUM-26).
+    func fireStatus(_ status: RerouteStatus?) { onStatusChange?(status) }
+}
+
+@MainActor
 final class FakeCameraGate: CameraAssistanceGating {
     var prepareResult: Bool
     private(set) var prepareCalls = 0
@@ -132,6 +145,38 @@ private func waitUntil(_ condition: () -> Bool, tries: Int = 200) async {
     arrival.onArrival?(result)
 
     #expect(safety.stops >= 1)
+}
+
+// MARK: - SCRUM-26 + SCRUM-33: recalcular NO detiene ni reinicia la detección
+
+@Test @MainActor func reroutingDoesNotStopOrRestartDetection() async {
+    let safety = SpySafetyMonitor()
+    let deviation = SpyDeviationMonitor()
+    let vm = DestinationViewModel(
+        routeCreator: FakeRouteCreator(created: activePharmacyRoute()),
+        arrivalMonitor: SpyArrivalMonitor(),
+        deviationMonitor: deviation,
+        safetyMonitor: safety,
+        obstacleGate: FakeCameraGate(prepareResult: true)
+    )
+    _ = await vm.createRoute(to: .query("Farmacia"))
+    await waitUntil { safety.starts == 1 }
+    #expect(safety.starts == 1)
+    #expect(safety.stops == 0)
+
+    // Recálculo automático: llega un nuevo recorrido por onStatusChange (SCRUM-26).
+    deviation.fireStatus(.rerouted(activePharmacyRoute()))
+    await Task.yield()
+    await Task.yield()
+
+    // Recálculo a mano.
+    deviation.rerouteNowResult = .rerouted(activePharmacyRoute())
+    _ = await vm.recalculateRoute()
+    await Task.yield()
+
+    // La detección sigue corriendo sin tocarse: ni para ni vuelve a arrancar.
+    #expect(safety.starts == 1, "recalcular no debe reiniciar la detección")
+    #expect(safety.stops == 0, "recalcular no debe detener la detección")
 }
 
 // MARK: - Permiso de cámara: concede vs. niega (comportamiento en el ViewModel)

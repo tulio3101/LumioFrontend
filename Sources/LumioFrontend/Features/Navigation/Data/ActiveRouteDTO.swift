@@ -1,7 +1,8 @@
 import Foundation
 
-// Reflejan el contrato de /places/routes del backend (RouteCreate, RouteDestinationChange y
-// ActiveRoute). Cambiar destino envía el mismo cuerpo que crear la ruta.
+// Reflejan el contrato de /places/routes del backend (RouteCreate, RouteDestinationChange,
+// RouteReroute y ActiveRoute). Cambiar destino envía el mismo cuerpo que crear la ruta;
+// recalcular añade `rerouted_at`.
 
 struct PlaceDTO: Codable, Equatable {
     let name: String
@@ -55,6 +56,27 @@ struct RouteCreateDTO: Encodable, Equatable {
         steps = route.steps.map(RouteStepDTO.init)
         distanceMeters = route.distanceMeters
         expectedTravelTimeSeconds = route.expectedTravelTimeSeconds
+    }
+}
+
+/// Recalcular Ruta: el cuerpo de crear la ruta (mismo destino) más cuándo se recalculó.
+struct RouteRerouteDTO: Encodable, Equatable {
+    let route: RouteCreateDTO
+    let reroutedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case reroutedAt = "rerouted_at"
+    }
+
+    init(_ route: ActiveRoute, reroutedAt: Date) {
+        self.route = RouteCreateDTO(route)
+        self.reroutedAt = reroutedAt
+    }
+
+    func encode(to encoder: Encoder) throws {
+        try route.encode(to: encoder)
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(BackendDate.string(from: reroutedAt), forKey: .reroutedAt)
     }
 }
 

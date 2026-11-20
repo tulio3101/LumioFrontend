@@ -44,7 +44,11 @@ Sin conexión se muestra la última lista guardada en el teléfono. Finalizar Ru
 detiene las indicaciones, borra la copia local y lo anuncia por audio y háptica, a mano
 («Llegué a mi destino» o «Terminar sin llegar») o al detectar la llegada con el GPS,
 también con el teléfono bloqueado (modo de fondo `location`). La ruta queda en el
-historial del backend; sin red, se envía al volver la conexión. El destino se escribe (con sugerencias) mientras no exista el dictado
+historial del backend; sin red, se envía al volver la conexión. Recalcular Ruta (SCRUM-26)
+detecta con el GPS que te saliste del trayecto (3 lecturas precisas a más de 30 m), lo
+avisa por audio, calcula una ruta nueva al mismo destino y la anuncia; sin red sigue con
+la copia local, lo avisa y recalcula al volver la conexión. También hay «Recalcular ruta»
+a mano en «Tu ruta». El destino se escribe (con sugerencias) mientras no exista el dictado
 (SCRUM-313); la guía de giros durante el trayecto es SCRUM-312.
 El registro y el inicio de sesión con correo están conectados a /users: los tokens se
 guardan en Keychain y se renuevan solos; Google sigue pendiente.

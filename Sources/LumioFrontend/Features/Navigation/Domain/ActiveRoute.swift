@@ -54,8 +54,14 @@ struct ActiveRoute: Codable, Equatable, Identifiable {
     var revision: Int = 0
     /// El backend todavía no conoce el último cambio de destino.
     var hasPendingDestinationChange = false
+    /// El backend todavía no conoce el último recálculo (Recalcular Ruta).
+    var hasPendingReroute = false
+    /// Cuándo se recalculó por última vez en el teléfono; nil si nunca.
+    var reroutedAt: Date?
 
-    var isPendingBackendSync: Bool { remoteID == nil || hasPendingDestinationChange }
+    var isPendingBackendSync: Bool {
+        remoteID == nil || hasPendingDestinationChange || hasPendingReroute
+    }
 
     /// Indicación que el usuario debe seguir ahora. Si `currentStep` ya pasó del último
     /// paso, es la llegada (el último). nil si la ruta no tiene pasos.
@@ -66,12 +72,14 @@ struct ActiveRoute: Codable, Equatable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case id, remoteID, origin, destination, steps, distanceMeters, expectedTravelTimeSeconds
         case createdAt, currentStep, revision, hasPendingDestinationChange
+        case hasPendingReroute, reroutedAt
     }
 }
 
 extension ActiveRoute {
     /// Las copias locales guardadas antes de Modificar Ruta no tienen `revision` ni
-    /// `hasPendingDestinationChange`: se leen con sus valores por defecto.
+    /// `hasPendingDestinationChange`, ni las anteriores a Recalcular Ruta
+    /// `hasPendingReroute` ni `reroutedAt`: se leen con sus valores por defecto.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
@@ -87,6 +95,8 @@ extension ActiveRoute {
         hasPendingDestinationChange = try container.decodeIfPresent(
             Bool.self, forKey: .hasPendingDestinationChange
         ) ?? false
+        hasPendingReroute = try container.decodeIfPresent(Bool.self, forKey: .hasPendingReroute) ?? false
+        reroutedAt = try container.decodeIfPresent(Date.self, forKey: .reroutedAt)
     }
 }
 

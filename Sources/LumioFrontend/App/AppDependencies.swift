@@ -8,7 +8,9 @@ struct AppDependencies {
     let recentRoutes: any RecentRoutesQuerying
     let routeFinisher: any RouteFinishing
     let arrivalMonitor: any ArrivalMonitoring
-    /// Se conserva mientras viva la app para reintentar el historial al volver la red.
+    let deviationMonitor: any RouteDeviationMonitoring
+    /// Se conserva mientras viva la app para reintentar el historial y el recálculo al
+    /// volver la red.
     private let connectivity: (any ConnectivityObserving)?
     let destinationSuggester: any DestinationSuggesting
     let sessionService: any SessionRestoring
@@ -66,7 +68,19 @@ struct AppDependencies {
         )
         let finisher = RouteFinishService(store: store, history: history, arbiter: arbiter, haptics: haptics)
         routeFinisher = finisher
-        arrivalMonitor = ArrivalMonitor(tracker: CoreLocationRouteTracker(), store: store, finisher: finisher)
+        // Llegada y desviación comparten una sola fuente de GPS durante la ruta.
+        let tracking = SharedLocationTracker(base: CoreLocationRouteTracker())
+        arrivalMonitor = ArrivalMonitor(tracker: tracking.makeClient(), store: store, finisher: finisher)
+        // El estado de la red decide si se puede recalcular; al volver se reintenta.
+        let monitor = NetworkConnectivityMonitor()
+        let rerouter = RouteRerouteService(
+            location: location, geocoder: geocoder, calculator: calculator,
+            store: store, sync: sync, arbiter: arbiter, connectivity: monitor,
+            haptics: haptics, history: history
+        )
+        deviationMonitor = RouteDeviationMonitor(
+            tracker: tracking.makeClient(), store: store, rerouter: rerouter, connectivity: monitor
+        )
         instructionRepeater = RouteInstructionRepeater(arbiter: arbiter)
         // Consultar Ruta: solo copia local y GPS, sin backend.
         routeStatus = RouteStatusService(store: store, location: location, arbiter: arbiter)
@@ -84,7 +98,6 @@ struct AppDependencies {
             recentRoutes: recentStore, pendingHistory: history
         )
         // El historial pendiente se envía al abrir la app y cada vez que vuelve la conexión.
-        let monitor = NetworkConnectivityMonitor()
         monitor.start { Task { await history.flush() } }
         connectivity = monitor
         Task { await history.flush() }
@@ -100,6 +113,7 @@ struct AppDependencies {
         recentRoutes = navigation
         routeFinisher = navigation
         arrivalMonitor = NoArrivalMonitoring()
+        deviationMonitor = NoDeviationMonitoring()
         connectivity = nil
         destinationSuggester = NoDestinationSuggestions()
         sessionService = UnavailableSessionService()

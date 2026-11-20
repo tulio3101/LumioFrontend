@@ -9,6 +9,7 @@ struct RootView: View {
     let recentRoutes: any RecentRoutesQuerying
     let routeFinisher: any RouteFinishing
     let arrivalMonitor: any ArrivalMonitoring
+    let deviationMonitor: any RouteDeviationMonitoring
     let destinationSuggester: any DestinationSuggesting
     let authenticationService: any Authenticating
     let signOut: any SigningOut
@@ -34,6 +35,7 @@ struct RootView: View {
         recentRoutes: any RecentRoutesQuerying,
         routeFinisher: any RouteFinishing,
         arrivalMonitor: any ArrivalMonitoring,
+        deviationMonitor: any RouteDeviationMonitoring,
         destinationSuggester: any DestinationSuggesting,
         signOut: any SigningOut,
         permissions: PermissionsViewModel,
@@ -47,6 +49,7 @@ struct RootView: View {
         self.recentRoutes = recentRoutes
         self.routeFinisher = routeFinisher
         self.arrivalMonitor = arrivalMonitor
+        self.deviationMonitor = deviationMonitor
         self.destinationSuggester = destinationSuggester
         self.signOut = signOut
         self.authenticationService = authenticationService
@@ -66,6 +69,7 @@ struct RootView: View {
         recentRoutes: any RecentRoutesQuerying,
         routeFinisher: any RouteFinishing,
         arrivalMonitor: any ArrivalMonitoring,
+        deviationMonitor: any RouteDeviationMonitoring,
         destinationSuggester: any DestinationSuggesting,
         signOut: any SigningOut,
         safetyMonitor: (any SafetyMonitoring)? = nil,
@@ -78,6 +82,7 @@ struct RootView: View {
         self.recentRoutes = recentRoutes
         self.routeFinisher = routeFinisher
         self.arrivalMonitor = arrivalMonitor
+        self.deviationMonitor = deviationMonitor
         self.destinationSuggester = destinationSuggester
         self.signOut = signOut
         self.authenticationService = authenticationService
@@ -111,6 +116,7 @@ struct RootView: View {
                     recentRoutes: recentRoutes,
                     routeFinisher: routeFinisher,
                     arrivalMonitor: arrivalMonitor,
+                    deviationMonitor: deviationMonitor,
                     suggester: destinationSuggester,
                     safetyMonitor: safetyMonitor,
                     obstacleGate: obstacleGate

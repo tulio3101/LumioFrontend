@@ -27,6 +27,7 @@ struct DestinationView: View {
         recentRoutes: (any RecentRoutesQuerying)? = nil,
         routeFinisher: (any RouteFinishing)? = nil,
         arrivalMonitor: (any ArrivalMonitoring)? = nil,
+        deviationMonitor: (any RouteDeviationMonitoring)? = nil,
         suggester: (any DestinationSuggesting)? = nil,
         safetyMonitor: (any SafetyMonitoring)? = nil,
         obstacleGate: (any CameraAssistanceGating)? = nil
@@ -39,6 +40,7 @@ struct DestinationView: View {
             recentRoutes: recentRoutes,
             routeFinisher: routeFinisher,
             arrivalMonitor: arrivalMonitor,
+            deviationMonitor: deviationMonitor,
             suggester: suggester,
             safetyMonitor: safetyMonitor,
             obstacleGate: obstacleGate
@@ -169,6 +171,11 @@ struct DestinationView: View {
                 .font(.title.weight(.bold))
                 .foregroundStyle(LumioColor.textPrimary)
                 .accessibilityAddTraits(.isHeader)
+
+            // El recálculo automático puede ocurrir mientras se está en esta pantalla.
+            if let reroute = model.rerouteStatus {
+                RerouteStatusBanner(status: reroute)
+            }
 
             RouteSummaryCard(route: route)
 

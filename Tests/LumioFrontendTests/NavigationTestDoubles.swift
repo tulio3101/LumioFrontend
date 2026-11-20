@@ -123,6 +123,14 @@ final class FakeRouteSync: ActiveRouteSyncing {
         destinationUpdates.append((route, remoteID))
         try destinationResult.get()
     }
+
+    var rerouteResult: Result<Void, Error> = .success(())
+    private(set) var reroutes: [(route: ActiveRoute, remoteID: UUID, reroutedAt: Date)] = []
+
+    func reroute(_ route: ActiveRoute, remoteID: UUID, reroutedAt: Date) async throws {
+        reroutes.append((route, remoteID, reroutedAt))
+        try rerouteResult.get()
+    }
 }
 
 @MainActor
@@ -279,4 +287,48 @@ final class InMemoryTokenStore: TokenStoring, @unchecked Sendable {
         defer { lock.unlock() }
         tokens = nil
     }
+}
+
+// MARK: - Recalcular Ruta (SCRUM-26)
+
+/// Estado de la red controlado por la prueba.
+@MainActor
+final class FakeConnectivity: ConnectivityObserving {
+    var isConnected = true
+    private(set) var handlers: [@MainActor () -> Void] = []
+
+    func start(onReconnect: @escaping @MainActor () -> Void) { handlers.append(onReconnect) }
+}
+
+/// A unos 60 m al este del primer tramo de la ruta hacia la farmacia (origen → Calle 19).
+let deviatedPosition = GeoCoordinate(latitude: 4.61025, longitude: -74.0816 + 60 / 110_835)
+
+/// Lectura a `meters` al este del punto medio del primer tramo de la ruta hacia la farmacia.
+func fix(offRouteMeters meters: Double, accuracy: Double = 8) -> LocationFix {
+    LocationFix(
+        coordinate: GeoCoordinate(latitude: 4.61025, longitude: -74.0816 + meters / 110_835),
+        horizontalAccuracy: accuracy
+    )
+}
+
+/// Recorrido recalculado hacia la farmacia desde donde se desvió el usuario.
+func rerouteCalculatedRoute() -> CalculatedRoute {
+    CalculatedRoute(
+        distanceMeters: 410,
+        expectedTravelTimeSeconds: 330,
+        steps: [
+            CalculatedRouteStep(instruction: "", distanceMeters: 0, maneuverCoordinate: deviatedPosition),
+            CalculatedRouteStep(
+                instruction: "Camina hacia el este por la Calle 17",
+                distanceMeters: 150,
+                maneuverCoordinate: deviatedPosition
+            ),
+            CalculatedRouteStep(
+                instruction: "Gira a la izquierda en la Carrera 5",
+                distanceMeters: 260,
+                maneuverCoordinate: GeoCoordinate(latitude: 4.6087, longitude: -74.0816)
+            ),
+            CalculatedRouteStep(instruction: "El destino está a la derecha", distanceMeters: 0, maneuverCoordinate: nil),
+        ]
+    )
 }

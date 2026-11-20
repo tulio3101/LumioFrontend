@@ -1,8 +1,8 @@
 #if canImport(SwiftUI)
 import SwiftUI
 
-/// Presenta Crear Ruta, Modificar Ruta, Consultar Ruta, Consultar Rutas Recientes y
-/// Finalizar Ruta. Los anuncios por audio los hacen
+/// Presenta Crear Ruta, Modificar Ruta, Consultar Ruta, Consultar Rutas Recientes,
+/// Finalizar Ruta y Recalcular Ruta. Los anuncios por audio los hacen
 /// los servicios a través del AudioArbiter; el ViewModel solo refleja el estado en pantalla.
 @MainActor
 final class DestinationViewModel: ObservableObject {
@@ -73,6 +73,8 @@ final class DestinationViewModel: ObservableObject {
     /// Última ruta finalizada (a mano o al llegar), para confirmarlo en pantalla.
     @Published private(set) var lastFinish: RouteFinishResult?
     @Published private(set) var isFinishing = false
+    /// Recalcular Ruta (SCRUM-26): en curso, recalculada, esperando conexión o fallida.
+    @Published private(set) var rerouteStatus: RerouteStatus?
 
     private let routeCreator: any RouteCreating
     private let routeModifier: any RouteModifying
@@ -81,6 +83,7 @@ final class DestinationViewModel: ObservableObject {
     private let recentRoutes: any RecentRoutesQuerying
     private let routeFinisher: any RouteFinishing
     private let arrivalMonitor: any ArrivalMonitoring
+    private let deviationMonitor: any RouteDeviationMonitoring
     private let suggester: any DestinationSuggesting
     /// Detección de obstáculos (SCRUM-33). Corre en paralelo a la detección de llegada: solo
     /// mientras hay ruta activa. nil si la plataforma o el modelo no la ofrecen.
@@ -95,7 +98,8 @@ final class DestinationViewModel: ObservableObject {
     /// `routeModifier` no se puede cambiar el destino; sin `instructionRepeater`, no se
     /// puede repetir la indicación; sin `routeStatusQuery`, no se puede consultar la ruta;
     /// sin `recentRoutes`, no hay destinos recientes; sin `routeFinisher`, no se puede
-    /// finalizar; sin `arrivalMonitor`, no se detecta la llegada.
+    /// finalizar; sin `arrivalMonitor`, no se detecta la llegada; sin `deviationMonitor`,
+    /// no se recalcula al desviarse.
     init(
         routeCreator: any RouteCreating,
         routeModifier: (any RouteModifying)? = nil,
@@ -104,6 +108,7 @@ final class DestinationViewModel: ObservableObject {
         recentRoutes: (any RecentRoutesQuerying)? = nil,
         routeFinisher: (any RouteFinishing)? = nil,
         arrivalMonitor: (any ArrivalMonitoring)? = nil,
+        deviationMonitor: (any RouteDeviationMonitoring)? = nil,
         suggester: (any DestinationSuggesting)? = nil,
         safetyMonitor: (any SafetyMonitoring)? = nil,
         obstacleGate: (any CameraAssistanceGating)? = nil
@@ -115,11 +120,14 @@ final class DestinationViewModel: ObservableObject {
         self.recentRoutes = recentRoutes ?? UnavailableNavigationService()
         self.routeFinisher = routeFinisher ?? UnavailableNavigationService()
         self.arrivalMonitor = arrivalMonitor ?? NoArrivalMonitoring()
+        self.deviationMonitor = deviationMonitor ?? NoDeviationMonitoring()
         self.suggester = suggester ?? NoDestinationSuggestions()
         self.safetyMonitor = safetyMonitor
         self.obstacleGate = obstacleGate
         // La llegada se detecta en cualquier pantalla, también con el teléfono bloqueado.
         self.arrivalMonitor.onArrival = { [weak self] result in self?.didFinish(result) }
+        // El recálculo automático también ocurre en cualquier pantalla.
+        self.deviationMonitor.onStatusChange = { [weak self] status in self?.didChangeReroute(status) }
     }
 
     // MARK: Detección de obstáculos (SCRUM-33, en paralelo a arrivalMonitor)
@@ -170,10 +178,7 @@ final class DestinationViewModel: ObservableObject {
     func restoreActiveRoute() async {
         guard route == nil, !isLoading else { return }
         route = await routeCreator.restoreActiveRoute()
-        if route != nil {
-            arrivalMonitor.startMonitoring()
-            startObstacleDetection()
-        }
+        if route != nil { startMonitoring() }
     }
 
     /// Prepara la hoja. Al cambiar de destino el campo empieza vacío: se pide uno nuevo.
@@ -188,9 +193,57 @@ final class DestinationViewModel: ObservableObject {
         planningMode = mode
     }
 
-    /// La confirmación «Ruta actualizada» ya se vio: no se vuelve a mostrar.
+    /// La confirmación «Ruta actualizada» (o «Ruta recalculada») ya se vio: no se vuelve a
+    /// mostrar.
     func acknowledgeRouteUpdate() {
         updatedRevision = nil
+        if case .rerouted = rerouteStatus { rerouteStatus = nil }
+    }
+
+    // MARK: Recalcular ruta
+
+    var isRerouting: Bool { rerouteStatus == .rerouting }
+
+    /// «Recalcular ruta» a mano (botón o acción de VoiceOver). El servicio locuta el
+    /// resultado; aquí solo se refleja en pantalla.
+    @discardableResult
+    func recalculateRoute() async -> Bool {
+        guard route != nil, !isLoading, !isFinishing, !isRerouting else { return false }
+        switch await deviationMonitor.rerouteNow() {
+        case .some(.rerouted):
+            return true
+        case .some(.noActiveRoute):
+            route = nil
+            return false
+        default:
+            return false
+        }
+    }
+
+    private func didChangeReroute(_ status: RerouteStatus?) {
+        // Crear o cambiar el destino decide la ruta que se muestra.
+        guard !isLoading else { return }
+        if case .rerouted(let rerouted) = status, let current = route, current.id == rerouted.id {
+            route = rerouted
+        }
+        rerouteStatus = status
+    }
+
+    /// Arranca los tres monitores que viven mientras hay ruta activa: llegada, desviación
+    /// (SCRUM-26) y detección de obstáculos (SCRUM-33). `safetyMonitor.start()` es idempotente,
+    /// así que cambiar el destino no reinicia la detección; recalcular ni siquiera pasa por aquí.
+    private func startMonitoring() {
+        arrivalMonitor.startMonitoring()
+        deviationMonitor.startMonitoring()
+        startObstacleDetection()
+    }
+
+    /// Detiene los tres monitores. Solo se llama al finalizar o al llegar (ver `didFinish`),
+    /// nunca al recalcular la ruta.
+    private func stopMonitoring() {
+        arrivalMonitor.stopMonitoring()
+        deviationMonitor.stopMonitoring()
+        stopObstacleDetection()
     }
 
     // MARK: Indicaciones
@@ -250,8 +303,7 @@ final class DestinationViewModel: ObservableObject {
         guard route != nil, !isLoading, !isFinishing else { return false }
         isFinishing = true
         defer { isFinishing = false }
-        arrivalMonitor.stopMonitoring()
-        stopObstacleDetection()
+        stopMonitoring()
         guard let result = await routeFinisher.finishActiveRoute(outcome: outcome, trigger: .manual) else {
             route = nil
             return false
@@ -266,13 +318,14 @@ final class DestinationViewModel: ObservableObject {
     }
 
     private func didFinish(_ result: RouteFinishResult) {
+        // Cubre la llegada automática (onArrival) y el fin manual: se detienen los tres
+        // monitores (llegada, desvío y detección) junto con la ruta.
+        stopMonitoring()
         route = nil
         routeStatus = nil
         updatedRevision = nil
+        rerouteStatus = nil
         lastFinish = result
-        // Cubre la llegada automática (onArrival) y el fin manual: la detección se detiene
-        // junto con la ruta.
-        stopObstacleDetection()
     }
 
     // MARK: Rutas recientes
@@ -393,9 +446,9 @@ final class DestinationViewModel: ObservableObject {
                 updatedRevision = changed.revision
             }
             lastFinish = nil
-            // Empieza (o sigue, con el destino nuevo) la detección de llegada y de obstáculos.
-            arrivalMonitor.startMonitoring()
-            startObstacleDetection()
+            rerouteStatus = nil
+            // Empieza (o sigue, con el destino nuevo) la llegada, la desviación y la detección.
+            startMonitoring()
             return true
         } catch let error as RouteCreationError {
             let message = mode == .changeDestination
