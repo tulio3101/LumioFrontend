@@ -142,6 +142,24 @@ struct LumioSecondaryButtonStyle: ButtonStyle {
     }
 }
 
+/// Acción irreversible (p. ej. eliminar la cuenta): colores de error con borde, siempre
+/// acompañada de un icono y un texto explícito para no depender del color.
+struct LumioDestructiveButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.headline)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+            .frame(maxWidth: .infinity, minHeight: 54)
+            .foregroundStyle(LumioColor.errorText)
+            .background(LumioColor.errorBackground, in: buttonShape)
+            .overlay(buttonShape.strokeBorder(LumioColor.errorText, lineWidth: configuration.isPressed ? 2 : 1))
+            .contentShape(buttonShape)
+            .modifier(PressFeedback(isPressed: configuration.isPressed))
+    }
+}
+
 /// Respuesta inmediata al pulsar; sin animación con «Reducir movimiento».
 private struct PressFeedback: ViewModifier {
     let isPressed: Bool

@@ -198,6 +198,25 @@ borra la sesión (la ruta queda pendiente en el teléfono). StoredSessionService
 pantalla inicial sin red. SignOutService (Preferencias) revoca la sesión, borra la ruta
 local y detiene el audio.
 
+Eliminar Cuenta (SCRUM-7), en Preferencias > Eliminar cuenta (DeleteAccountView):
+  1. Al entrar se explican las consecuencias (cuenta, contactos de confianza, historial
+     de rutas y preferencias; no se puede deshacer). Sin VoiceOver las locuta
+     AccountDeletionService por el árbitro (contexto `account-deletion`); con VoiceOver el
+     foco va a la explicación para no hablar a la vez. «Escuchar de nuevo» la repite.
+  2. «Eliminar mi cuenta» abre la última confirmación («Eliminar definitivamente» /
+     «Cancelar»), también locutada sin VoiceOver. Cancelar corta ese audio.
+  3. RemoteAccountService: DELETE /users/me con AuthorizedHTTPClient (renueva el access
+     token una vez si hace falta). El backend borra en cascada sesiones, rutas e historial.
+  4. Solo con 204 se borra el teléfono: se descarta el historial pendiente (no se envía),
+     la ruta activa, las rutas recientes y los tokens; se reinicia el árbitro y se anuncia
+     «Cuenta eliminada…». La app vuelve a la bienvenida.
+  5. Errores (todos locutados y mostrados; la cuenta sigue): sin conexión, fallo del
+     servidor (500/503) o sesión rechazada; en este último se borran los tokens y se
+     vuelve a la bienvenida para iniciar sesión otra vez. Un segundo toque mientras se
+     elimina se ignora.
+  Las preferencias (UserPreferences) aún no existen: cuando se creen, AccountDeletionService
+  debe borrarlas del teléfono en el paso 4.
+
 La ruta está lista en cuanto existe la copia local: la guía no depende del backend.
 Si el backend falla, la ruta queda pendiente (remoteID nil o hasPendingDestinationChange)
 y restoreActiveRoute() reintenta guardarla al volver a la pantalla. Cada fallo es un RouteCreationError con

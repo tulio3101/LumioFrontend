@@ -16,6 +16,7 @@ struct AppDependencies {
     let sessionService: any SessionRestoring
     let authenticationService: any Authenticating
     let signOut: any SigningOut
+    let accountDeleter: any AccountDeleting
     #if canImport(AVFoundation)
     let audioArbiter: AudioArbiterService
     #endif
@@ -97,6 +98,12 @@ struct AppDependencies {
             session: session, routes: store, arbiter: arbiter,
             recentRoutes: recentStore, pendingHistory: history
         )
+        // Eliminar Cuenta: DELETE /users/me con sesión; después borra lo mismo que cerrar sesión.
+        accountDeleter = AccountDeletionService(
+            remote: RemoteAccountService(client: routeClient, baseURL: configuration.apiBaseURL),
+            tokens: tokens, routes: store, recentRoutes: recentStore, pendingHistory: history,
+            arbiter: arbiter
+        )
         // El historial pendiente se envía al abrir la app y cada vez que vuelve la conexión.
         monitor.start { Task { await history.flush() } }
         connectivity = monitor
@@ -120,6 +127,10 @@ struct AppDependencies {
         authenticationService = UnavailableAuthenticationService()
         signOut = SignOutService(
             session: UnavailableSessionService(), routes: NoActiveRouteStore(), arbiter: nil
+        )
+        accountDeleter = AccountDeletionService(
+            remote: RemoteAccountService(client: URLSessionHTTPClient(), baseURL: nil),
+            tokens: NoTokenStore(), routes: NoActiveRouteStore(), arbiter: nil
         )
         #endif
         #if os(iOS)
