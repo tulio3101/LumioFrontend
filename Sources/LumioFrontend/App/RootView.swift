@@ -18,6 +18,8 @@ struct RootView: View {
     /// o si el modelo YOLO no cargó. Se pasa a DestinationView para arrancarla con la ruta.
     let safetyMonitor: (any SafetyMonitoring)?
     let obstacleGate: (any CameraAssistanceGating)?
+    /// HU Interactuar mediante voz: botón «Comando de voz» en Trayecto. nil fuera de iOS.
+    let voiceCommands: VoiceCommandService?
     /// Se decide antes del primer frame para no mostrar la bienvenida de forma transitoria.
     @State private var entry: AppEntry
 
@@ -42,7 +44,8 @@ struct RootView: View {
         accountDeleter: any AccountDeleting,
         permissions: PermissionsViewModel,
         safetyMonitor: (any SafetyMonitoring)? = nil,
-        obstacleGate: (any CameraAssistanceGating)? = nil
+        obstacleGate: (any CameraAssistanceGating)? = nil,
+        voiceCommands: VoiceCommandService? = nil
     ) {
         self.routeCreator = routeCreator
         self.routeModifier = routeModifier
@@ -59,6 +62,7 @@ struct RootView: View {
         self.permissions = permissions
         self.safetyMonitor = safetyMonitor
         self.obstacleGate = obstacleGate
+        self.voiceCommands = voiceCommands
         _entry = State(initialValue: AppEntry(session: sessionService))
     }
     #else
@@ -77,7 +81,8 @@ struct RootView: View {
         signOut: any SigningOut,
         accountDeleter: any AccountDeleting,
         safetyMonitor: (any SafetyMonitoring)? = nil,
-        obstacleGate: (any CameraAssistanceGating)? = nil
+        obstacleGate: (any CameraAssistanceGating)? = nil,
+        voiceCommands: VoiceCommandService? = nil
     ) {
         self.routeCreator = routeCreator
         self.routeModifier = routeModifier
@@ -93,6 +98,7 @@ struct RootView: View {
         self.authenticationService = authenticationService
         self.safetyMonitor = safetyMonitor
         self.obstacleGate = obstacleGate
+        self.voiceCommands = voiceCommands
         _entry = State(initialValue: AppEntry(session: sessionService))
     }
     #endif
@@ -124,7 +130,8 @@ struct RootView: View {
                     deviationMonitor: deviationMonitor,
                     suggester: destinationSuggester,
                     safetyMonitor: safetyMonitor,
-                    obstacleGate: obstacleGate
+                    obstacleGate: obstacleGate,
+                    voiceCommands: voiceCommands
                 )
             }
             .tabItem { Label("Trayecto", systemImage: "figure.walk") }
