@@ -64,7 +64,9 @@ El audio nativo está pendiente de validación en Xcode/dispositivo. No hay mode
 en un iPhone físico usa la IP del equipo que corre el backend). Crea una cuenta desde la
 app: las rutas se guardan con el access token de esa sesión. Sin sesión (solo DEBUG,
 «Entrar sin sesión») o sin conexión, la ruta funciona igual pero queda pendiente de
-guardarse en el servidor. «Cerrar sesión» y «Eliminar cuenta» están en Preferencias.
+guardarse en el servidor. «Mi cuenta», «Cerrar sesión» y «Eliminar cuenta» están en Preferencias.
+En «Mi cuenta» (SCRUM-6) se consulta el correo y se cambian el nombre, el celular y la
+contraseña; se valida en el teléfono y el resultado o el error se anuncian por audio.
 Eliminar la cuenta (SCRUM-7) explica por audio qué se borra, pide dos confirmaciones y
 llama a `DELETE /users/me`; solo si el backend confirma, borra del teléfono la ruta, las
 rutas recientes, el historial pendiente y la sesión. Sin conexión no se elimina nada.
@@ -83,7 +85,7 @@ Sources/LumioFrontend/
     Safety/Domain/         Eventos y contrato de monitor local
     Audio/                 Domain, Application (árbitro), Data (reproductor nativo)
     Narration/             Contrato local y DTOs del backend
-    Users/                 Sesión (Keychain, Bearer, refresh), registro/login, cerrar sesión y eliminar cuenta
+    Users/                 Sesión (Keychain, Bearer, refresh), registro/login, perfil, cerrar sesión y eliminar cuenta
     Welcome/Presentation/  Bienvenida sin sesión activa
     Places/Domain/         Lugares guardados y contrato de carga
     Settings/Presentation/ Preferencias (pantalla inicial)
