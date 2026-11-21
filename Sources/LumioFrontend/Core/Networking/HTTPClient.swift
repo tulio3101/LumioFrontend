@@ -13,6 +13,18 @@ enum HTTPClientError: Error {
     case statusCode(Int)
 }
 
+extension URLError {
+    /// La petición no llegó al servidor (o no volvió) por falta de red: «Sin conexión».
+    var isConnectivityFailure: Bool {
+        Self.connectivityCodes.contains(code)
+    }
+
+    private static let connectivityCodes: Set<URLError.Code> = [
+        .notConnectedToInternet, .networkConnectionLost, .timedOut, .cannotFindHost,
+        .cannotConnectToHost, .dnsLookupFailed, .dataNotAllowed, .internationalRoamingOff,
+    ]
+}
+
 struct URLSessionHTTPClient: HTTPClient {
     let session: URLSession
 

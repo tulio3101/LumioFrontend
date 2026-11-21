@@ -16,6 +16,7 @@ struct AppDependencies {
     let sessionService: any SessionRestoring
     let authenticationService: any Authenticating
     let signOut: any SigningOut
+    let profile: any ProfileManaging
     let accountDeleter: any AccountDeleting
     #if canImport(AVFoundation)
     let audioArbiter: AudioArbiterService
@@ -99,6 +100,11 @@ struct AppDependencies {
             session: session, routes: store, arbiter: arbiter,
             recentRoutes: recentStore, pendingHistory: history
         )
+        // Personalizar Cuenta: GET/PATCH /users/me y PUT /users/me/password con sesión.
+        profile = ProfileService(
+            remote: RemoteProfileService(client: routeClient, baseURL: configuration.apiBaseURL),
+            tokens: tokens, arbiter: arbiter
+        )
         // Eliminar Cuenta: DELETE /users/me con sesión; después borra lo mismo que cerrar sesión.
         accountDeleter = AccountDeletionService(
             remote: RemoteAccountService(client: routeClient, baseURL: configuration.apiBaseURL),
@@ -128,6 +134,9 @@ struct AppDependencies {
         authenticationService = UnavailableAuthenticationService()
         signOut = SignOutService(
             session: UnavailableSessionService(), routes: NoActiveRouteStore(), arbiter: nil
+        )
+        profile = ProfileService(
+            remote: RemoteProfileService(client: URLSessionHTTPClient(), baseURL: nil), arbiter: nil
         )
         accountDeleter = AccountDeletionService(
             remote: RemoteAccountService(client: URLSessionHTTPClient(), baseURL: nil),
