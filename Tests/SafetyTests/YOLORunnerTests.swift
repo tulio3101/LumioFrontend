@@ -42,7 +42,7 @@ import CoreGraphics
 
 // MARK: - iOS-only: YOLORunner model loading
 
-#if os(iOS)
+#if os(iOS) && !targetEnvironment(simulator)
 @Test func yoloRunnerThrowsWhenModelIsAbsent() {
     // On device this test is only meaningful if the mlpackage is missing from the bundle.
     // It verifies the error path compiles and throws the right error type.

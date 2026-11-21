@@ -24,6 +24,7 @@ import Testing
 
 #if os(iOS)
 import ARKit
+import AVFoundation
 import CoreVideo
 
 @Test func capturedFrameWithNilDepthRepresentsNonLidarPath() {
@@ -42,7 +43,7 @@ import CoreVideo
     #expect(!source.isDepthAvailable)
 }
 
-@Test func arkitFrameSourceDepthAvailabilityMatchesHardware() throws {
+@Test(.enabled(if: ARWorldTrackingConfiguration.isSupported && AVCaptureDevice.authorizationStatus(for: .video) == .authorized)) func arkitFrameSourceDepthAvailabilityMatchesHardware() throws {
     let source = ARKitFrameSource()
     try source.start()
     let expected = ARWorldTrackingConfiguration.supportsFrameSemantics(.sceneDepth)
