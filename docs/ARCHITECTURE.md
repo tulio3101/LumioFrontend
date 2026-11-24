@@ -198,6 +198,23 @@ borra la sesión (la ruta queda pendiente en el teléfono). StoredSessionService
 pantalla inicial sin red. SignOutService (Preferencias) revoca la sesión, borra la ruta
 local y detiene el audio.
 
+Personalizar Cuenta (SCRUM-6), en Preferencias > Mi cuenta (ProfileView + ProfileViewModel):
+  1. ProfileService consulta GET /users/me (RemoteProfileService con AuthorizedHTTPClient):
+     correo (solo lectura), nombre y celular. Solo el perfil: las preferencias de voz y
+     háptica son UserPreferences (SCRUM-27, 28 y 32) y se leen del teléfono.
+  2. Guardar valida en el teléfono con ProfilePolicy (las mismas reglas que
+     UserProfileUpdate: nombre 1–60 en NFC con letras, espacios, ' . -; celular de 10
+     dígitos que empieza por 3). Con errores no se envía nada; si no cambió nada, tampoco.
+  3. PATCH /users/me envía los dos campos (`null` quita el dato) y anuncia «Cambios
+     guardados.». Un fallo deja los datos como estaban.
+  4. Cambiar contraseña (PasswordChangePolicy: actual, nueva de 8–128 distinta de la
+     actual y confirmación) con PUT /users/me/password. El backend cierra las demás
+     sesiones; este teléfono conserva sus tokens. Contraseña actual incorrecta es 403,
+     no 401, para que AuthorizedHTTPClient no intente renovar la sesión.
+  5. Todo resultado y error se locuta por el árbitro (contexto `account-profile`) y se
+     muestra en un aviso; los errores de cada campo van en su pista de VoiceOver. Sesión
+     rechazada: se borran los tokens y se vuelve a la bienvenida.
+
 Eliminar Cuenta (SCRUM-7), en Preferencias > Eliminar cuenta (DeleteAccountView):
   1. Al entrar se explican las consecuencias (cuenta, contactos de confianza, historial
      de rutas y preferencias; no se puede deshacer). Sin VoiceOver las locuta

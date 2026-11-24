@@ -84,7 +84,9 @@ import Foundation
 // Run these manually on iPhone with Airplane Mode enabled.
 
 #if os(iOS)
-@Test func arkitFrameSourceStartsWithoutNetworkAccess() throws {
+import ARKit
+import AVFoundation
+@Test(.enabled(if: ARWorldTrackingConfiguration.isSupported && AVCaptureDevice.authorizationStatus(for: .video) == .authorized)) func arkitFrameSourceStartsWithoutNetworkAccess() throws {
     // Verifies the detection pipeline can initialize even with no network.
     // On simulator: isDepthAvailable=false (no LiDAR). On LiDAR device: true.
     let source = ARKitFrameSource()

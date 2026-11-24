@@ -4,20 +4,22 @@ import CoreML
 import CoreVideo
 import OSLog
 
-enum YOLORunnerError: Error {
-    case modelNotFound
+typealias YOLORunnerError = DetectionModelError
+
+protocol ObstacleDetecting: AnyObject {
+    func detect(pixelBuffer: CVPixelBuffer) throws -> [Detection]
 }
 
 /// Runs yolo26n_640_int8 via Vision/Core ML.
 /// NMS is baked into the model pipeline — Vision returns VNRecognizedObjectObservation directly.
 /// Vision handles resize to 640×640; no manual preprocessing needed.
-final class YOLORunner {
+final class YOLORunner: ObstacleDetecting {
     private let request: VNCoreMLRequest
     let confidenceThreshold: Float
 
     private static let logger = Logger(subsystem: "com.lumio.app", category: "YOLORunner")
     #if DEBUG
-    private static var hasLoggedObservationType = false
+    private var hasLoggedObservationType = false
     #endif
 
     init(confidenceThreshold: Float = 0.45) throws {
@@ -46,8 +48,14 @@ final class YOLORunner {
         logger.info("Cargando modelo desde \(modelURL.lastPathComponent)")
         let config = MLModelConfiguration()
         config.computeUnits = .all
-        let model = try MLModel(contentsOf: modelURL, configuration: config)
-        let vnModel = try VNCoreMLModel(for: model)
+        let vnModel: VNCoreMLModel
+        do {
+            let model = try MLModel(contentsOf: modelURL, configuration: config)
+            vnModel = try VNCoreMLModel(for: model)
+        } catch {
+            logger.error("No se pudo cargar el modelo: \(error)")
+            throw DetectionModelError.modelLoadingFailed
+        }
         let req = VNCoreMLRequest(model: vnModel)
         req.imageCropAndScaleOption = .scaleFit
         self.request = req
@@ -59,13 +67,18 @@ final class YOLORunner {
     func detect(pixelBuffer: CVPixelBuffer) throws -> [Detection] {
         // ARKit frames arrive rotated 90° CW on iPhone — use .right orientation.
         let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .right)
-        try handler.perform([request])
+        do {
+            try handler.perform([request])
+        } catch {
+            Self.logger.error("Inferencia fallida: \(error)")
+            throw DetectionModelError.inferenceFailed
+        }
 
         #if DEBUG
         // Log result type once — if VNCoreMLFeatureValueObservation appears, Vision could not
         // decode the model output as bounding boxes; manual MLMultiArray [1,300,6] decoding needed.
-        if !Self.hasLoggedObservationType, let first = request.results?.first {
-            Self.hasLoggedObservationType = true
+        if !hasLoggedObservationType, let first = request.results?.first {
+            hasLoggedObservationType = true
             if first is VNCoreMLFeatureValueObservation {
                 Self.logger.error("resultado: VNCoreMLFeatureValueObservation — Vision no decodificó el modelo como detector; se necesita fallback MLMultiArray (ver lumio-spikes/DepthProto/YOLORunner.swift)")
             } else if first is VNRecognizedObjectObservation {
@@ -77,7 +90,7 @@ final class YOLORunner {
         #endif
 
         guard let observations = request.results as? [VNRecognizedObjectObservation] else {
-            return []
+            throw DetectionModelError.invalidOutput
         }
         return observations.compactMap { obs in
             guard obs.confidence >= confidenceThreshold,

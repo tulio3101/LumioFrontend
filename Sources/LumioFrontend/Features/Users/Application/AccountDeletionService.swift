@@ -104,15 +104,10 @@ final class AccountDeletionService: AccountDeleting {
         // Rechazada aun después de renovar la sesión.
         case HTTPClientError.statusCode(401):
             return .sessionExpired
-        case let error as URLError where offlineCodes.contains(error.code):
+        case let error as URLError where error.isConnectivityFailure:
             return .offline
         default:
             return .failed
         }
     }
-
-    private nonisolated static let offlineCodes: Set<URLError.Code> = [
-        .notConnectedToInternet, .networkConnectionLost, .timedOut, .cannotFindHost,
-        .cannotConnectToHost, .dnsLookupFailed, .dataNotAllowed, .internationalRoamingOff,
-    ]
 }
