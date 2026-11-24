@@ -22,6 +22,9 @@ struct AppDependencies {
     #if os(iOS)
     /// nil si el modelo YOLO no está en el bundle (añadir yolo26n_640_int8.mlpackage a Copy Bundle Resources).
     let safetyService: SafetyService?
+    /// SCRUM-360: al expirar la sesión (401 no renovable) desmonta la ruta activa y devuelve la UI
+    /// al login, reutilizando el mismo teardown que el cierre de sesión.
+    let sessionExpiry: SessionExpiryCoordinator
     #endif
     #if os(iOS)
     let permissions: PermissionsViewModel
@@ -40,7 +43,8 @@ struct AppDependencies {
         let authAPI = configuration.apiBaseURL.map { AuthAPI(client: http, baseURL: $0) }
         let session = StoredSessionService(api: authAPI, store: tokens)
         sessionService = session
-        authenticationService = RemoteAuthenticationService(api: authAPI, store: tokens)
+        // SCRUM-360: identidad de la cuenta para el historial pendiente por usuario.
+        let account = UserDefaultsCurrentAccount()
         let routeClient: any HTTPClient = authAPI.map {
             AuthorizedHTTPClient(base: http, api: $0, store: tokens)
         } ?? http
@@ -52,7 +56,12 @@ struct AppDependencies {
         let history = FinishedRouteSynchronizer(
             store: FileFinishedRoutesStore(fileURL: FileFinishedRoutesStore.defaultFileURL()),
             finishSync: RemoteFinishedRouteService(client: routeClient, baseURL: configuration.apiBaseURL),
-            routeSync: sync
+            routeSync: sync,
+            account: account
+        )
+        // SCRUM-360: al iniciar sesión, esta cuenta reenvía sus rutas finalizadas aparcadas.
+        authenticationService = RemoteAuthenticationService(
+            api: authAPI, store: tokens, account: account, pendingHistory: history
         )
         let location = CoreLocationCurrentLocationProvider()
         let geocoder = MapKitDestinationGeocoder()
@@ -93,10 +102,8 @@ struct AppDependencies {
             pendingHistory: history
         )
         destinationSuggester = MapKitDestinationSuggester()
-        signOut = SignOutService(
-            session: session, routes: store, arbiter: arbiter,
-            recentRoutes: recentStore, pendingHistory: history
-        )
+        // SCRUM-360: `signOut` y `sessionExpiry` se arman más abajo, tras construir safetyService,
+        // para que el teardown central incluya la detección de obstáculos.
         // El historial pendiente se envía al abrir la app y cada vez que vuelve la conexión.
         monitor.start { Task { await history.flush() } }
         connectivity = monitor
@@ -162,6 +169,19 @@ struct AppDependencies {
         self.obstacleGate = ObstacleAssistanceGate(
             permissions: permissionsViewModel, audio: audioArbiter, modelAvailable: modelAvailable
         )
+        // SCRUM-360: punto único de desmonte, reutilizado por el cierre de sesión (SignOutService)
+        // y por la expiración/401 (SessionExpiryCoordinator, vía .lumioSessionExpired).
+        let teardown = SessionTeardown(
+            safetyMonitor: self.safetyService,
+            arrivalMonitor: arrivalMonitor,
+            deviationMonitor: deviationMonitor,
+            arbiter: arbiter,
+            routes: store,
+            recentRoutes: recentStore,
+            pendingHistory: history
+        )
+        signOut = SignOutService(session: session, teardown: teardown)
+        self.sessionExpiry = SessionExpiryCoordinator(teardown: teardown, routes: store, arbiter: arbiter)
         #endif
     }
 }

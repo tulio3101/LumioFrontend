@@ -326,6 +326,8 @@ final class DestinationViewModel: ObservableObject {
         updatedRevision = nil
         rerouteStatus = nil
         lastFinish = result
+        // SCRUM-360: si la sesión expiró durante la ruta, el teardown diferido se ejecuta ahora.
+        NotificationCenter.default.post(name: .lumioRouteEnded, object: nil)
     }
 
     // MARK: Rutas recientes

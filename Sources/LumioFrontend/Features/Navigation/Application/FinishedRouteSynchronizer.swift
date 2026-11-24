@@ -17,16 +17,20 @@ final class FinishedRouteSynchronizer: PendingHistorySyncing {
     private let store: any FinishedRoutesStoring
     private let finishSync: any FinishedRouteSyncing
     private let routeSync: any ActiveRouteSyncing
+    /// SCRUM-360: de quién es lo pendiente. nil = sin sistema de cuentas (se envía como antes).
+    private let account: (any CurrentAccountStoring)?
     private var inFlight: Task<Bool, Never>?
 
     init(
         store: any FinishedRoutesStoring,
         finishSync: any FinishedRouteSyncing,
-        routeSync: any ActiveRouteSyncing
+        routeSync: any ActiveRouteSyncing,
+        account: (any CurrentAccountStoring)? = nil
     ) {
         self.store = store
         self.finishSync = finishSync
         self.routeSync = routeSync
+        self.account = account
     }
 
     func enqueue(_ finished: FinishedRoute) throws {
@@ -36,16 +40,31 @@ final class FinishedRouteSynchronizer: PendingHistorySyncing {
     /// Una sola sincronización a la vez: quien llega mientras corre espera a la misma.
     @discardableResult
     func flush() async -> Bool {
+        // SCRUM-360: si lo pendiente está aparcado a nombre de una cuenta que NO es la actual,
+        // no se envía (otro usuario no sube las rutas del anterior). Se enviará cuando vuelva el dueño.
+        if let account, let owner = account.pendingOwnerAccountID, owner != account.currentAccountID {
+            return true
+        }
         if let inFlight { return await inFlight.value }
         let task = Task { await self.flushPending() }
         inFlight = task
         let result = await task.value
         inFlight = nil
+        // Entregado todo lo del dueño actual: ya no está aparcado.
+        if result, account?.pendingOwnerAccountID != nil { account?.pendingOwnerAccountID = nil }
         return result
     }
 
     func discardPending() {
         try? store.save([])
+    }
+
+    func park() {
+        // No se descarta: se marca a qué cuenta pertenece (la que se va) y se deja de considerar
+        // "de la sesión actual" (currentAccountID se limpia) para que otro usuario no lo suba.
+        guard let account else { return }
+        account.pendingOwnerAccountID = account.currentAccountID
+        account.currentAccountID = nil
     }
 
     private func flushPending() async -> Bool {

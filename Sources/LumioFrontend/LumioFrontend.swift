@@ -32,6 +32,7 @@ struct LumioApp: App {
                 destinationSuggester: dependencies.destinationSuggester,
                 signOut: dependencies.signOut,
                 permissions: dependencies.permissions,
+                sessionExpiry: dependencies.sessionExpiry,
                 safetyMonitor: dependencies.safetyService,
                 obstacleGate: dependencies.obstacleGate
             )
