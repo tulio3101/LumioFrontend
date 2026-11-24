@@ -30,6 +30,8 @@ struct AppDependencies {
     let permissions: PermissionsViewModel
     /// SCRUM-315: compuerta de permiso de cámara para arrancar la detección (SCRUM-33).
     let obstacleGate: (any CameraAssistanceGating)?
+    /// HU Interactuar mediante voz: escucha local, intérprete y respuestas por el árbitro.
+    let voiceCommands: VoiceCommandService
     #endif
 
     init(configuration: AppConfiguration = .main) {
@@ -176,6 +178,17 @@ struct AppDependencies {
         self.obstacleGate = ObstacleAssistanceGate(
             permissions: permissionsViewModel, audio: audioArbiter
         )
+        // Comandos de voz: reutilizan el flujo accesible de permisos y hablan por el árbitro.
+        let voice = VoiceCommandService(
+            listener: DeviceSpeechListener(),
+            permissions: PermissionsVoiceGate(permissions: permissionsViewModel),
+            audio: ArbiterVoiceAudio(arbiter: audioArbiter)
+        )
+        // Una alerta crítica que empieza a sonar corta la escucha (no compite con ella).
+        audioArbiter.onMessageChanged = { [weak voice] message in
+            voice?.audioMessageChanged(message)
+        }
+        self.voiceCommands = voice
         #endif
     }
 }

@@ -36,9 +36,9 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Lumio usa tu ubicación para calcular la ruta a pie desde donde estás, guiarte por voz y avisarte al llegar, también con la pantalla bloqueada.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Lumio usa el micrófono para que puedas indicar tu destino hablando.</string>
+	<string>Lumio usa el micrófono para escuchar tus comandos de voz y el destino que indiques hablando.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Lumio usa el reconocimiento de voz para convertir lo que dices en el texto de tu destino.</string>
+	<string>Lumio usa el reconocimiento de voz para entender tus comandos y el destino que dices.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

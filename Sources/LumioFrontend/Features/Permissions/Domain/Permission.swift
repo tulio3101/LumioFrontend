@@ -16,8 +16,8 @@ enum AppPermission: String, CaseIterable, Identifiable {
 
     var purpose: String {
         switch self {
-        case .microphone: return "Lumio necesita el micrófono para escuchar el destino que indiques hablando."
-        case .speechRecognition: return "Lumio necesita reconocimiento de voz para convertir lo que dices en el texto de tu destino."
+        case .microphone: return "Lumio necesita el micrófono para escuchar tus comandos de voz y el destino que indiques hablando."
+        case .speechRecognition: return "Lumio necesita reconocimiento de voz para entender tus comandos y el destino que dices."
         case .location: return "Lumio necesita tu ubicación mientras usas la app para calcular la ruta desde donde estás y guiarte."
         case .camera: return "Lumio necesita la cámara para detectar obstáculos durante la asistencia."
         case .notifications: return "Las notificaciones permiten recibir avisos de Lumio cuando una función los utilice. Son opcionales para crear una ruta."
@@ -26,8 +26,8 @@ enum AppPermission: String, CaseIterable, Identifiable {
 
     var limitation: String {
         switch self {
-        case .microphone: return "No puedes indicar ni modificar tu destino por voz sin acceso al micrófono."
-        case .speechRecognition: return "No puedes transcribir ni confirmar tu destino por voz sin reconocimiento de voz."
+        case .microphone: return "No puedes usar comandos de voz ni indicar tu destino hablando sin acceso al micrófono."
+        case .speechRecognition: return "No puedes usar comandos de voz ni indicar tu destino hablando sin reconocimiento de voz."
         case .location: return "No puedes calcular una ruta desde tu posición actual sin acceso a tu ubicación."
         case .camera: return "La detección de obstáculos no está disponible sin acceso a la cámara."
         case .notifications: return "No recibirás los avisos que utilicen notificaciones. Puedes crear rutas sin este permiso."

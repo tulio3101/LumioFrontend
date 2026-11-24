@@ -78,7 +78,17 @@ final class PermissionsViewModel: ObservableObject {
     /// (receiveAndWait) y luego muestra el diálogo del sistema. Devuelve true si todos quedan
     /// concedidos. Pensado para llamarse en segundo plano (no bloquea la navegación).
     func requestForObstacleAssistance() async -> Bool {
-        for permission in PermissionPurpose.obstacleAssistance.required {
+        await requestInline(for: .obstacleAssistance)
+    }
+
+    /// HU Interactuar mediante voz: micrófono y reconocimiento de voz con el mismo flujo
+    /// accesible, al activar el primer comando de voz.
+    func requestForVoiceCommands() async -> Bool {
+        await requestInline(for: .voiceDestination)
+    }
+
+    private func requestInline(for purpose: PermissionPurpose) async -> Bool {
+        for permission in purpose.required {
             let current = await service.status(for: permission)
             statuses[permission] = current
             switch current {

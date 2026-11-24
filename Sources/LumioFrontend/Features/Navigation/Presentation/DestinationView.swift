@@ -18,6 +18,8 @@ struct DestinationView: View {
     #if os(iOS) && DEBUG
     @EnvironmentObject var debugContainer: DebugSafetyContainer
     #endif
+    /// HU Interactuar mediante voz: los comandos ejecutan las acciones de este ViewModel.
+    private let voiceCommands: VoiceCommandService?
     #if os(iOS)
     /// SCRUM-37: estado de la detección y «Reintentar detección» durante la ruta.
     private let safetyService: SafetyService?
@@ -34,8 +36,10 @@ struct DestinationView: View {
         deviationMonitor: (any RouteDeviationMonitoring)? = nil,
         suggester: (any DestinationSuggesting)? = nil,
         safetyMonitor: (any SafetyMonitoring)? = nil,
-        obstacleGate: (any CameraAssistanceGating)? = nil
+        obstacleGate: (any CameraAssistanceGating)? = nil,
+        voiceCommands: VoiceCommandService? = nil
     ) {
+        self.voiceCommands = voiceCommands
         #if os(iOS)
         self.safetyService = safetyMonitor as? SafetyService
         #endif
@@ -112,8 +116,10 @@ struct DestinationView: View {
         #if os(iOS)
         .toolbar(.hidden, for: .navigationBar)
         #endif
+        .voiceCommandControl(voiceCommands)
         .navigationDestination(isPresented: $showsRoute) {
             ActiveRouteView(model: model)
+                .voiceCommandControl(voiceCommands)
         }
         .navigationDestination(isPresented: $showsRecentRoutes) {
             RecentRoutesView(model: model)
@@ -125,7 +131,10 @@ struct DestinationView: View {
             }
         }
         .tint(LumioColor.actionPrimary)
-        .onAppear { hasAppeared = true }
+        .onAppear {
+            hasAppeared = true
+            voiceCommands?.actions = model
+        }
         .task { await model.restoreActiveRoute() }
     }
 
