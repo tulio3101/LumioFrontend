@@ -7,14 +7,26 @@ enum SafetyAudio {
     /// sin tocar el audio de navegación.
     static let context = "safety"
 
-    /// SCRUM-37 (punto de extensión para Nestor): el modelo YOLO no cargó. Se avisa con
-    /// prioridad alta que la detección no está disponible, pero la navegación sigue.
+    /// SCRUM-37: se perdió la detección (modelo ausente, carga/inferencia fallida o captura
+    /// interrumpida). P1 una sola vez por episodio de fallo; la navegación sigue.
     static func modelUnavailable() -> AudioMessage {
         AudioMessage(
             text: "La detección de obstáculos no está disponible. La navegación sigue funcionando.",
             priority: .immediateRisk,
             contextID: context,
             deduplicationKey: "safety-unavailable"
+        )
+    }
+
+    /// SCRUM-37: la detección volvió tras un fallo (solo después de una inferencia válida).
+    /// P2 con vencimiento: si se retrasa por otros avisos, ya no se reproduce.
+    static func detectionRecovered(now: Date = Date()) -> AudioMessage {
+        AudioMessage(
+            text: "La detección de obstáculos vuelve a estar disponible.",
+            priority: .routeInformation,
+            expiresAt: now.addingTimeInterval(10),
+            contextID: context,
+            deduplicationKey: "safety-recovered"
         )
     }
 

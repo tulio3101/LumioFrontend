@@ -1,5 +1,6 @@
 #if os(iOS)
 import ARKit
+import AVFoundation
 import OSLog
 import os  // OSAllocatedUnfairLock (iOS 16+)
 import simd
@@ -12,8 +13,14 @@ final class ARKitFrameSource: NSObject, FrameSource {
     private(set) var isDepthAvailable = false
     private var activeConfig: ARWorldTrackingConfiguration?
 
-    let frames: AsyncStream<CapturedFrame>
-    private let continuation: AsyncStream<CapturedFrame>.Continuation
+    /// SCRUM-37: el flujo se reemplaza en cada `start()` (un flujo terminado no se reutiliza).
+    /// Se protege con un lock porque el delegado de ARSession produce desde su propia cola.
+    private struct FrameStream {
+        var stream: AsyncStream<CapturedFrame>
+        var continuation: AsyncStream<CapturedFrame>.Continuation
+    }
+    private let frameStream: OSAllocatedUnfairLock<FrameStream>
+    var frames: AsyncStream<CapturedFrame> { frameStream.withLockUnchecked { $0.stream } }
 
     /// Single-frame gate: true while the pipeline is processing a frame.
     /// Checked synchronously in the ARSession delegate before any memory is allocated.
@@ -35,9 +42,10 @@ final class ARKitFrameSource: NSObject, FrameSource {
     #endif
 
     override init() {
-        var cont: AsyncStream<CapturedFrame>.Continuation!
-        frames = AsyncStream<CapturedFrame>(bufferingPolicy: .bufferingNewest(1)) { cont = $0 }
-        continuation = cont
+        let initial = makeSafetyStream(of: CapturedFrame.self, bufferingPolicy: .bufferingNewest(1))
+        frameStream = OSAllocatedUnfairLock(
+            uncheckedState: FrameStream(stream: initial.stream, continuation: initial.continuation)
+        )
         super.init()
         session.delegate = self
         NotificationCenter.default.addObserver(
@@ -49,6 +57,23 @@ final class ARKitFrameSource: NSObject, FrameSource {
     deinit { NotificationCenter.default.removeObserver(self) }
 
     func start() throws {
+        // SCRUM-37: sin hardware compatible o con cámara denegada/restringida no se abre la
+        // sesión; el pipeline lo publica como captura no disponible. Si aún no se pidió el
+        // permiso, ARKit muestra la solicitud del sistema (la compuerta SCRUM-315 la prepara).
+        guard ARWorldTrackingConfiguration.isSupported else { throw FrameSourceError.unsupported }
+        let authorization = AVCaptureDevice.authorizationStatus(for: .video)
+        guard authorization != .denied, authorization != .restricted else {
+            throw FrameSourceError.cameraPermissionRequired
+        }
+        // Flujo nuevo por sesión: stop() o un fallo terminaron el anterior.
+        let next = makeSafetyStream(of: CapturedFrame.self, bufferingPolicy: .bufferingNewest(1))
+        let previous = frameStream.withLockUnchecked { state -> AsyncStream<CapturedFrame>.Continuation in
+            let old = state.continuation
+            state = FrameStream(stream: next.stream, continuation: next.continuation)
+            return old
+        }
+        previous.finish()
+        processingGate.withLock { $0 = false }
         let config = makeConfig()
         activeConfig = config
         session.run(config, options: [.resetTracking, .removeExistingAnchors])
@@ -59,7 +84,7 @@ final class ARKitFrameSource: NSObject, FrameSource {
         session.pause()
         meshStore.reset()
         anchorState.withLock { $0 = AnchorState() }
-        continuation.finish()
+        frameStream.withLockUnchecked { $0.continuation }.finish()
     }
 
     func frameProcessingComplete() {
@@ -70,6 +95,7 @@ final class ARKitFrameSource: NSObject, FrameSource {
     /// **desactiva** cuando el `thermalState` es `.serious`/`.critical` (la profundidad sigue).
     private func makeConfig() -> ARWorldTrackingConfiguration {
         let config = ARWorldTrackingConfiguration()
+        isDepthAvailable = false
         if ARWorldTrackingConfiguration.supportsFrameSemantics(.sceneDepth) {
             config.frameSemantics = .sceneDepth
             isDepthAvailable = true
@@ -117,6 +143,11 @@ extension ARKitFrameSource: ARSessionDelegate {
             return true
         }
         guard acquired else { return }
+        // SCRUM-37: tras stop() o un fallo pueden llegar frames rezagados; no se entregan.
+        guard activeConfig != nil else {
+            frameProcessingComplete()
+            return
+        }
 
         #if DEBUG
         let ts = frame.timestamp
@@ -135,7 +166,7 @@ extension ARKitFrameSource: ARSessionDelegate {
         let dominant = meshStore.dominantClass
         let meshClassification = dominant == .none ? nil : MeshClassificationSnapshot(dominantClass: dominant)
 
-        continuation.yield(CapturedFrame(
+        frameStream.withLockUnchecked { $0.continuation }.yield(CapturedFrame(
             pixelBuffer: frame.capturedImage,
             depthData: frame.sceneDepth,
             camera: frame.camera,
@@ -186,7 +217,11 @@ extension ARKitFrameSource: ARSessionDelegate {
 
     nonisolated func session(_ session: ARSession, didFailWithError error: Error) {
         logger.error("ARSession falló: \(error)")
-        continuation.finish()
+        // SCRUM-37: el fin inesperado de la captura termina el flujo; el pipeline lo publica
+        // como captura no disponible y se puede reintentar (Reintentar detección).
+        activeConfig = nil
+        session.pause()
+        frameStream.withLockUnchecked { $0.continuation }.finish()
     }
 }
 #endif

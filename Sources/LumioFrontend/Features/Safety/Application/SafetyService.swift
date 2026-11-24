@@ -5,6 +5,9 @@ import OSLog
 /// Implements SafetyMonitoring: drives the detection pipeline, converts detections to
 /// SafetyEvents via onEvent and emits audio alerts through the AudioArbiter (never direct TTS).
 /// El armado de los mensajes (contextID, captura, throttle) vive en ObstacleAnnouncer.
+/// SCRUM-37: publica `status` (visible en Debug y Release), avisa una sola vez por episodio
+/// cuando se pierde la asistencia (P1), confirma la recuperación (P2) y ofrece `retry()`.
+/// Un fallo del detector nunca detiene la navegación ni recrea otros servicios.
 @MainActor
 final class SafetyService: ObservableObject, SafetyMonitoring {
     var onEvent: ((SafetyEvent) -> Void)?
@@ -12,8 +15,18 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
     private let pipeline: any ObstacleDetectionPipeline
     private let audioArbiter: any AudioArbitrating
     private var announcer: ObstacleAnnouncer
+    /// Configuración inyectada (intervalos y distancia de peligro) para reiniciar el estado.
+    private let initialAnnouncer: ObstacleAnnouncer
     private var consumptionTask: Task<Void, Never>?
+    private var statusTask: Task<Void, Never>?
     private var isRunning = false
+    /// Invalida un start() en curso si llega stop() o un reintento mientras prepara el modelo.
+    private var sessionGeneration = 0
+    @Published private(set) var status = SafetyStatus.stopped
+    /// Un episodio de fallo genera un único aviso; los intentos de recuperación no lo repiten.
+    private var outageAnnounced = false
+    /// El modo (completo/reducido) se anuncia con la primera inferencia válida de la sesión.
+    private var modeAnnounced = false
 
     private let logger = Logger(subsystem: "com.lumio.app", category: "SafetyService")
 
@@ -42,6 +55,7 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
         self.pipeline = pipeline
         self.audioArbiter = audioArbiter
         self.announcer = announcer
+        self.initialAnnouncer = announcer
     }
 
     func start() async throws {
@@ -50,33 +64,37 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
             return
         }
         isRunning = true
-        logger.info("start() — isDepthAvailable=\(self.pipeline.isDepthAvailable)")
-        do {
-            try pipeline.start()
-        } catch {
-            isRunning = false
-            logger.error("pipeline.start() falló: \(error)")
-            throw error
+        sessionGeneration += 1
+        let generation = sessionGeneration
+        modeAnnounced = false
+        logger.info("start() — preparando modelo y cámara")
+        // SCRUM-37: el pipeline prepara el modelo antes de abrir la cámara y publica cada
+        // cambio de estado. Nunca se anuncia «activo» solo por haber cargado el modelo.
+        await pipeline.start()
+        guard isRunning, generation == sessionGeneration, !Task.isCancelled else { return }
+        statusTask = Task { [weak self, updates = pipeline.statusUpdates] in
+            for await state in updates {
+                guard !Task.isCancelled else { return }
+                self?.handleStatus(state)
+            }
         }
-        logger.info("pipeline arrancado OK")
-        announceMode()
-        #if DEBUG
-        debugState.isActive = true
-        debugState.isFullMode = pipeline.isDepthAvailable
-        #endif
-        consumptionTask = Task { [weak self] in
-            await self?.consumeLoop()
+        consumptionTask = Task { [weak self, outputs = pipeline.detections] in
+            for await output in outputs {
+                guard !Task.isCancelled else { return }
+                self?.handle(output)
+            }
         }
     }
 
     func stop() {
+        sessionGeneration += 1
         guard isRunning else {
             logger.debug("stop() — no en ejecución, noop")
             return
         }
         isRunning = false
         logger.info("stop()")
-        announcer = ObstacleAnnouncer()
+        announcer = initialAnnouncer
         #if DEBUG
         debugState.isActive = false
         debugState.fps = 0
@@ -84,9 +102,60 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
         #endif
         consumptionTask?.cancel()
         consumptionTask = nil
+        statusTask?.cancel()
+        statusTask = nil
         pipeline.stop()
         // Solo el contexto de seguridad: no pisar las instrucciones de navegación en curso.
         audioArbiter.cancel(contextIDs: [SafetyAudio.context])
+        status = .stopped
+        outageAnnounced = false
+    }
+
+    /// SCRUM-37: «Reintentar detección». Abre una sesión nueva con presupuesto de reintentos
+    /// nuevo. Solo tiene efecto mientras la detección está pedida (hay una ruta activa), aunque
+    /// haya quedado no disponible; no enciende la cámara por su cuenta fuera de una ruta.
+    func retry() async {
+        guard isRunning else { return }
+        stop()
+        try? await start()
+    }
+
+    private func handleStatus(_ next: SafetyStatus) {
+        guard next != status else { return }
+        status = next
+        #if DEBUG
+        debugState.isActive = next == .running
+        debugState.isFullMode = pipeline.isDepthAvailable
+        if next != .running {
+            debugState.lastDetections = []
+            debugState.fps = 0
+        }
+        #endif
+        switch next {
+        case .recovering, .unavailable:
+            // Sin detección: se retiran los avisos de obstáculos pendientes (pueden ser viejos).
+            announcer = initialAnnouncer
+            audioArbiter.cancel(contextIDs: [SafetyAudio.context])
+            if !outageAnnounced {
+                outageAnnounced = true
+                audioArbiter.receive(SafetyAudio.modelUnavailable())
+            }
+            if case .unavailable = next {
+                logger.error("Detección no disponible: \(next.message)")
+            }
+        case .running:
+            if outageAnnounced {
+                outageAnnounced = false
+                audioArbiter.cancel(contextIDs: [SafetyAudio.context])
+                audioArbiter.receive(SafetyAudio.detectionRecovered())
+            }
+            if !modeAnnounced {
+                modeAnnounced = true
+                announceMode()
+            }
+        case .stopped, .starting:
+            break
+        }
     }
 
     // MARK: - SCRUM-320/349: mode announcement
@@ -98,16 +167,11 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
         )
     }
 
-    // MARK: - Detection consumption loop
-
-    private func consumeLoop() async {
-        for await output in pipeline.detections {
-            guard !Task.isCancelled else { return }
-            handle(output)
-        }
-    }
+    // MARK: - Detection consumption
 
     private func handle(_ output: SafetyFrameOutput) {
+        // SCRUM-37: solo se avisa con detección confirmada; durante la recuperación no hay avisos.
+        guard status == .running else { return }
         let now = Date()
         #if DEBUG
         debugState.lastDetections = output.tracked.map(\.detection)

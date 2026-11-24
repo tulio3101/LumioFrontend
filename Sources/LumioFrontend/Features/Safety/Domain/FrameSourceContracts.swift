@@ -2,6 +2,9 @@
 import ARKit
 import CoreVideo
 
+/// SCRUM-37: la captura no puede iniciar. Se publica como `SafetyStatus.unavailable(.camera)`.
+enum FrameSourceError: Error { case unsupported, cameraPermissionRequired }
+
 /// Clasificación de malla LiDAR cerca del frente del usuario, extraída a bajas Hz. Ligera (sin
 /// geometría de la malla) para no retener el ARFrame. nil cuando no hay malla disponible/reciente.
 struct MeshClassificationSnapshot {
@@ -47,6 +50,7 @@ struct CapturedFrame {
 /// "Latest frame wins": if the consumer is behind, intermediate frames are dropped.
 protocol FrameSource: AnyObject {
     var isDepthAvailable: Bool { get }
+    /// SCRUM-37: cada `start()` entrega un flujo nuevo; `stop()` o un fallo de ARKit lo terminan.
     var frames: AsyncStream<CapturedFrame> { get }
     func start() throws
     func stop()

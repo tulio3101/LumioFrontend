@@ -20,6 +20,10 @@ struct DestinationView: View {
     #endif
     /// HU Interactuar mediante voz: los comandos ejecutan las acciones de este ViewModel.
     private let voiceCommands: VoiceCommandService?
+    #if os(iOS)
+    /// SCRUM-37: estado de la detección y «Reintentar detección» durante la ruta.
+    private let safetyService: SafetyService?
+    #endif
 
     init(
         routeCreator: any RouteCreating,
@@ -36,6 +40,9 @@ struct DestinationView: View {
         voiceCommands: VoiceCommandService? = nil
     ) {
         self.voiceCommands = voiceCommands
+        #if os(iOS)
+        self.safetyService = safetyMonitor as? SafetyService
+        #endif
         _model = StateObject(wrappedValue: DestinationViewModel(
             routeCreator: routeCreator,
             routeModifier: routeModifier,
@@ -190,6 +197,12 @@ struct DestinationView: View {
             }
 
             RouteSummaryCard(route: route)
+
+            #if os(iOS)
+            if let safetyService {
+                SafetyStatusView(service: safetyService)
+            }
+            #endif
 
             RouteProgressCard(
                 route: route,
