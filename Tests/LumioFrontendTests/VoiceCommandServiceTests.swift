@@ -70,10 +70,14 @@ private final class FakeActions: VoiceActionPerforming {
 @MainActor
 private func run(
     _ replies: [String],
-    actions: FakeActions = FakeActions(),
-    permissions: FakePermissions = FakePermissions(),
-    audio: RecordingAudio = RecordingAudio()
+    actions: FakeActions? = nil,
+    permissions: FakePermissions? = nil,
+    audio: RecordingAudio? = nil
 ) async -> (VoiceCommandService, RecordingAudio, FakeActions) {
+    // Los valores por defecto se evalúan fuera del MainActor: se crean aquí dentro.
+    let actions = actions ?? FakeActions()
+    let permissions = permissions ?? FakePermissions()
+    let audio = audio ?? RecordingAudio()
     let service = VoiceCommandService(
         listener: ScriptedListener(replies), permissions: permissions, audio: audio
     )
