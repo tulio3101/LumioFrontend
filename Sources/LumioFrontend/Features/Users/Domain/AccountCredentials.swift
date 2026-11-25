@@ -56,7 +56,8 @@ enum CredentialsPolicy {
         )
     }
 
-    private static func emailIssue(_ email: String) -> EmailIssue? {
+    /// Formato del correo ya recortado. También lo usan los contactos de confianza.
+    static func emailIssue(_ email: String) -> EmailIssue? {
         if email.isEmpty { return .missing }
         let parts = email.split(separator: "@", omittingEmptySubsequences: false)
         guard parts.count == 2, !parts[0].isEmpty, !email.contains(where: \.isWhitespace) else {

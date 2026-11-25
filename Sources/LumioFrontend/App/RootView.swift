@@ -14,6 +14,7 @@ struct RootView: View {
     let authenticationService: any Authenticating
     let signOut: any SigningOut
     let profile: any ProfileManaging
+    let contacts: any TrustedContactsManaging
     let accountDeleter: any AccountDeleting
     /// Configurar Preferencias de Voz Descriptiva (Preferencias > Preferencias de voz).
     let voicePreferences: any VoicePreferencesManaging
@@ -45,6 +46,7 @@ struct RootView: View {
         destinationSuggester: any DestinationSuggesting,
         signOut: any SigningOut,
         profile: any ProfileManaging,
+        contacts: any TrustedContactsManaging,
         accountDeleter: any AccountDeleting,
         voicePreferences: any VoicePreferencesManaging,
         permissions: PermissionsViewModel,
@@ -63,6 +65,7 @@ struct RootView: View {
         self.destinationSuggester = destinationSuggester
         self.signOut = signOut
         self.profile = profile
+        self.contacts = contacts
         self.accountDeleter = accountDeleter
         self.voicePreferences = voicePreferences
         self.authenticationService = authenticationService
@@ -87,6 +90,7 @@ struct RootView: View {
         destinationSuggester: any DestinationSuggesting,
         signOut: any SigningOut,
         profile: any ProfileManaging,
+        contacts: any TrustedContactsManaging,
         accountDeleter: any AccountDeleting,
         voicePreferences: any VoicePreferencesManaging,
         safetyMonitor: (any SafetyMonitoring)? = nil,
@@ -104,6 +108,7 @@ struct RootView: View {
         self.destinationSuggester = destinationSuggester
         self.signOut = signOut
         self.profile = profile
+        self.contacts = contacts
         self.accountDeleter = accountDeleter
         self.voicePreferences = voicePreferences
         self.authenticationService = authenticationService
@@ -150,13 +155,13 @@ struct RootView: View {
             NavigationStack {
                 #if os(iOS)
                 SettingsView(
-                    signOut: signOut, profile: profile, accountDeleter: accountDeleter,
+                    signOut: signOut, profile: profile, contacts: contacts, accountDeleter: accountDeleter,
                     voicePreferences: voicePreferences,
                     onSignedOut: { entry = .welcome }, permissions: permissions
                 )
                 #else
                 SettingsView(
-                    signOut: signOut, profile: profile, accountDeleter: accountDeleter,
+                    signOut: signOut, profile: profile, contacts: contacts, accountDeleter: accountDeleter,
                     voicePreferences: voicePreferences
                 ) { entry = .welcome }
                 #endif

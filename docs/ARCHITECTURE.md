@@ -215,6 +215,30 @@ Personalizar Cuenta (SCRUM-6), en Preferencias > Mi cuenta (ProfileView + Profil
      muestra en un aviso; los errores de cada campo van en su pista de VoiceOver. Sesión
      rechazada: se borran los tokens y se vuelve a la bienvenida.
 
+Contactos de Confianza (SCRUM-319), en Preferencias > Emergencia > Contactos de confianza
+(TrustedContactsView):
+  1. Los contactos (nombre y correo) viven solo en el backend: GET, POST, PUT y DELETE
+     /contacts con AuthorizedHTTPClient (RemoteTrustedContactsService). Siguen ahí al volver
+     a iniciar sesión; no hay copia local que borrar al cerrar sesión.
+  2. Agregar y editar validan en el teléfono con ContactsPolicy (nombre 1–60 con las reglas
+     del nombre de la cuenta; formato del correo con CredentialsPolicy; correo no repetido
+     entre los contactos cargados; máximo 5, igual que el backend). Con errores no se envía
+     nada y se locutan; editar sin cambiar nada tampoco envía. El correo se envía recortado
+     y en minúsculas.
+  3. Todo resultado, bueno o malo, lo locuta TrustedContactsService por el árbitro (contexto
+     `trusted-contacts`) y se muestra en un aviso: contacto guardado, actualizado, eliminado
+     o por qué no se pudo. Un fallo deja la lista como estaba.
+  4. La app no lee el `code` de los errores del backend (HTTPClientError solo guarda el
+     estado). Por eso 409 se locuta como «ese correo ya está en tu lista o ya tienes 5
+     contactos» y 422 como «el servidor no aceptó los datos… ni tu propio correo»: el
+     backend rechaza el correo de la propia cuenta y la app no lo conoce. Los casos de
+     repetido y máximo se detectan antes, en el teléfono, con mensaje exacto.
+  5. VoiceOver: cada contacto se lee como «nombre, correo» seguido de los botones «Editar a
+     …» y «Eliminar a …». Eliminar pide confirmación. Agregar con el máximo no abre el
+     formulario y lo dice. El formulario es una pantalla de la navegación (no una hoja), con
+     el error de cada campo en su pista; no se mueve el foco para no superponer la voz de
+     VoiceOver con la del árbitro.
+
 Eliminar Cuenta (SCRUM-7), en Preferencias > Eliminar cuenta (DeleteAccountView):
   1. Al entrar se explican las consecuencias (cuenta, contactos de confianza, historial
      de rutas y preferencias; no se puede deshacer). Sin VoiceOver las locuta
