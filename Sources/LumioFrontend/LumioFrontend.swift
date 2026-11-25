@@ -36,6 +36,7 @@ struct LumioApp: App {
                 emergency: dependencies.emergency,
                 accountDeleter: dependencies.accountDeleter,
                 voicePreferences: dependencies.voicePreferences,
+                hapticPreferences: dependencies.hapticPreferences,
                 permissions: dependencies.permissions,
                 safetyMonitor: dependencies.safetyService,
                 obstacleGate: dependencies.obstacleGate,
@@ -64,7 +65,8 @@ struct LumioApp: App {
                 contacts: dependencies.contacts,
                 emergency: dependencies.emergency,
                 accountDeleter: dependencies.accountDeleter,
-                voicePreferences: dependencies.voicePreferences
+                voicePreferences: dependencies.voicePreferences,
+                hapticPreferences: dependencies.hapticPreferences
             )
             #endif
         }
