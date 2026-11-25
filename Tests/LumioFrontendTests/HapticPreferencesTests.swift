@@ -150,7 +150,7 @@ private func pattern(_ cue: HapticCue, _ intensity: HapticIntensity = .medium) -
     #expect(harness.player.played == [pattern(.routeReady, .strong)])
 }
 
-@Test @MainActor func samePreferencesDoNothing() {
+@Test @MainActor func sameHapticPreferencesDoNothing() {
     let harness = HapticHarness()
 
     #expect(harness.service.update(.standard) == .unchanged)
@@ -209,7 +209,7 @@ private func pattern(_ cue: HapticCue, _ intensity: HapticIntensity = .medium) -
 
 // MARK: - Se conservan al cerrar y abrir la app
 
-@Test @MainActor func preferencesSurviveClosingAndReopeningTheApp() throws {
+@Test @MainActor func hapticPreferencesSurviveClosingAndReopeningTheApp() throws {
     let directory = FileManager.default.temporaryDirectory
         .appendingPathComponent("lumio-haptics-\(UUID().uuidString)", isDirectory: true)
     defer { try? FileManager.default.removeItem(at: directory) }
