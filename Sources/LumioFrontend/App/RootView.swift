@@ -16,6 +16,8 @@ struct RootView: View {
     let profile: any ProfileManaging
     let contacts: any TrustedContactsManaging
     let accountDeleter: any AccountDeleting
+    /// Configurar Preferencias de Voz Descriptiva (Preferencias > Preferencias de voz).
+    let voicePreferences: any VoicePreferencesManaging
     /// SCRUM-33: detección de obstáculos y su compuerta de permiso de cámara. nil fuera de iOS
     /// o si el modelo YOLO no cargó. Se pasa a DestinationView para arrancarla con la ruta.
     let safetyMonitor: (any SafetyMonitoring)?
@@ -46,6 +48,7 @@ struct RootView: View {
         profile: any ProfileManaging,
         contacts: any TrustedContactsManaging,
         accountDeleter: any AccountDeleting,
+        voicePreferences: any VoicePreferencesManaging,
         permissions: PermissionsViewModel,
         safetyMonitor: (any SafetyMonitoring)? = nil,
         obstacleGate: (any CameraAssistanceGating)? = nil,
@@ -64,6 +67,7 @@ struct RootView: View {
         self.profile = profile
         self.contacts = contacts
         self.accountDeleter = accountDeleter
+        self.voicePreferences = voicePreferences
         self.authenticationService = authenticationService
         self.permissions = permissions
         self.safetyMonitor = safetyMonitor
@@ -88,6 +92,7 @@ struct RootView: View {
         profile: any ProfileManaging,
         contacts: any TrustedContactsManaging,
         accountDeleter: any AccountDeleting,
+        voicePreferences: any VoicePreferencesManaging,
         safetyMonitor: (any SafetyMonitoring)? = nil,
         obstacleGate: (any CameraAssistanceGating)? = nil,
         voiceCommands: VoiceCommandService? = nil
@@ -105,6 +110,7 @@ struct RootView: View {
         self.profile = profile
         self.contacts = contacts
         self.accountDeleter = accountDeleter
+        self.voicePreferences = voicePreferences
         self.authenticationService = authenticationService
         self.safetyMonitor = safetyMonitor
         self.obstacleGate = obstacleGate
@@ -150,11 +156,13 @@ struct RootView: View {
                 #if os(iOS)
                 SettingsView(
                     signOut: signOut, profile: profile, contacts: contacts, accountDeleter: accountDeleter,
+                    voicePreferences: voicePreferences,
                     onSignedOut: { entry = .welcome }, permissions: permissions
                 )
                 #else
                 SettingsView(
-                    signOut: signOut, profile: profile, contacts: contacts, accountDeleter: accountDeleter
+                    signOut: signOut, profile: profile, contacts: contacts, accountDeleter: accountDeleter,
+                    voicePreferences: voicePreferences
                 ) { entry = .welcome }
                 #endif
             }

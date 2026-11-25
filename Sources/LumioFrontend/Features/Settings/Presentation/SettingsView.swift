@@ -9,6 +9,8 @@ struct SettingsView: View {
     let contacts: any TrustedContactsManaging
     /// Eliminar Cuenta (SCRUM-7).
     let accountDeleter: any AccountDeleting
+    /// Configurar Preferencias de Voz Descriptiva.
+    let voicePreferences: any VoicePreferencesManaging
     /// Se llama después de cerrar la sesión o eliminar la cuenta para volver a la bienvenida.
     let onSignedOut: () -> Void
     #if os(iOS)
@@ -23,10 +25,13 @@ struct SettingsView: View {
             #if os(iOS)
             NavigationLink("Permisos y accesibilidad") { PermissionsView(model: permissions) }
             #endif
-            FeatureStatusView(
-                title: "Preferencias de voz",
-                message: "Aquí se integrarán idioma, velocidad y configuración de voz."
-            )
+            NavigationLink {
+                VoicePreferencesView(service: voicePreferences)
+            } label: {
+                Label("Preferencias de voz", systemImage: "speaker.wave.2")
+            }
+            .disabled(isSigningOut)
+            .accessibilityHint("Consulta y cambia el idioma, la voz y la velocidad con que habla Lumio.")
             Section("Emergencia") {
                 NavigationLink {
                     TrustedContactsView(service: contacts, onSessionExpired: onSignedOut)

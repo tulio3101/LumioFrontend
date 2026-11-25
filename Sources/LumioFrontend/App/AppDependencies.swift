@@ -19,6 +19,9 @@ struct AppDependencies {
     let profile: any ProfileManaging
     let contacts: any TrustedContactsManaging
     let accountDeleter: any AccountDeleting
+    /// Configurar Preferencias de Voz Descriptiva: se leen del teléfono y se aplican al
+    /// reproductor del árbitro al abrir la app, antes de la primera locución.
+    let voicePreferences: VoicePreferencesService
     #if canImport(AVFoundation)
     let audioArbiter: AudioArbiterService
     #endif
@@ -37,8 +40,17 @@ struct AppDependencies {
 
     init(configuration: AppConfiguration = .main) {
         #if os(iOS)
-        let arbiter = AudioArbiterService(player: SpeechAudioPlayer())
+        let player = SpeechAudioPlayer()
+        let arbiter = AudioArbiterService(player: player)
         audioArbiter = arbiter
+        // Preferencias de voz: solo copia local; nunca esperan a la red.
+        let voiceSettings = VoicePreferencesService(
+            store: FileVoicePreferencesStore(fileURL: FileVoicePreferencesStore.defaultFileURL()),
+            catalog: SystemVoiceCatalog(),
+            output: player,
+            arbiter: arbiter
+        )
+        voicePreferences = voiceSettings
 
         // Sesión: tokens en Keychain; las rutas se envían con el access token.
         let http = URLSessionHTTPClient()
@@ -118,7 +130,7 @@ struct AppDependencies {
         accountDeleter = AccountDeletionService(
             remote: RemoteAccountService(client: routeClient, baseURL: configuration.apiBaseURL),
             tokens: tokens, routes: store, recentRoutes: recentStore, pendingHistory: history,
-            arbiter: arbiter
+            voicePreferences: voiceSettings, arbiter: arbiter
         )
         // El historial pendiente se envía al abrir la app y cada vez que vuelve la conexión.
         monitor.start { Task { await history.flush() } }
@@ -126,7 +138,22 @@ struct AppDependencies {
         Task { await history.flush() }
         #else
         #if canImport(AVFoundation)
-        audioArbiter = AudioArbiterService(player: SpeechAudioPlayer())
+        let player = SpeechAudioPlayer()
+        let arbiter = AudioArbiterService(player: player)
+        audioArbiter = arbiter
+        voicePreferences = VoicePreferencesService(
+            store: FileVoicePreferencesStore(fileURL: FileVoicePreferencesStore.defaultFileURL()),
+            catalog: SystemVoiceCatalog(),
+            output: player,
+            arbiter: arbiter
+        )
+        #else
+        voicePreferences = VoicePreferencesService(
+            store: FileVoicePreferencesStore(fileURL: FileVoicePreferencesStore.defaultFileURL()),
+            catalog: NoVoiceCatalog(),
+            output: nil,
+            arbiter: nil
+        )
         #endif
         let navigation = UnavailableNavigationService()
         routeCreator = navigation
