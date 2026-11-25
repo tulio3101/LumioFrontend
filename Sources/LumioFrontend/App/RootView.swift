@@ -17,6 +17,8 @@ struct RootView: View {
     let accountDeleter: any AccountDeleting
     /// Configurar Preferencias de Voz Descriptiva (Preferencias > Preferencias de voz).
     let voicePreferences: any VoicePreferencesManaging
+    /// Configurar Retroalimentación Háptica (Preferencias > Vibración).
+    let hapticPreferences: any HapticPreferencesManaging
     /// SCRUM-33: detección de obstáculos y su compuerta de permiso de cámara. nil fuera de iOS
     /// o si el modelo YOLO no cargó. Se pasa a DestinationView para arrancarla con la ruta.
     let safetyMonitor: (any SafetyMonitoring)?
@@ -47,6 +49,7 @@ struct RootView: View {
         profile: any ProfileManaging,
         accountDeleter: any AccountDeleting,
         voicePreferences: any VoicePreferencesManaging,
+        hapticPreferences: any HapticPreferencesManaging,
         permissions: PermissionsViewModel,
         safetyMonitor: (any SafetyMonitoring)? = nil,
         obstacleGate: (any CameraAssistanceGating)? = nil,
@@ -65,6 +68,7 @@ struct RootView: View {
         self.profile = profile
         self.accountDeleter = accountDeleter
         self.voicePreferences = voicePreferences
+        self.hapticPreferences = hapticPreferences
         self.authenticationService = authenticationService
         self.permissions = permissions
         self.safetyMonitor = safetyMonitor
@@ -89,6 +93,7 @@ struct RootView: View {
         profile: any ProfileManaging,
         accountDeleter: any AccountDeleting,
         voicePreferences: any VoicePreferencesManaging,
+        hapticPreferences: any HapticPreferencesManaging,
         safetyMonitor: (any SafetyMonitoring)? = nil,
         obstacleGate: (any CameraAssistanceGating)? = nil,
         voiceCommands: VoiceCommandService? = nil
@@ -106,6 +111,7 @@ struct RootView: View {
         self.profile = profile
         self.accountDeleter = accountDeleter
         self.voicePreferences = voicePreferences
+        self.hapticPreferences = hapticPreferences
         self.authenticationService = authenticationService
         self.safetyMonitor = safetyMonitor
         self.obstacleGate = obstacleGate
@@ -151,13 +157,13 @@ struct RootView: View {
                 #if os(iOS)
                 SettingsView(
                     signOut: signOut, profile: profile, accountDeleter: accountDeleter,
-                    voicePreferences: voicePreferences,
+                    voicePreferences: voicePreferences, hapticPreferences: hapticPreferences,
                     onSignedOut: { entry = .welcome }, permissions: permissions
                 )
                 #else
                 SettingsView(
                     signOut: signOut, profile: profile, accountDeleter: accountDeleter,
-                    voicePreferences: voicePreferences
+                    voicePreferences: voicePreferences, hapticPreferences: hapticPreferences
                 ) { entry = .welcome }
                 #endif
             }

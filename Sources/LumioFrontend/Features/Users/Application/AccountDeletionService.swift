@@ -8,7 +8,7 @@ import Foundation
 ///    el teléfono: si falla, la cuenta y todo lo local siguen como estaban.
 /// 3. Borra lo que la cuenta guarda en el teléfono: el historial pendiente (no se envía, la
 ///    cuenta ya no existe), la ruta activa, la copia de rutas recientes, los tokens y las
-///    preferencias de voz (vuelve la voz predeterminada).
+///    preferencias de voz y de vibración (vuelven las predeterminadas).
 /// 4. Corta el audio de la sesión y anuncia el resultado; los errores también se locutan.
 @MainActor
 final class AccountDeletionService: AccountDeleting {
@@ -20,6 +20,7 @@ final class AccountDeletionService: AccountDeleting {
     private let recentRoutes: (any RecentRoutesStoring)?
     private let pendingHistory: (any PendingHistorySyncing)?
     private let voicePreferences: (any VoicePreferencesResetting)?
+    private let hapticPreferences: (any HapticPreferencesResetting)?
     private let arbiter: (any AudioArbitrating)?
     private let now: () -> Date
     private(set) var isDeleting = false
@@ -31,6 +32,7 @@ final class AccountDeletionService: AccountDeleting {
         recentRoutes: (any RecentRoutesStoring)? = nil,
         pendingHistory: (any PendingHistorySyncing)? = nil,
         voicePreferences: (any VoicePreferencesResetting)? = nil,
+        hapticPreferences: (any HapticPreferencesResetting)? = nil,
         arbiter: (any AudioArbitrating)?,
         now: @escaping () -> Date = Date.init
     ) {
@@ -40,6 +42,7 @@ final class AccountDeletionService: AccountDeleting {
         self.recentRoutes = recentRoutes
         self.pendingHistory = pendingHistory
         self.voicePreferences = voicePreferences
+        self.hapticPreferences = hapticPreferences
         self.arbiter = arbiter
         self.now = now
     }
@@ -83,6 +86,7 @@ final class AccountDeletionService: AccountDeleting {
         try? recentRoutes?.clear()
         tokens.clear()
         voicePreferences?.resetToStandard()
+        hapticPreferences?.resetToStandard()
         // Instrucciones de la ruta y cualquier otro mensaje de la cuenta borrada.
         arbiter?.resetSession()
     }

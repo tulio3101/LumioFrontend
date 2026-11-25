@@ -56,6 +56,9 @@ Audio ya incluye cola, política, árbitro y adaptador AVSpeechSynthesizer.
 En Preferencias > Preferencias de voz se eligen el idioma (variante de español), la voz y la
 velocidad de todo lo que dice Lumio; se guardan en el teléfono y se aplican desde la primera
 locución al abrir la app (ver docs/HU-preferencias-de-voz.md).
+En Preferencias > Vibración se activa o desactiva la vibración, se elige qué eventos de la ruta
+vibran y con qué intensidad; las alertas de seguridad siempre vibran
+(ver docs/HU-preferencias-hapticas.md).
 También deduplica eventos P2/P3 y reemplaza narraciones pendientes de capturas
 antiguas mediante metadatos opcionales; las reglas están en la guía de arquitectura.
 No están implementados cámara, seguridad, inicio de sesión con Google ni llamadas de narración.

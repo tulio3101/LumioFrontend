@@ -1,20 +1,30 @@
 #if os(iOS)
+import CoreHaptics
 import UIKit
 
-/// Háptica de resultado: éxito al tener la ruta lista o al terminar la navegación, error si
-/// no se pudo crear.
+/// Motor de vibración: reproduce los pulsos de un HapticPattern con UIImpactFeedbackGenerator.
+/// Qué evento vibra y con qué intensidad lo decide HapticPreferencesService.
 @MainActor
-final class UIKitHapticFeedback: HapticFeedbackPlaying {
-    private let generator = UINotificationFeedbackGenerator()
+final class UIKitHapticFeedback: HapticPatternPlaying {
+    private let generator = UIImpactFeedbackGenerator(style: .heavy)
 
-    func play(_ cue: HapticCue) {
-        switch cue {
-        case .routeReady:
-            generator.notificationOccurred(.success)
-        case .routeFailed:
-            generator.notificationOccurred(.error)
-        case .routeFinished:
-            generator.notificationOccurred(.success)
+    var supportsHaptics: Bool {
+        CHHapticEngine.capabilitiesForHardware().supportsHaptics
+    }
+
+    func play(_ pattern: HapticPattern) {
+        generator.prepare()
+        for pulse in pattern.pulses {
+            let intensity = CGFloat(min(max(pulse.strength, 0), 1))
+            if pulse.delay <= 0 {
+                generator.impactOccurred(intensity: intensity)
+            } else {
+                let nanoseconds = UInt64(pulse.delay * 1_000_000_000)
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(nanoseconds: nanoseconds)
+                    self?.generator.impactOccurred(intensity: intensity)
+                }
+            }
         }
     }
 }
