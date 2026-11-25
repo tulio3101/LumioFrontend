@@ -5,9 +5,15 @@ import Foundation
 struct FileVoicePreferencesStore: VoicePreferencesStoring {
     let fileURL: URL
 
+    /// Misma carpeta que FileActiveRouteStore. No se llama a su defaultFileURL porque es
+    /// MainActor (por ActiveRouteStoring) y este almacenamiento no lo es.
     static func defaultFileURL(fileManager: FileManager = .default) -> URL {
-        FileActiveRouteStore.defaultFileURL(fileManager: fileManager)
-            .deletingLastPathComponent()
+        let base = (try? fileManager.url(
+            for: .applicationSupportDirectory, in: .userDomainMask,
+            appropriateFor: nil, create: true
+        )) ?? fileManager.temporaryDirectory
+        return base
+            .appendingPathComponent("Lumio", isDirectory: true)
             .appendingPathComponent("voice-preferences.json")
     }
 
