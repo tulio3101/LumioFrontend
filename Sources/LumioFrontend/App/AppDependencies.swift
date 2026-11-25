@@ -18,6 +18,8 @@ struct AppDependencies {
     let signOut: any SigningOut
     let profile: any ProfileManaging
     let contacts: any TrustedContactsManaging
+    /// Botón de Emergencia (SCRUM-35): margen para cancelar y alerta por correo a los contactos.
+    let emergency: any EmergencyManaging
     let accountDeleter: any AccountDeleting
     /// Configurar Preferencias de Voz Descriptiva: se leen del teléfono y se aplican al
     /// reproductor del árbitro al abrir la app, antes de la primera locución.
@@ -122,9 +124,16 @@ struct AppDependencies {
         )
         // Contactos de Confianza: GET/POST/PUT/DELETE /contacts con sesión. Viven solo en el
         // backend: no hay copia local que borrar al cerrar sesión.
-        contacts = TrustedContactsService(
-            remote: RemoteTrustedContactsService(client: routeClient, baseURL: configuration.apiBaseURL),
-            tokens: tokens, arbiter: arbiter
+        let contactsRemote = RemoteTrustedContactsService(client: routeClient, baseURL: configuration.apiBaseURL)
+        contacts = TrustedContactsService(remote: contactsRemote, tokens: tokens, arbiter: arbiter)
+        // Botón de Emergencia: POST /sos con sesión. La ubicación no pide permiso (nil si falta) y
+        // los contactos se cuentan sin audio para avisar de inmediato si no hay ninguno.
+        emergency = EmergencyService(
+            remote: RemoteEmergencyService(client: routeClient, baseURL: configuration.apiBaseURL),
+            locator: CoreLocationEmergencyLocator(),
+            connectivity: monitor,
+            contactCount: { try? await contactsRemote.listContacts().count },
+            tokens: tokens, arbiter: arbiter, haptics: haptics
         )
         // Eliminar Cuenta: DELETE /users/me con sesión; después borra lo mismo que cerrar sesión.
         accountDeleter = AccountDeletionService(
@@ -176,6 +185,11 @@ struct AppDependencies {
         )
         contacts = TrustedContactsService(
             remote: RemoteTrustedContactsService(client: URLSessionHTTPClient(), baseURL: nil), arbiter: nil
+        )
+        emergency = EmergencyService(
+            remote: RemoteEmergencyService(client: URLSessionHTTPClient(), baseURL: nil),
+            locator: NoEmergencyLocation(), connectivity: AssumeConnected(),
+            arbiter: nil, haptics: NoHapticFeedback()
         )
         accountDeleter = AccountDeletionService(
             remote: RemoteAccountService(client: URLSessionHTTPClient(), baseURL: nil),
