@@ -52,8 +52,21 @@ Navigation/Data/UIKitHapticFeedback.swift      Motor: pulsos con UIImpactFeedbac
   tocar su código.
 - Leer y aplicar nunca espera al disco ni a la red: el archivo se lee una vez al abrir la app.
 - Eliminar Cuenta (SCRUM-7) borra el archivo y vuelve a las predeterminadas.
-- No hay sincronización con el backend (no hay contrato de preferencias); cuando exista, debe
-  ir después de aplicar y guardar en el teléfono, sin bloquear.
+- Respaldo en el backend (voz y vibración juntas, GET/PUT /users/me/preferences), con
+  PreferencesSynchronizer y siempre después de aplicar y guardar en el teléfono:
+  - Cada cambio del usuario queda pendiente (preferences-sync.json) y se sube en segundo plano.
+    Sin red, sin sesión o con error del servidor sigue pendiente y se reintenta al volver la
+    conexión, al abrir la app o al iniciar sesión. Un 422 no se reintenta.
+  - Sin cambios pendientes, al abrir la app con sesión o al iniciar sesión se bajan y se aplican
+    solo si son más recientes (`updated_at`) que las del teléfono. Lo que se baja no se vuelve
+    a subir ni se locuta; una voz que no está en este teléfono se reemplaza por la
+    predeterminada y se avisa en la pantalla de voz.
+  - Al cerrar sesión o eliminar la cuenta se olvida el estado: la siguiente cuenta empieza por
+    lo de su backend.
+  - Solo se envían los eventos configurables: las alertas de seguridad no se pueden apagar.
+  - Pruebas: PreferencesSyncTests (subir, reintentar, 422, bajar más recientes, no pisar con
+    más antiguas, cuenta sin preferencias, cambios pendientes ganan, cerrar sesión, formato
+    del backend).
 
 ## Criterios de aceptación
 

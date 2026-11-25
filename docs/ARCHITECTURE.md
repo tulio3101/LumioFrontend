@@ -315,7 +315,7 @@ local esté disponible.
 | Narration | Servicio remoto y control de frecuencia | HTTPClient, POST /narration |
 | Users | Inicio de sesión con Google | Correo, Keychain, Bearer y refresh implementados |
 | Places | Confirmar contrato de favoritos con backend | El backend actual expone rutas, no asumir CRUD de favoritos |
-| Settings | Sincronizar preferencias de voz y vibración con el backend cuando exista el contrato | Voz aplicada en SpeechAudioPlayer; vibración filtrada en HapticPreferencesService (docs/HU-preferencias-hapticas.md) |
+| Settings | Validar en dispositivo voz, vibración y respaldo | Voz en SpeechAudioPlayer, vibración en HapticPreferencesService, respaldo en PreferencesSynchronizer (GET/PUT /users/me/preferences; docs/HU-preferencias-hapticas.md) |
 
 Agregar Data/ o Presentation/ cuando exista implementación; no crear repositorios
 ni interfaces vacías para cada clase. Mantener tests por funcionalidad conforme crezcan.

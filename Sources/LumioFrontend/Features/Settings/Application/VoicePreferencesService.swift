@@ -14,7 +14,7 @@ import Foundation
 ///
 /// Todo lo que dice pasa por el AudioArbiter como P2: una alerta P1 siempre lo interrumpe.
 @MainActor
-final class VoicePreferencesService: VoicePreferencesManaging, VoicePreferencesResetting {
+final class VoicePreferencesService: VoicePreferencesManaging, VoicePreferencesResetting, SyncableVoicePreferences {
     static let contextID = "voice-preferences"
 
     private let store: any VoicePreferencesStoring
@@ -25,6 +25,8 @@ final class VoicePreferencesService: VoicePreferencesManaging, VoicePreferencesR
 
     private(set) var preferences: VoicePreferences
     private(set) var launchIssues: [VoicePreferenceIssue]
+    /// Cada cambio del usuario aplicado: PreferencesSynchronizer lo sube en segundo plano.
+    var onPreferencesChanged: (() -> Void)?
 
     init(
         store: any VoicePreferencesStoring,
@@ -82,6 +84,7 @@ final class VoicePreferencesService: VoicePreferencesManaging, VoicePreferencesR
         } catch {
             outcome = .appliedNotSaved
         }
+        onPreferencesChanged?()
         let confirmation = VoicePreferencesAnnouncements.confirmation(
             from: old, to: new,
             language: VoicePreferencesAnnouncements.languageName(new.language, catalog: availableLanguages()),
@@ -98,6 +101,17 @@ final class VoicePreferencesService: VoicePreferencesManaging, VoicePreferencesR
 
     func preview() {
         speak(VoicePreferencesAnnouncements.sample, key: "preview")
+    }
+
+    /// Lo que llegó del backend (más reciente que lo del teléfono): se guarda tal cual y se
+    /// aplica lo que este teléfono puede usar; una voz que aquí no está se reemplaza por la
+    /// predeterminada y se avisa en la pantalla. Sin audio y sin volver a subirlo.
+    func applySynced(_ synced: VoicePreferences) {
+        let usable = VoicePreferencesPolicy.usable(synced, catalog: catalog)
+        try? store.save(synced)
+        preferences = usable.preferences
+        launchIssues = usable.issues
+        output?.apply(usable.preferences)
     }
 
     /// Eliminar Cuenta: borra la copia del teléfono y vuelve a la voz predeterminada.
