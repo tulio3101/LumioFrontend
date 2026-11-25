@@ -225,6 +225,12 @@ enum HapticCue: Equatable {
     case danger
     /// SCRUM-33: aviso (subida o un obstáculo a menos de 1 m). 2 impactos medios.
     case warning
+    /// Botón de Emergencia: se activó y empieza el margen para cancelar.
+    case emergencyActivated
+    /// Botón de Emergencia: la alerta llegó a algún contacto.
+    case emergencySent
+    /// Botón de Emergencia: la alerta no se pudo enviar.
+    case emergencyFailed
 }
 
 /// Acompaña los anuncios de Crear Ruta. Los patrones de giro pertenecen a Guiar Giros.

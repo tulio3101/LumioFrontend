@@ -26,11 +26,18 @@ final class UIKitHapticFeedback: HapticFeedbackPlaying {
         case .routeFinished:
             generator.notificationOccurred(.success)
         case .danger:
-            // Patrón distinguible = 3 impactos fuertes seguidos.
+            // SCRUM-33: patrón distinguible = 3 impactos fuertes seguidos.
             pulse(heavy, remaining: 3)
         case .warning:
-            // 2 impactos medios.
+            // SCRUM-33: 2 impactos medios (subida u obstáculo cercano).
             pulse(medium, remaining: 2)
+        case .emergencyActivated:
+            // Distinto de éxito y de error: avisa que empezó el margen para cancelar.
+            generator.notificationOccurred(.warning)
+        case .emergencySent:
+            generator.notificationOccurred(.success)
+        case .emergencyFailed:
+            generator.notificationOccurred(.error)
         }
     }
 

@@ -14,7 +14,12 @@ struct RootView: View {
     let authenticationService: any Authenticating
     let signOut: any SigningOut
     let profile: any ProfileManaging
+    let contacts: any TrustedContactsManaging
+    /// Botón de Emergencia (SCRUM-35): fijo sobre la pestaña Trayecto y sus pantallas.
+    let emergency: any EmergencyManaging
     let accountDeleter: any AccountDeleting
+    /// Configurar Preferencias de Voz Descriptiva (Preferencias > Preferencias de voz).
+    let voicePreferences: any VoicePreferencesManaging
     /// SCRUM-33: detección de obstáculos y su compuerta de permiso de cámara. nil fuera de iOS
     /// o si el modelo YOLO no cargó. Se pasa a DestinationView para arrancarla con la ruta.
     let safetyMonitor: (any SafetyMonitoring)?
@@ -43,7 +48,10 @@ struct RootView: View {
         destinationSuggester: any DestinationSuggesting,
         signOut: any SigningOut,
         profile: any ProfileManaging,
+        contacts: any TrustedContactsManaging,
+        emergency: any EmergencyManaging,
         accountDeleter: any AccountDeleting,
+        voicePreferences: any VoicePreferencesManaging,
         permissions: PermissionsViewModel,
         safetyMonitor: (any SafetyMonitoring)? = nil,
         obstacleGate: (any CameraAssistanceGating)? = nil,
@@ -60,7 +68,10 @@ struct RootView: View {
         self.destinationSuggester = destinationSuggester
         self.signOut = signOut
         self.profile = profile
+        self.contacts = contacts
+        self.emergency = emergency
         self.accountDeleter = accountDeleter
+        self.voicePreferences = voicePreferences
         self.authenticationService = authenticationService
         self.permissions = permissions
         self.safetyMonitor = safetyMonitor
@@ -83,7 +94,10 @@ struct RootView: View {
         destinationSuggester: any DestinationSuggesting,
         signOut: any SigningOut,
         profile: any ProfileManaging,
+        contacts: any TrustedContactsManaging,
+        emergency: any EmergencyManaging,
         accountDeleter: any AccountDeleting,
+        voicePreferences: any VoicePreferencesManaging,
         safetyMonitor: (any SafetyMonitoring)? = nil,
         obstacleGate: (any CameraAssistanceGating)? = nil,
         voiceCommands: VoiceCommandService? = nil
@@ -99,7 +113,10 @@ struct RootView: View {
         self.destinationSuggester = destinationSuggester
         self.signOut = signOut
         self.profile = profile
+        self.contacts = contacts
+        self.emergency = emergency
         self.accountDeleter = accountDeleter
+        self.voicePreferences = voicePreferences
         self.authenticationService = authenticationService
         self.safetyMonitor = safetyMonitor
         self.obstacleGate = obstacleGate
@@ -139,16 +156,22 @@ struct RootView: View {
                     voiceCommands: voiceCommands
                 )
             }
+            // Fijo en la pila de Trayecto: sigue visible al abrir la ruta activa.
+            .emergencyControl(emergency, onSessionExpired: { entry = .welcome })
             .tabItem { Label("Trayecto", systemImage: "figure.walk") }
 
             NavigationStack {
                 #if os(iOS)
                 SettingsView(
-                    signOut: signOut, profile: profile, accountDeleter: accountDeleter,
+                    signOut: signOut, profile: profile, contacts: contacts, accountDeleter: accountDeleter,
+                    voicePreferences: voicePreferences,
                     onSignedOut: { entry = .welcome }, permissions: permissions
                 )
                 #else
-                SettingsView(signOut: signOut, profile: profile, accountDeleter: accountDeleter) { entry = .welcome }
+                SettingsView(
+                    signOut: signOut, profile: profile, contacts: contacts, accountDeleter: accountDeleter,
+                    voicePreferences: voicePreferences
+                ) { entry = .welcome }
                 #endif
             }
             .tabItem { Label("Preferencias", systemImage: "gearshape") }

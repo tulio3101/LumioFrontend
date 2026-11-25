@@ -208,8 +208,9 @@ struct ProfileView: View {
 // MARK: Componentes
 
 /// Etiqueta visible encima del campo y, debajo, el error o la ayuda. VoiceOver lee la
-/// etiqueta como nombre del campo y el error (o la ayuda) como pista.
-private struct ProfileInput<Field: View>: View {
+/// etiqueta como nombre del campo y el error (o la ayuda) como pista. También lo usan los
+/// contactos de confianza.
+struct ProfileInput<Field: View>: View {
     let label: String
     let error: String?
     let hint: String?

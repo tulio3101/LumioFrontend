@@ -17,7 +17,13 @@ struct AppDependencies {
     let authenticationService: any Authenticating
     let signOut: any SigningOut
     let profile: any ProfileManaging
+    let contacts: any TrustedContactsManaging
+    /// Botón de Emergencia (SCRUM-35): margen para cancelar y alerta por correo a los contactos.
+    let emergency: any EmergencyManaging
     let accountDeleter: any AccountDeleting
+    /// Configurar Preferencias de Voz Descriptiva: se leen del teléfono y se aplican al
+    /// reproductor del árbitro al abrir la app, antes de la primera locución.
+    let voicePreferences: VoicePreferencesService
     #if canImport(AVFoundation)
     let audioArbiter: AudioArbiterService
     #endif
@@ -36,8 +42,17 @@ struct AppDependencies {
 
     init(configuration: AppConfiguration = .main) {
         #if os(iOS)
-        let arbiter = AudioArbiterService(player: SpeechAudioPlayer())
+        let player = SpeechAudioPlayer()
+        let arbiter = AudioArbiterService(player: player)
         audioArbiter = arbiter
+        // Preferencias de voz: solo copia local; nunca esperan a la red.
+        let voiceSettings = VoicePreferencesService(
+            store: FileVoicePreferencesStore(fileURL: FileVoicePreferencesStore.defaultFileURL()),
+            catalog: SystemVoiceCatalog(),
+            output: player,
+            arbiter: arbiter
+        )
+        voicePreferences = voiceSettings
 
         // Sesión: tokens en Keychain; las rutas se envían con el access token.
         let http = URLSessionHTTPClient()
@@ -107,11 +122,24 @@ struct AppDependencies {
             remote: RemoteProfileService(client: routeClient, baseURL: configuration.apiBaseURL),
             tokens: tokens, arbiter: arbiter
         )
+        // Contactos de Confianza: GET/POST/PUT/DELETE /contacts con sesión. Viven solo en el
+        // backend: no hay copia local que borrar al cerrar sesión.
+        let contactsRemote = RemoteTrustedContactsService(client: routeClient, baseURL: configuration.apiBaseURL)
+        contacts = TrustedContactsService(remote: contactsRemote, tokens: tokens, arbiter: arbiter)
+        // Botón de Emergencia: POST /sos con sesión. La ubicación no pide permiso (nil si falta) y
+        // los contactos se cuentan sin audio para avisar de inmediato si no hay ninguno.
+        emergency = EmergencyService(
+            remote: RemoteEmergencyService(client: routeClient, baseURL: configuration.apiBaseURL),
+            locator: CoreLocationEmergencyLocator(),
+            connectivity: monitor,
+            contactCount: { try? await contactsRemote.listContacts().count },
+            tokens: tokens, arbiter: arbiter, haptics: haptics
+        )
         // Eliminar Cuenta: DELETE /users/me con sesión; después borra lo mismo que cerrar sesión.
         accountDeleter = AccountDeletionService(
             remote: RemoteAccountService(client: routeClient, baseURL: configuration.apiBaseURL),
             tokens: tokens, routes: store, recentRoutes: recentStore, pendingHistory: history,
-            arbiter: arbiter
+            voicePreferences: voiceSettings, arbiter: arbiter
         )
         // El historial pendiente se envía al abrir la app y cada vez que vuelve la conexión.
         monitor.start { Task { await history.flush() } }
@@ -119,7 +147,22 @@ struct AppDependencies {
         Task { await history.flush() }
         #else
         #if canImport(AVFoundation)
-        audioArbiter = AudioArbiterService(player: SpeechAudioPlayer())
+        let player = SpeechAudioPlayer()
+        let arbiter = AudioArbiterService(player: player)
+        audioArbiter = arbiter
+        voicePreferences = VoicePreferencesService(
+            store: FileVoicePreferencesStore(fileURL: FileVoicePreferencesStore.defaultFileURL()),
+            catalog: SystemVoiceCatalog(),
+            output: player,
+            arbiter: arbiter
+        )
+        #else
+        voicePreferences = VoicePreferencesService(
+            store: FileVoicePreferencesStore(fileURL: FileVoicePreferencesStore.defaultFileURL()),
+            catalog: NoVoiceCatalog(),
+            output: nil,
+            arbiter: nil
+        )
         #endif
         let navigation = UnavailableNavigationService()
         routeCreator = navigation
@@ -139,6 +182,14 @@ struct AppDependencies {
         )
         profile = ProfileService(
             remote: RemoteProfileService(client: URLSessionHTTPClient(), baseURL: nil), arbiter: nil
+        )
+        contacts = TrustedContactsService(
+            remote: RemoteTrustedContactsService(client: URLSessionHTTPClient(), baseURL: nil), arbiter: nil
+        )
+        emergency = EmergencyService(
+            remote: RemoteEmergencyService(client: URLSessionHTTPClient(), baseURL: nil),
+            locator: NoEmergencyLocation(), connectivity: AssumeConnected(),
+            arbiter: nil, haptics: NoHapticFeedback()
         )
         accountDeleter = AccountDeletionService(
             remote: RemoteAccountService(client: URLSessionHTTPClient(), baseURL: nil),
