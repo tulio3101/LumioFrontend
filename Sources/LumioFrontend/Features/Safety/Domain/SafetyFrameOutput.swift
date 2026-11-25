@@ -5,14 +5,32 @@ struct DepthObstacleSignal: Equatable {
     let distanceMeters: Float
 }
 
-/// Salida del pipeline por frame: las detecciones YOLO rastreadas más los obstáculos detectados
-/// por profundidad (independientes de la clase). En la Parte 3 se añadirán los desniveles.
+/// Un desnivel listo para anunciar (ya pasó persistencia + cooldown en el pipeline). `isDanger`
+/// (bajada) dispara la háptica de peligro.
+struct ElevationHazardSignal: Equatable {
+    let hazard: ElevationHazard
+    let isDanger: Bool
+}
+
+/// Salida del pipeline por frame: detecciones YOLO rastreadas, obstáculos por profundidad y
+/// desniveles (escalón/escalera/bordillo/rampa).
 struct SafetyFrameOutput: Equatable {
     var tracked: [TrackedDetection]
     var depthObstacles: [DepthObstacleSignal]
+    var elevationHazards: [ElevationHazardSignal]
+    #if DEBUG
+    /// Diagnóstico del frame (solo Debug): perfil, piso, hazard crudo, YOLO crudas. nil en frames
+    /// sin datos (p. ej. inclinación fuera de rango).
+    var debug: SafetyDebugFrame?
+    #endif
 
-    init(tracked: [TrackedDetection] = [], depthObstacles: [DepthObstacleSignal] = []) {
+    init(
+        tracked: [TrackedDetection] = [],
+        depthObstacles: [DepthObstacleSignal] = [],
+        elevationHazards: [ElevationHazardSignal] = []
+    ) {
         self.tracked = tracked
         self.depthObstacles = depthObstacles
+        self.elevationHazards = elevationHazards
     }
 }

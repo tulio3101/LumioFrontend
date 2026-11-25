@@ -50,9 +50,19 @@ struct DetectionFocusConfig: Equatable {
     /// Altura (m) sobre el plano de piso por debajo de la cual un punto se considera "piso" y se
     /// descarta al buscar obstáculos (no es un obstáculo, es el suelo).
     var floorBandMeters: Float = 0.12
-    /// Zona del corredor analizada para desniveles (metros adelante del usuario).
-    var elevationNearMeters: Float = 0.5
+    /// Zona del corredor analizada para desniveles (metros adelante del usuario). `near` bajo
+    /// (0.3 m) para ver una escalera de bajada que arranca justo en el borde bajo los pies.
+    var elevationNearMeters: Float = 0.3
     var elevationFarMeters: Float = 3.0
+    /// Una subida solo es escalón si va seguida de una huella plana de al menos esta distancia a la
+    /// nueva altura; si no, es una pared/zócalo (SCRUM-33, corrección de falso escalón).
+    var minTreadMeters: Float = 0.20
+    /// Al muestrear el perfil se descartan puntos por encima de este techo sobre el piso: son
+    /// paredes/mobiliario alto, no desniveles del suelo.
+    var elevationCeilingMeters: Float = 0.4
+    /// Rango (m) por debajo de la cámara donde debe estar el plano del piso "bajo los pies".
+    var floorUnderFeetMinMeters: Float = 0.9
+    var floorUnderFeetMaxMeters: Float = 1.8
     /// Muestras de piso válido (confianza alta) que deben preceder a un hueco para confirmarlo
     /// como bajada/bordillo, y longitud mínima del hueco. Evita interpretar reflejos/vidrio/sol.
     var minFloorSamplesBeforeDrop: Int = 3
@@ -61,6 +71,17 @@ struct DetectionFocusConfig: Equatable {
     var dropStepMeters: Float = 0.10
     /// Subida (m) que confirma un escalón hacia arriba.
     var riseStepMeters: Float = 0.10
+    /// Rango de altura (m) de un escalón real (subida o bajada). Un cambio menor que `stepMin` es
+    /// ruido/rampa; uno mayor que `stepMax` NO es escalón/escalera (es una pared/obstáculo, lo
+    /// maneja `DepthObstacleDetector`). Valores típicos de escalón peatonal: 8–25 cm.
+    var stepMinMeters: Float = 0.08
+    var stepMaxMeters: Float = 0.25
+    /// Margen (m) bajo la cámara para considerar que un plano horizontal es "el piso" (y no una
+    /// mesa). El plano de piso es el más cercano por debajo de la cámara menos este margen.
+    var floorBelowCameraMargin: Float = 0.5
+    /// Un objeto cuya caja ocupe al menos esta fracción de alto se conserva aunque esté en el
+    /// borde del corredor: está cerca/parcialmente visible y no debe descartarse (SCRUM-33).
+    var corridorKeepLargeBoxHeightFraction: CGFloat = 0.5
 
     init() {}
 }

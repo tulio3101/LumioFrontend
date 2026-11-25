@@ -40,6 +40,16 @@ enum SafetyAudio {
         )
     }
 
+    /// SCRUM-33: sin LiDAR no se detectan desniveles (escalones/escaleras). Se avisa una sola vez.
+    static func elevationUnavailable() -> AudioMessage {
+        AudioMessage(
+            text: "No puedo detectar desniveles sin sensor de profundidad.",
+            priority: .environmentInformation,
+            contextID: context,
+            deduplicationKey: "safety-no-elevation"
+        )
+    }
+
     /// SCRUM-349: modo reducido (sin LiDAR), avisos de distancia aproximados.
     static func reducedMode() -> AudioMessage {
         AudioMessage(

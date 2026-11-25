@@ -152,6 +152,13 @@ final class DetectionPipeline: ObstacleDetectionPipeline {
             windowFrames: self.focusConfig.depthWindowFrames,
             cooldown: self.focusConfig.depthCooldownSeconds
         )
+        // SCRUM-33 (desniveles): mismo patrón de persistencia + cooldown por tipo de peligro.
+        let elevationAnalyzer = ElevationProfileAnalyzer()
+        var elevationGate = PersistenceGate(
+            minAppearances: self.focusConfig.depthMinAppearances,
+            windowFrames: self.focusConfig.depthWindowFrames,
+            cooldown: self.focusConfig.depthCooldownSeconds
+        )
         for await frame in frames {
             // Always release the gate when done — even if Task is cancelled or detect() throws.
             defer { self.frameSource.frameProcessingComplete() }
@@ -241,9 +248,58 @@ final class DetectionPipeline: ObstacleDetectionPipeline {
                 }
             }
 
-            output.yield(
-                SafetyFrameOutput(tracked: tracked, depthObstacles: depthObstacles)
+            // SCRUM-33: desniveles (escalón/escalera/bordillo/rampa). Solo con LiDAR y con el piso
+            // bajo los pies. Persistencia + cooldown por tipo.
+            var elevationHazards: [ElevationHazardSignal] = []
+            var elevationProfile: ElevationProfile?
+            var rawHazard: ElevationHazard?
+            if self.frameSource.isDepthAvailable, let depth = frame.depthData,
+               let camera = frame.camera, let floorHeight = frame.floorHeight {
+                let rect = corridor.rect(pitchDegrees: pitchDegrees ?? 0)
+                elevationProfile = ElevationProfileSampler.profile(
+                    from: depth, corridor: rect, camera: camera, floorHeight: floorHeight,
+                    nearMeters: self.focusConfig.elevationNearMeters,
+                    farMeters: self.focusConfig.elevationFarMeters,
+                    ceilingMeters: self.focusConfig.elevationCeilingMeters
+                )
+                // El piso viene del plano bajo los pies: una bajada que arranca en el borde (sin
+                // muestras de piso visibles antes) igual se detecta.
+                rawHazard = elevationProfile.map {
+                    elevationAnalyzer.analyze($0, config: self.focusConfig, hasKnownFloor: true)
+                }
+                let announcement = rawHazard.flatMap { ElevationAudio.announcement(for: $0) }
+                let present: Set<String> = announcement.map { [$0.typeKey] } ?? []
+                let fire = elevationGate.update(present: present, now: Date())
+                if let hazard = rawHazard, let announcement, fire.contains(announcement.typeKey) {
+                    elevationHazards.append(
+                        ElevationHazardSignal(hazard: hazard, isDanger: announcement.isDanger)
+                    )
+                }
+            }
+
+            var frameOutput = SafetyFrameOutput(
+                tracked: tracked, depthObstacles: depthObstacles, elevationHazards: elevationHazards
             )
+            #if DEBUG
+            frameOutput.debug = SafetyDebugFrame(
+                timestamp: frame.timestamp,
+                pitchDegrees: pitchDegrees,
+                floorHeight: frame.floorHeight,
+                cameraHeightAboveFloor: frame.camera.flatMap { cam in
+                    frame.floorHeight.map { cam.transform.columns.3.y - $0 }
+                },
+                profileForward: elevationProfile?.samples.map(\.forwardMeters) ?? [],
+                profileHeights: elevationProfile?.samples.map(\.heightAboveFloor) ?? [],
+                rawHazard: rawHazard?.debugLabel ?? (frame.floorHeight == nil ? "sin piso" : "plano"),
+                announcedHazards: elevationHazards.map { $0.hazard.debugLabel },
+                rawDetections: raw.map {
+                    SafetyDebugFrame.RawDetection(cls: $0.obstacleClass.rawValue, confidence: $0.confidence)
+                },
+                trackedCount: tracked.count,
+                depthObstacleCount: depthObstacles.count
+            )
+            #endif
+            output.yield(frameOutput)
             // frame goes out of scope here — CVPixelBuffer/ARDepthData are released.
         }
     }

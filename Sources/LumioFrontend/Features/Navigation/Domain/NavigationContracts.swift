@@ -221,6 +221,10 @@ enum HapticCue: Equatable {
     case routeFailed
     /// La navegación terminó (Finalizar Ruta).
     case routeFinished
+    /// SCRUM-33: peligro grave (desnivel hacia abajo). 3 impactos fuertes.
+    case danger
+    /// SCRUM-33: aviso (subida o un obstáculo a menos de 1 m). 2 impactos medios.
+    case warning
 }
 
 /// Acompaña los anuncios de Crear Ruta. Los patrones de giro pertenecen a Guiar Giros.

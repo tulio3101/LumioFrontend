@@ -14,6 +14,8 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
 
     private let pipeline: any ObstacleDetectionPipeline
     private let audioArbiter: any AudioArbitrating
+    /// SCRUM-33: háptica de peligro para los desniveles hacia abajo. NoHapticFeedback fuera de iOS/tests.
+    private let haptics: any HapticFeedbackPlaying
     private var announcer: ObstacleAnnouncer
     /// Configuración inyectada (intervalos y distancia de peligro) para reiniciar el estado.
     private let initialAnnouncer: ObstacleAnnouncer
@@ -39,21 +41,57 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
         var lastDetections: [Detection] = []
         var lastDetectionDate: Date?
         var fps: Double = 0
+        /// SCRUM-33: diagnóstico del último frame (perfil, piso, hazard crudo, YOLO crudas).
+        var lastDebug: SafetyDebugFrame?
     }
     @Published var debugState = DebugState()
     private var debugFPSFrameCount = 0
     private var debugFPSWindowStart = Date()
 
+    // Grabación de 10 s a JSON (SCRUM-33): casos reales → tests.
+    @Published private(set) var recordingActive = false
+    @Published private(set) var lastRecordingName: String?
+    private var recordedFrames: [SafetyDebugFrame] = []
+    private var recordingUntil: Date?
+
     var debugPreviewFrameSource: ARKitFrameSource? { pipeline.previewFrameSource }
+
+    /// Graba los próximos `seconds` de frames de diagnóstico a un JSON en Documentos.
+    func startRecording(seconds: TimeInterval = 10) {
+        recordedFrames = []
+        recordingUntil = Date().addingTimeInterval(seconds)
+        recordingActive = true
+        lastRecordingName = nil
+    }
+
+    private func recordIfNeeded(_ debug: SafetyDebugFrame?, now: Date) {
+        guard let until = recordingUntil else { return }
+        if now < until {
+            if let debug { recordedFrames.append(debug) }
+        } else {
+            recordingUntil = nil
+            recordingActive = false
+            let name = "lumio-safety-\(Int(now.timeIntervalSince1970)).json"
+            if let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first,
+               let data = try? JSONEncoder().encode(recordedFrames) {
+                try? data.write(to: dir.appendingPathComponent(name))
+                lastRecordingName = name
+                logger.info("grabación guardada: \(name) (\(self.recordedFrames.count) frames)")
+            }
+            recordedFrames = []
+        }
+    }
     #endif
 
     init(
         pipeline: any ObstacleDetectionPipeline,
         audioArbiter: any AudioArbitrating,
-        announcer: ObstacleAnnouncer = ObstacleAnnouncer()
+        announcer: ObstacleAnnouncer = ObstacleAnnouncer(),
+        haptics: (any HapticFeedbackPlaying)? = nil
     ) {
         self.pipeline = pipeline
         self.audioArbiter = audioArbiter
+        self.haptics = haptics ?? NoHapticFeedback()
         self.announcer = announcer
         self.initialAnnouncer = announcer
     }
@@ -165,6 +203,10 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
         audioArbiter.receive(
             pipeline.isDepthAvailable ? SafetyAudio.fullMode() : SafetyAudio.reducedMode()
         )
+        // SCRUM-33: sin profundidad no se detectan desniveles; se dice una sola vez y no se inventa.
+        if !pipeline.isDepthAvailable {
+            audioArbiter.receive(SafetyAudio.elevationUnavailable())
+        }
     }
 
     // MARK: - Detection consumption
@@ -176,6 +218,8 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
         #if DEBUG
         debugState.lastDetections = output.tracked.map(\.detection)
         debugState.lastDetectionDate = now
+        debugState.lastDebug = output.debug
+        recordIfNeeded(output.debug, now: now)
         debugFPSFrameCount += 1
         let elapsed = now.timeIntervalSince(debugFPSWindowStart)
         if elapsed >= 1.0 {
@@ -187,6 +231,8 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
         for out in announcer.announcements(for: output.tracked, now: now) {
             onEvent?(out.event)
             audioArbiter.receive(out.message)
+            // SCRUM-33: un obstáculo a menos de 1 m (riesgo inmediato) también vibra.
+            if out.event.requiresImmediateAction { haptics.play(.warning) }
         }
         // SCRUM-33: obstáculos por profundidad (ya filtrados/persistidos en el pipeline).
         for obstacle in output.depthObstacles {
@@ -195,6 +241,16 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
             )
             onEvent?(out.event)
             audioArbiter.receive(out.message)
+            if out.event.requiresImmediateAction { haptics.play(.warning) }
+        }
+        // SCRUM-33: desniveles. Todo desnivel immediateRisk vibra: bajada = peligro (3 fuertes),
+        // subida = aviso (2 medios).
+        for signal in output.elevationHazards {
+            guard let out = announcer.elevationOutput(for: signal.hazard, now: now) else { continue }
+            onEvent?(out.event)
+            audioArbiter.receive(out.message)
+            if signal.isDanger { haptics.play(.danger) }
+            else if out.event.requiresImmediateAction { haptics.play(.warning) }
         }
     }
 }

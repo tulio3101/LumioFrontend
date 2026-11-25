@@ -167,7 +167,8 @@ struct AppDependencies {
             announcer: ObstacleAnnouncer(
                 announcementInterval: focusConfig.perTrackCooldownSeconds,
                 dangerDistanceMeters: focusConfig.dangerDistanceMeters
-            )
+            ),
+            haptics: haptics
         )
         // La compuerta reutiliza el PermissionsViewModel de la pantalla de permisos para el flujo
         // accesible de solicitud de cámara.

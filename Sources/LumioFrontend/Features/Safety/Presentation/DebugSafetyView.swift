@@ -10,9 +10,77 @@ struct DebugSafetySection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             statusHeader
+            recorderRow
+            diagnostics
             cameraWithBoxes
         }
         .padding(.vertical, 4)
+    }
+
+    // MARK: Grabar 10 s (SCRUM-33)
+
+    private var recorderRow: some View {
+        HStack(spacing: 10) {
+            Button {
+                service.startRecording(seconds: 10)
+            } label: {
+                Label(service.recordingActive ? "Grabando…" : "Grabar 10 s",
+                      systemImage: service.recordingActive ? "record.circle.fill" : "record.circle")
+            }
+            .font(.caption.bold())
+            .disabled(service.recordingActive)
+            if let name = service.lastRecordingName {
+                Text(name).font(.caption2.monospaced()).foregroundColor(.secondary).lineLimit(1)
+            }
+        }
+    }
+
+    // MARK: Diagnóstico de desniveles + YOLO crudas
+
+    @ViewBuilder
+    private var diagnostics: some View {
+        if let d = service.debugState.lastDebug {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("YOLO crudas: \(d.rawDetections.count) · tracked: \(d.trackedCount) · prof.obj: \(d.depthObstacleCount)")
+                    .font(.caption.monospacedDigit())
+                if !d.rawDetections.isEmpty {
+                    Text(d.rawDetections.map { "\($0.cls) \(String(format: "%.2f", $0.confidence))" }
+                        .joined(separator: ", "))
+                        .font(.caption2.monospaced()).foregroundColor(.secondary).lineLimit(2)
+                }
+                Text(floorLine(d)).font(.caption2.monospacedDigit()).foregroundColor(.secondary)
+                Text("hazard crudo: \(d.rawHazard)  ·  anunciado: \(d.announcedHazards.isEmpty ? "—" : d.announcedHazards.joined(separator: ", "))")
+                    .font(.caption2).foregroundColor(.secondary).lineLimit(2)
+                profileGraph(d)
+            }
+        }
+    }
+
+    private func floorLine(_ d: SafetyDebugFrame) -> String {
+        let floor = d.floorHeight.map { String(format: "%.2f", $0) } ?? "—"
+        let cam = d.cameraHeightAboveFloor.map { String(format: "%.2f", $0) } ?? "—"
+        let pitch = d.pitchDegrees.map { String(format: "%.0f°", $0) } ?? "—"
+        return "piso Y: \(floor)  ·  cámara sobre piso: \(cam) m  ·  pitch: \(pitch)"
+    }
+
+    /// Mini gráfica distancia vs. altura: una barra por bin (↑ verde arriba, ↓ roja abajo, hueco gris).
+    private func profileGraph(_ d: SafetyDebugFrame) -> some View {
+        HStack(alignment: .center, spacing: 2) {
+            ForEach(Array(d.profileHeights.enumerated()), id: \.offset) { _, h in
+                let mag = min(abs(h ?? 0) / 0.5, 1)   // normaliza a ±0.5 m
+                Rectangle()
+                    .fill(color(for: h))
+                    .frame(width: 6, height: CGFloat(4 + mag * 24))
+            }
+        }
+        .frame(height: 30, alignment: .center)
+    }
+
+    private func color(for height: Float?) -> Color {
+        guard let h = height else { return .gray }     // hueco
+        if h <= -0.08 { return .red }                   // bajada
+        if h >= 0.08 { return .blue }                   // subida
+        return .green                                   // ~plano
     }
 
     // MARK: Status rows

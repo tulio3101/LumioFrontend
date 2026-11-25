@@ -33,8 +33,13 @@ struct ObstacleTracker {
     mutating func update(_ detections: [Detection], pitchDegrees: Float? = nil) -> [TrackedDetection] {
         let pitch = pitchDegrees ?? 0
 
-        // 1. Solo objetos dentro del corredor de marcha.
-        let inCorridor = detections.filter { corridor.contains($0.boundingBox, pitchDegrees: pitch) }
+        // 1. Objetos dentro del corredor de marcha. Además se conservan los objetos grandes (caja
+        //    alta = cerca/parcialmente visible) aunque queden en el borde: no deben descartarse.
+        let keepLargeBox = config.corridorKeepLargeBoxHeightFraction
+        let inCorridor = detections.filter {
+            corridor.contains($0.boundingBox, pitchDegrees: pitch)
+                || $0.boundingBox.height >= keepLargeBox
+        }
 
         // 2. Avanzar la ventana: por defecto nadie se vio este frame.
         for i in tracks.indices {
