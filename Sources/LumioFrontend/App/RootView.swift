@@ -15,6 +15,8 @@ struct RootView: View {
     let signOut: any SigningOut
     let profile: any ProfileManaging
     let accountDeleter: any AccountDeleting
+    /// Configurar Preferencias de Voz Descriptiva (Preferencias > Preferencias de voz).
+    let voicePreferences: any VoicePreferencesManaging
     /// SCRUM-33: detección de obstáculos y su compuerta de permiso de cámara. nil fuera de iOS
     /// o si el modelo YOLO no cargó. Se pasa a DestinationView para arrancarla con la ruta.
     let safetyMonitor: (any SafetyMonitoring)?
@@ -44,6 +46,7 @@ struct RootView: View {
         signOut: any SigningOut,
         profile: any ProfileManaging,
         accountDeleter: any AccountDeleting,
+        voicePreferences: any VoicePreferencesManaging,
         permissions: PermissionsViewModel,
         safetyMonitor: (any SafetyMonitoring)? = nil,
         obstacleGate: (any CameraAssistanceGating)? = nil,
@@ -61,6 +64,7 @@ struct RootView: View {
         self.signOut = signOut
         self.profile = profile
         self.accountDeleter = accountDeleter
+        self.voicePreferences = voicePreferences
         self.authenticationService = authenticationService
         self.permissions = permissions
         self.safetyMonitor = safetyMonitor
@@ -84,6 +88,7 @@ struct RootView: View {
         signOut: any SigningOut,
         profile: any ProfileManaging,
         accountDeleter: any AccountDeleting,
+        voicePreferences: any VoicePreferencesManaging,
         safetyMonitor: (any SafetyMonitoring)? = nil,
         obstacleGate: (any CameraAssistanceGating)? = nil,
         voiceCommands: VoiceCommandService? = nil
@@ -100,6 +105,7 @@ struct RootView: View {
         self.signOut = signOut
         self.profile = profile
         self.accountDeleter = accountDeleter
+        self.voicePreferences = voicePreferences
         self.authenticationService = authenticationService
         self.safetyMonitor = safetyMonitor
         self.obstacleGate = obstacleGate
@@ -145,10 +151,14 @@ struct RootView: View {
                 #if os(iOS)
                 SettingsView(
                     signOut: signOut, profile: profile, accountDeleter: accountDeleter,
+                    voicePreferences: voicePreferences,
                     onSignedOut: { entry = .welcome }, permissions: permissions
                 )
                 #else
-                SettingsView(signOut: signOut, profile: profile, accountDeleter: accountDeleter) { entry = .welcome }
+                SettingsView(
+                    signOut: signOut, profile: profile, accountDeleter: accountDeleter,
+                    voicePreferences: voicePreferences
+                ) { entry = .welcome }
                 #endif
             }
             .tabItem { Label("Preferencias", systemImage: "gearshape") }
