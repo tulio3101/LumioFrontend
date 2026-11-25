@@ -32,6 +32,7 @@ struct LumioApp: App {
                 destinationSuggester: dependencies.destinationSuggester,
                 signOut: dependencies.signOut,
                 profile: dependencies.profile,
+                contacts: dependencies.contacts,
                 accountDeleter: dependencies.accountDeleter,
                 permissions: dependencies.permissions,
                 safetyMonitor: dependencies.safetyService,
@@ -58,6 +59,7 @@ struct LumioApp: App {
                 destinationSuggester: dependencies.destinationSuggester,
                 signOut: dependencies.signOut,
                 profile: dependencies.profile,
+                contacts: dependencies.contacts,
                 accountDeleter: dependencies.accountDeleter
             )
             #endif

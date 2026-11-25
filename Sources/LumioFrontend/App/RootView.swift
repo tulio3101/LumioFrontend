@@ -14,6 +14,7 @@ struct RootView: View {
     let authenticationService: any Authenticating
     let signOut: any SigningOut
     let profile: any ProfileManaging
+    let contacts: any TrustedContactsManaging
     let accountDeleter: any AccountDeleting
     /// SCRUM-33: detección de obstáculos y su compuerta de permiso de cámara. nil fuera de iOS
     /// o si el modelo YOLO no cargó. Se pasa a DestinationView para arrancarla con la ruta.
@@ -43,6 +44,7 @@ struct RootView: View {
         destinationSuggester: any DestinationSuggesting,
         signOut: any SigningOut,
         profile: any ProfileManaging,
+        contacts: any TrustedContactsManaging,
         accountDeleter: any AccountDeleting,
         permissions: PermissionsViewModel,
         safetyMonitor: (any SafetyMonitoring)? = nil,
@@ -60,6 +62,7 @@ struct RootView: View {
         self.destinationSuggester = destinationSuggester
         self.signOut = signOut
         self.profile = profile
+        self.contacts = contacts
         self.accountDeleter = accountDeleter
         self.authenticationService = authenticationService
         self.permissions = permissions
@@ -83,6 +86,7 @@ struct RootView: View {
         destinationSuggester: any DestinationSuggesting,
         signOut: any SigningOut,
         profile: any ProfileManaging,
+        contacts: any TrustedContactsManaging,
         accountDeleter: any AccountDeleting,
         safetyMonitor: (any SafetyMonitoring)? = nil,
         obstacleGate: (any CameraAssistanceGating)? = nil,
@@ -99,6 +103,7 @@ struct RootView: View {
         self.destinationSuggester = destinationSuggester
         self.signOut = signOut
         self.profile = profile
+        self.contacts = contacts
         self.accountDeleter = accountDeleter
         self.authenticationService = authenticationService
         self.safetyMonitor = safetyMonitor
@@ -144,11 +149,13 @@ struct RootView: View {
             NavigationStack {
                 #if os(iOS)
                 SettingsView(
-                    signOut: signOut, profile: profile, accountDeleter: accountDeleter,
+                    signOut: signOut, profile: profile, contacts: contacts, accountDeleter: accountDeleter,
                     onSignedOut: { entry = .welcome }, permissions: permissions
                 )
                 #else
-                SettingsView(signOut: signOut, profile: profile, accountDeleter: accountDeleter) { entry = .welcome }
+                SettingsView(
+                    signOut: signOut, profile: profile, contacts: contacts, accountDeleter: accountDeleter
+                ) { entry = .welcome }
                 #endif
             }
             .tabItem { Label("Preferencias", systemImage: "gearshape") }

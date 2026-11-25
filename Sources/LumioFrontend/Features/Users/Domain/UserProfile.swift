@@ -83,7 +83,8 @@ enum ProfilePolicy {
         )
     }
 
-    private static func displayNameIssue(_ name: String) -> DisplayNameIssue? {
+    /// Reglas del nombre ya normalizado. También las usan los contactos de confianza.
+    static func displayNameIssue(_ name: String) -> DisplayNameIssue? {
         // Python mide la longitud en puntos de código, no en grafemas como String.count.
         if name.unicodeScalars.count > displayNameMaxLength { return .tooLong(maximum: displayNameMaxLength) }
         let valid = name.contains(where: \.isLetter)

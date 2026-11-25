@@ -17,6 +17,7 @@ struct AppDependencies {
     let authenticationService: any Authenticating
     let signOut: any SigningOut
     let profile: any ProfileManaging
+    let contacts: any TrustedContactsManaging
     let accountDeleter: any AccountDeleting
     #if canImport(AVFoundation)
     let audioArbiter: AudioArbiterService
@@ -107,6 +108,12 @@ struct AppDependencies {
             remote: RemoteProfileService(client: routeClient, baseURL: configuration.apiBaseURL),
             tokens: tokens, arbiter: arbiter
         )
+        // Contactos de Confianza: GET/POST/PUT/DELETE /contacts con sesión. Viven solo en el
+        // backend: no hay copia local que borrar al cerrar sesión.
+        contacts = TrustedContactsService(
+            remote: RemoteTrustedContactsService(client: routeClient, baseURL: configuration.apiBaseURL),
+            tokens: tokens, arbiter: arbiter
+        )
         // Eliminar Cuenta: DELETE /users/me con sesión; después borra lo mismo que cerrar sesión.
         accountDeleter = AccountDeletionService(
             remote: RemoteAccountService(client: routeClient, baseURL: configuration.apiBaseURL),
@@ -139,6 +146,9 @@ struct AppDependencies {
         )
         profile = ProfileService(
             remote: RemoteProfileService(client: URLSessionHTTPClient(), baseURL: nil), arbiter: nil
+        )
+        contacts = TrustedContactsService(
+            remote: RemoteTrustedContactsService(client: URLSessionHTTPClient(), baseURL: nil), arbiter: nil
         )
         accountDeleter = AccountDeletionService(
             remote: RemoteAccountService(client: URLSessionHTTPClient(), baseURL: nil),
