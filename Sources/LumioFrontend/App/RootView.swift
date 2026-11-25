@@ -28,8 +28,16 @@ struct RootView: View {
     let obstacleGate: (any CameraAssistanceGating)?
     /// HU Interactuar mediante voz: botón «Comando de voz» en Trayecto. nil fuera de iOS.
     let voiceCommands: VoiceCommandService?
+    /// Pantalla Principal Accesible: estado que se locuta al abrir. nil fuera de iOS.
+    let homeStatus: HomeStatusService?
     /// Se decide antes del primer frame para no mostrar la bienvenida de forma transitoria.
     @State private var entry: AppEntry
+    /// «Ajustes» en la pantalla principal cambia a la pestaña Preferencias.
+    @State private var tab = HomeTab.route
+
+    private enum HomeTab: Hashable {
+        case route, settings
+    }
 
     #if os(iOS)
     /// SCRUM-315: permisos accesibles (micrófono, voz, ubicación, cámara) para el destino por
@@ -58,8 +66,10 @@ struct RootView: View {
         permissions: PermissionsViewModel,
         safetyMonitor: (any SafetyMonitoring)? = nil,
         obstacleGate: (any CameraAssistanceGating)? = nil,
-        voiceCommands: VoiceCommandService? = nil
+        voiceCommands: VoiceCommandService? = nil,
+        homeStatus: HomeStatusService? = nil
     ) {
+        self.homeStatus = homeStatus
         self.routeCreator = routeCreator
         self.routeModifier = routeModifier
         self.instructionRepeater = instructionRepeater
@@ -105,8 +115,10 @@ struct RootView: View {
         hapticPreferences: any HapticPreferencesManaging,
         safetyMonitor: (any SafetyMonitoring)? = nil,
         obstacleGate: (any CameraAssistanceGating)? = nil,
-        voiceCommands: VoiceCommandService? = nil
+        voiceCommands: VoiceCommandService? = nil,
+        homeStatus: HomeStatusService? = nil
     ) {
+        self.homeStatus = homeStatus
         self.routeCreator = routeCreator
         self.routeModifier = routeModifier
         self.instructionRepeater = instructionRepeater
@@ -145,7 +157,7 @@ struct RootView: View {
     }
 
     private var home: some View {
-        TabView {
+        TabView(selection: $tab) {
             NavigationStack {
                 DestinationView(
                     routeCreator: routeCreator,
@@ -159,12 +171,16 @@ struct RootView: View {
                     suggester: destinationSuggester,
                     safetyMonitor: safetyMonitor,
                     obstacleGate: obstacleGate,
-                    voiceCommands: voiceCommands
+                    voiceCommands: voiceCommands,
+                    emergency: emergency,
+                    homeStatus: homeStatus,
+                    onOpenSettings: { tab = .settings }
                 )
             }
             // Fijo en la pila de Trayecto: sigue visible al abrir la ruta activa.
             .emergencyControl(emergency, onSessionExpired: { entry = .welcome })
             .tabItem { Label("Trayecto", systemImage: "figure.walk") }
+            .tag(HomeTab.route)
 
             NavigationStack {
                 #if os(iOS)
@@ -181,6 +197,7 @@ struct RootView: View {
                 #endif
             }
             .tabItem { Label("Preferencias", systemImage: "gearshape") }
+            .tag(HomeTab.settings)
         }
         .tint(LumioColor.actionPrimary)
     }

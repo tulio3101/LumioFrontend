@@ -1,11 +1,14 @@
 #if canImport(SwiftUI)
 import SwiftUI
 
-/// Inicio del trayecto. Una sola acción principal: sin ruta, «Indicar destino»; con ruta
-/// activa, «Ver indicaciones» (y «Cambiar destino» como secundaria). El Magic Tap de
-/// VoiceOver consulta la ruta actual en toda la pantalla, también sin ruta. Planificar o cambiar el
-/// destino ocurre en su propia hoja (RoutePlannerView) y el detalle de la ruta en su propia
-/// pantalla (ActiveRouteView).
+/// Pantalla Principal Accesible (y la de Crear Ruta). Arriba, el estado de Lumio (se locuta
+/// al abrir la app) y las acciones principales con botones grandes: «Indicar destino por
+/// voz», «¿Cómo voy?» y «Ajustes». El botón de Emergencia está fijo abajo (EmergencyControl).
+/// Gestos: el Magic Tap de VoiceOver dicta un destino (o cierra la escucha si está abierta);
+/// «Indicar destino por voz» y «Emergencia» también están en las acciones del rotor de los
+/// elementos principales. Planificar o cambiar el destino escribiendo ocurre en su propia hoja
+/// (RoutePlannerView) y el detalle de la ruta en su propia pantalla (ActiveRouteView), donde el
+/// Magic Tap repite la indicación.
 struct DestinationView: View {
     @StateObject private var model: DestinationViewModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -24,6 +27,11 @@ struct DestinationView: View {
     /// SCRUM-37: estado de la detección y «Reintentar detección» durante la ruta.
     private let safetyService: SafetyService?
     #endif
+    /// Pantalla Principal Accesible: emergencia desde el rotor, estado al abrir y ajustes.
+    private let emergency: (any EmergencyManaging)?
+    private let homeStatus: HomeStatusService?
+    private let onOpenSettings: (() -> Void)?
+    @State private var statusText: String?
 
     init(
         routeCreator: any RouteCreating,
@@ -37,9 +45,15 @@ struct DestinationView: View {
         suggester: (any DestinationSuggesting)? = nil,
         safetyMonitor: (any SafetyMonitoring)? = nil,
         obstacleGate: (any CameraAssistanceGating)? = nil,
-        voiceCommands: VoiceCommandService? = nil
+        voiceCommands: VoiceCommandService? = nil,
+        emergency: (any EmergencyManaging)? = nil,
+        homeStatus: HomeStatusService? = nil,
+        onOpenSettings: (() -> Void)? = nil
     ) {
         self.voiceCommands = voiceCommands
+        self.emergency = emergency
+        self.homeStatus = homeStatus
+        self.onOpenSettings = onOpenSettings
         #if os(iOS)
         self.safetyService = safetyMonitor as? SafetyService
         #endif
@@ -63,6 +77,8 @@ struct DestinationView: View {
             VStack(alignment: .leading, spacing: 24) {
                 brandBar
                     .lumioEntrance(hasAppeared, delay: 0, reduceMotion: reduceMotion)
+                homeActions
+                    .lumioEntrance(hasAppeared, delay: 0.05, reduceMotion: reduceMotion)
                 if let route = model.route {
                     activeRouteSection(route)
                         .lumioEntrance(hasAppeared, delay: 0.1, reduceMotion: reduceMotion)
@@ -83,8 +99,6 @@ struct DestinationView: View {
                     howItWorks
                         .lumioEntrance(hasAppeared, delay: 0.2, reduceMotion: reduceMotion)
                 }
-                upcomingFeatures
-                    .lumioEntrance(hasAppeared, delay: 0.3, reduceMotion: reduceMotion)
                 // Panel de diagnóstico de la detección (solo builds Debug en iOS).
                 #if os(iOS) && DEBUG
                 if let service = debugContainer.service {
@@ -104,11 +118,15 @@ struct DestinationView: View {
             .frame(maxWidth: 560)
             .frame(maxWidth: .infinity)
         }
-        // Consultar Ruta con el gesto de VoiceOver; sin ruta, se informa por audio.
-        // Magic Tap solo existe en iOS (no disponible en macOS; la compilación portable lo omite).
+        // Pantalla principal: el Magic Tap dicta un destino; si la escucha está abierta, la
+        // cierra. Magic Tap solo existe en iOS (la compilación portable lo omite).
         #if os(iOS)
         .accessibilityAction(.magicTap) {
-            model.startRouteStatusQuery()
+            if voiceCommands?.isActive == true {
+                voiceCommands?.cancel()
+            } else {
+                dictateDestination()
+            }
         }
         #endif
         .background(LumioColor.background.ignoresSafeArea())
@@ -136,6 +154,15 @@ struct DestinationView: View {
             voiceCommands?.actions = model
         }
         .task { await model.restoreActiveRoute() }
+        // Al abrir la app se locuta el estado una vez; después solo se muestra.
+        .task {
+            guard let homeStatus else { return }
+            if let spoken = await homeStatus.announceOnLaunch() {
+                statusText = spoken
+            } else {
+                statusText = HomeAnnouncements.welcome(await homeStatus.snapshot())
+            }
+        }
     }
 
     // MARK: Secciones
@@ -152,6 +179,61 @@ struct DestinationView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Lumio, trayecto")
         .accessibilityAddTraits(.isHeader)
+    }
+
+    /// Pantalla Principal Accesible: estado de Lumio y las acciones principales, en el orden en
+    /// que las recorre VoiceOver. Botones de ancho completo (LumioPrimaryButtonStyle).
+    private var homeActions: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let statusText {
+                Button {
+                    Task {
+                        if let homeStatus { self.statusText = await homeStatus.announce() }
+                    }
+                } label: {
+                    Text(statusText)
+                        .font(.subheadline)
+                        .foregroundStyle(LumioColor.textSecondary)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Estado de Lumio. \(statusText)")
+                .accessibilityHint("Toca dos veces para escucharlo de nuevo.")
+                .homeQuickActions(dictate: dictateDestination, emergency: emergencyAction)
+            }
+
+            Button {
+                dictateDestination()
+            } label: {
+                Label(model.route == nil ? "Indicar destino por voz" : "Cambiar destino por voz", systemImage: "mic.fill")
+            }
+            .buttonStyle(LumioPrimaryButtonStyle())
+            .accessibilityHint("Lumio pregunta a dónde quieres ir y calcula la ruta. También con toque doble de dos dedos.")
+            .homeQuickActions(dictate: dictateDestination, emergency: emergencyAction)
+
+            Button {
+                model.startRouteStatusQuery()
+            } label: {
+                Label("¿Cómo voy?", systemImage: "location.north.line")
+            }
+            .buttonStyle(LumioSecondaryButtonStyle())
+            .disabled(model.isQueryingStatus)
+            .accessibilityHint("Dice el destino, el avance y la siguiente indicación de la ruta actual.")
+            .homeQuickActions(dictate: dictateDestination, emergency: emergencyAction)
+
+            if let onOpenSettings {
+                Button {
+                    onOpenSettings()
+                } label: {
+                    Label("Ajustes", systemImage: "gearshape")
+                }
+                .buttonStyle(LumioSecondaryButtonStyle())
+                .accessibilityHint("Abre Preferencias: voz, vibración, permisos, contactos y cuenta.")
+                .homeQuickActions(dictate: dictateDestination, emergency: emergencyAction)
+            }
+        }
     }
 
     /// Sin ruta: el mismo lenguaje visual que la bienvenida (símbolo radiante + panel de acción).
@@ -300,37 +382,49 @@ struct DestinationView: View {
         }
     }
 
-    private var upcomingFeatures: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "sparkles")
-                .font(.headline)
-                .foregroundStyle(LumioColor.textSecondary)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Próximamente")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(LumioColor.textPrimary)
-                Text("Guía de giros durante el trayecto, cámara y alertas de obstáculos.")
-                    .font(.subheadline)
-                    .foregroundStyle(LumioColor.textSecondary)
-            }
+    // MARK: Acciones
+
+    /// Dicta el destino por voz; sin servicio de voz, abre la búsqueda escrita.
+    private func dictateDestination() {
+        if let voiceCommands {
+            voiceCommands.actions = model
+            voiceCommands.startDestinationDictation()
+        } else {
+            planning = model.route == nil ? .create : .changeDestination
         }
-        .fixedSize(horizontal: false, vertical: true)
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(LumioColor.controlBorder.opacity(0.4), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
-        )
-        .accessibilityElement(children: .combine)
     }
 
-    // MARK: Acciones
+    /// Activa la emergencia (con su margen para cancelar) desde el rotor de VoiceOver.
+    private var emergencyAction: (() -> Void)? {
+        guard let emergency else { return nil }
+        return { emergency.activate() }
+    }
 
     private func openRouteIfReady() {
         guard opensRouteAfterPlanning else { return }
         opensRouteAfterPlanning = false
         showsRoute = true
+    }
+}
+
+private extension View {
+    /// Acciones rápidas del rotor de VoiceOver en los elementos principales.
+    func homeQuickActions(dictate: @escaping () -> Void, emergency: (() -> Void)?) -> some View {
+        accessibilityAction(named: "Indicar destino por voz", dictate)
+            .modifier(EmergencyRotorAction(activate: emergency))
+    }
+}
+
+private struct EmergencyRotorAction: ViewModifier {
+    let activate: (() -> Void)?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let activate {
+            content.accessibilityAction(named: "Emergencia", activate)
+        } else {
+            content
+        }
     }
 }
 

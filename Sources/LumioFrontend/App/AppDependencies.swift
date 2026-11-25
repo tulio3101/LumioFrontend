@@ -41,6 +41,8 @@ struct AppDependencies {
     let obstacleGate: (any CameraAssistanceGating)?
     /// HU Interactuar mediante voz: escucha local, intérprete y respuestas por el árbitro.
     let voiceCommands: VoiceCommandService
+    /// Pantalla Principal Accesible: sesión, permisos, seguridad y ruta, locutados al abrir.
+    let homeStatus: HomeStatusService
     #endif
 
     init(configuration: AppConfiguration = .main) {
@@ -237,9 +239,8 @@ struct AppDependencies {
         )
         // La compuerta reutiliza el PermissionsViewModel de la pantalla de permisos para el flujo
         // accesible de solicitud de cámara.
-        let permissionsViewModel = PermissionsViewModel(
-            service: PermissionService(provider: IOSPermissionProvider()), audio: audioArbiter
-        )
+        let permissionService = PermissionService(provider: IOSPermissionProvider())
+        let permissionsViewModel = PermissionsViewModel(service: permissionService, audio: audioArbiter)
         self.permissions = permissionsViewModel
         self.obstacleGate = ObstacleAssistanceGate(
             permissions: permissionsViewModel, audio: audioArbiter
@@ -257,6 +258,14 @@ struct AppDependencies {
             hapticSettings?.audioMessageChanged(message)
         }
         self.voiceCommands = voice
+        // Pantalla principal: solo lee estados locales (no pide permisos ni usa la red).
+        self.homeStatus = HomeStatusService(
+            session: session,
+            permissions: permissionService,
+            safetyModel: BundleSafetyModelChecker(),
+            routes: store,
+            arbiter: audioArbiter
+        )
         #endif
     }
 }

@@ -87,6 +87,23 @@ private func run(
     return (service, audio, actions)
 }
 
+@Test @MainActor func dictatingADestinationAsksWhereToGoDirectly() async {
+    let actions = FakeActions(hasActiveRoute: false)
+    let audio = RecordingAudio()
+    let service = VoiceCommandService(
+        listener: ScriptedListener(["la biblioteca"]), permissions: FakePermissions(), audio: audio
+    )
+    service.actions = actions
+
+    service.startDestinationDictation()
+    await service.waitUntilIdle()
+
+    #expect(audio.spoken.first == "¿A dónde quieres ir?")
+    #expect(!audio.spoken.contains("Te escucho."))
+    #expect(actions.performed == [.navigate(destination: "la biblioteca")])
+    #expect(service.phase == .idle)
+}
+
 @Test @MainActor func activatingVoiceListensAndRunsTheCommand() async {
     let (service, audio, actions) = await run(["repetir instrucción"])
     #expect(audio.spoken.first == "Te escucho.")
