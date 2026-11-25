@@ -223,6 +223,12 @@ enum HapticCue: String, Codable, CaseIterable, Equatable {
     case routeFailed
     /// La navegación terminó (Finalizar Ruta).
     case routeFinished
+    /// Botón de Emergencia: se activó y empieza el margen para cancelar.
+    case emergencyActivated
+    /// Botón de Emergencia: la alerta llegó a algún contacto.
+    case emergencySent
+    /// Botón de Emergencia: la alerta no se pudo enviar.
+    case emergencyFailed
     /// Una alerta de seguridad P1 empezó a sonar.
     case criticalAlert
 }

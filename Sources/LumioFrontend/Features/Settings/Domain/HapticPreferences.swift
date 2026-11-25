@@ -2,7 +2,8 @@ import Foundation
 
 /// Configurar Retroalimentación Háptica: activar o desactivar la vibración, elegir qué
 /// eventos vibran y con qué intensidad. Se guardan en el teléfono; no dependen del backend.
-/// Las alertas críticas (P1) no son configurables: siempre vibran con su patrón fuerte.
+/// Las alertas críticas (P1) y las del Botón de Emergencia no son configurables: siempre
+/// vibran con su patrón, sin escalar por la intensidad.
 struct HapticPreferences: Codable, Equatable {
     var isEnabled: Bool
     var intensity: HapticIntensity
@@ -12,7 +13,7 @@ struct HapticPreferences: Codable, Equatable {
 
     static let standard = HapticPreferences(isEnabled: true, intensity: .medium, disabledCues: [])
 
-    /// Si el evento vibra con estas preferencias. Las alertas críticas siempre vibran.
+    /// Si el evento vibra con estas preferencias. Las alertas de seguridad siempre vibran.
     func plays(_ cue: HapticCue) -> Bool {
         guard cue.isConfigurable else { return true }
         return isEnabled && !disabledCues.contains(cue)
@@ -45,14 +46,24 @@ enum HapticIntensity: String, Codable, CaseIterable, Identifiable {
 extension HapticCue {
     /// Los eventos que el usuario puede apagar, en el orden de la pantalla.
     static let configurable: [HapticCue] = allCases.filter(\.isConfigurable)
+    /// Alertas de seguridad: vibran siempre, aunque la vibración esté desactivada.
+    static let alwaysOn: [HapticCue] = allCases.filter { !$0.isConfigurable }
 
-    var isConfigurable: Bool { self != .criticalAlert }
+    var isConfigurable: Bool {
+        switch self {
+        case .routeReady, .routeFailed, .routeFinished: true
+        case .emergencyActivated, .emergencySent, .emergencyFailed, .criticalAlert: false
+        }
+    }
 
     var name: String {
         switch self {
         case .routeReady: "Ruta lista"
         case .routeFailed: "No se pudo calcular la ruta"
         case .routeFinished: "Ruta terminada"
+        case .emergencyActivated: "Emergencia activada"
+        case .emergencySent: "Alerta de emergencia enviada"
+        case .emergencyFailed: "No se pudo enviar la emergencia"
         case .criticalAlert: "Alerta de seguridad"
         }
     }
@@ -63,6 +74,9 @@ extension HapticCue {
         case .routeReady: "Dos toques cortos."
         case .routeFailed: "Un toque fuerte, una pausa y un toque suave."
         case .routeFinished: "Tres toques que van subiendo."
+        case .emergencyActivated: "Tres toques fuertes y espaciados."
+        case .emergencySent: "Dos toques rápidos, una pausa y un toque."
+        case .emergencyFailed: "Dos pares de toques fuertes."
         case .criticalAlert: "Cuatro toques fuertes y rápidos."
         }
     }
@@ -82,7 +96,7 @@ struct HapticPattern: Equatable {
     let pulses: [HapticPulse]
 
     /// El patrón de cada evento. Cada uno tiene un ritmo distinto para reconocerlo sin
-    /// escuchar el audio. La alerta crítica no se escala con la intensidad elegida.
+    /// escuchar el audio. Las alertas de seguridad no se escalan con la intensidad elegida.
     static func pattern(for cue: HapticCue, intensity: HapticIntensity) -> HapticPattern {
         let base: [HapticPulse]
         switch cue {
@@ -96,12 +110,23 @@ struct HapticPattern: Equatable {
                 HapticPulse(delay: 0.15, strength: 0.75),
                 HapticPulse(delay: 0.3, strength: 1),
             ]
+        case .emergencyActivated:
+            return .full([0, 0.25, 0.5])
+        case .emergencySent:
+            return .full([0, 0.12, 0.5])
+        case .emergencyFailed:
+            return .full([0, 0.1, 0.5, 0.6])
         case .criticalAlert:
-            return HapticPattern(pulses: [0, 0.1, 0.2, 0.3].map { HapticPulse(delay: $0, strength: 1) })
+            return .full([0, 0.1, 0.2, 0.3])
         }
         return HapticPattern(pulses: base.map {
             HapticPulse(delay: $0.delay, strength: min(1, $0.strength * intensity.scale))
         })
+    }
+
+    /// Toques a fuerza máxima en esos instantes.
+    private static func full(_ delays: [TimeInterval]) -> HapticPattern {
+        HapticPattern(pulses: delays.map { HapticPulse(delay: $0, strength: 1) })
     }
 }
 
@@ -154,7 +179,8 @@ enum HapticPreferencesAnnouncements {
         + "Al cerrar la app volverá la configuración anterior."
     static let storedUnreadable = "No se pudieron leer tus preferencias de vibración guardadas. "
         + "Se usan las predeterminadas."
-    static let criticalAlwaysOn = "Las alertas de seguridad siempre vibran, aunque desactives la vibración."
+    static let criticalAlwaysOn = "Las alertas de seguridad y las del botón de emergencia siempre vibran, "
+        + "aunque desactives la vibración."
     static let unsupported = "Este dispositivo no tiene vibración. Las alertas siguen llegando por audio."
 
     static func summary(_ preferences: HapticPreferences) -> String {

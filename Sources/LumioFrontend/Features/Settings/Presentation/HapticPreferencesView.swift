@@ -69,16 +69,19 @@ struct HapticPreferencesView: View {
             .disabled(!model.preferences.isEnabled)
 
             Section {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(HapticCue.criticalAlert.name)
-                    Text(HapticCue.criticalAlert.patternDescription)
-                        .font(.footnote)
-                        .foregroundStyle(LumioColor.textSecondary)
-                    Text("Siempre activa")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(LumioColor.textSecondary)
+                ForEach(HapticCue.alwaysOn, id: \.self) { cue in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(cue.name)
+                        Text(cue.patternDescription)
+                            .font(.footnote)
+                            .foregroundStyle(LumioColor.textSecondary)
+                        Text("Siempre activa")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(LumioColor.textSecondary)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityAction(named: "Probar vibración") { model.preview(cue) }
                 }
-                .accessibilityElement(children: .combine)
 
                 Button {
                     model.preview(.criticalAlert)

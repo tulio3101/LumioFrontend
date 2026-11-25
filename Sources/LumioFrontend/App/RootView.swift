@@ -14,6 +14,9 @@ struct RootView: View {
     let authenticationService: any Authenticating
     let signOut: any SigningOut
     let profile: any ProfileManaging
+    let contacts: any TrustedContactsManaging
+    /// Botón de Emergencia (SCRUM-35): fijo sobre la pestaña Trayecto y sus pantallas.
+    let emergency: any EmergencyManaging
     let accountDeleter: any AccountDeleting
     /// Configurar Preferencias de Voz Descriptiva (Preferencias > Preferencias de voz).
     let voicePreferences: any VoicePreferencesManaging
@@ -47,6 +50,8 @@ struct RootView: View {
         destinationSuggester: any DestinationSuggesting,
         signOut: any SigningOut,
         profile: any ProfileManaging,
+        contacts: any TrustedContactsManaging,
+        emergency: any EmergencyManaging,
         accountDeleter: any AccountDeleting,
         voicePreferences: any VoicePreferencesManaging,
         hapticPreferences: any HapticPreferencesManaging,
@@ -66,6 +71,8 @@ struct RootView: View {
         self.destinationSuggester = destinationSuggester
         self.signOut = signOut
         self.profile = profile
+        self.contacts = contacts
+        self.emergency = emergency
         self.accountDeleter = accountDeleter
         self.voicePreferences = voicePreferences
         self.hapticPreferences = hapticPreferences
@@ -91,6 +98,8 @@ struct RootView: View {
         destinationSuggester: any DestinationSuggesting,
         signOut: any SigningOut,
         profile: any ProfileManaging,
+        contacts: any TrustedContactsManaging,
+        emergency: any EmergencyManaging,
         accountDeleter: any AccountDeleting,
         voicePreferences: any VoicePreferencesManaging,
         hapticPreferences: any HapticPreferencesManaging,
@@ -109,6 +118,8 @@ struct RootView: View {
         self.destinationSuggester = destinationSuggester
         self.signOut = signOut
         self.profile = profile
+        self.contacts = contacts
+        self.emergency = emergency
         self.accountDeleter = accountDeleter
         self.voicePreferences = voicePreferences
         self.hapticPreferences = hapticPreferences
@@ -151,18 +162,20 @@ struct RootView: View {
                     voiceCommands: voiceCommands
                 )
             }
+            // Fijo en la pila de Trayecto: sigue visible al abrir la ruta activa.
+            .emergencyControl(emergency, onSessionExpired: { entry = .welcome })
             .tabItem { Label("Trayecto", systemImage: "figure.walk") }
 
             NavigationStack {
                 #if os(iOS)
                 SettingsView(
-                    signOut: signOut, profile: profile, accountDeleter: accountDeleter,
+                    signOut: signOut, profile: profile, contacts: contacts, accountDeleter: accountDeleter,
                     voicePreferences: voicePreferences, hapticPreferences: hapticPreferences,
                     onSignedOut: { entry = .welcome }, permissions: permissions
                 )
                 #else
                 SettingsView(
-                    signOut: signOut, profile: profile, accountDeleter: accountDeleter,
+                    signOut: signOut, profile: profile, contacts: contacts, accountDeleter: accountDeleter,
                     voicePreferences: voicePreferences, hapticPreferences: hapticPreferences
                 ) { entry = .welcome }
                 #endif

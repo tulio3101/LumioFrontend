@@ -22,11 +22,15 @@ confirma el cambio sin mirar la pantalla ni oír otra voz encima de VoiceOver.
 | routeReady | Ruta creada, destino cambiado o ruta recalculada | Dos toques cortos | Sí |
 | routeFailed | No se pudo calcular la ruta | Un toque fuerte, pausa y uno suave | Sí |
 | routeFinished | Finalizar Ruta (a mano o al llegar) | Tres toques que van subiendo | Sí |
+| emergencyActivated | Botón de Emergencia activado (empieza el margen para cancelar) | Tres toques fuertes y espaciados | No |
+| emergencySent | La alerta de emergencia llegó a algún contacto | Dos toques rápidos, pausa y un toque | No |
+| emergencyFailed | La alerta de emergencia no se pudo enviar | Dos pares de toques fuertes | No |
 | criticalAlert | Una alerta P1 del AudioArbiter empieza a sonar | Cuatro toques fuertes y rápidos | No |
 
 Antes de esta HU, ruta lista y ruta terminada vibraban igual (éxito del sistema) y las
 alertas de seguridad no vibraban. Ahora cada evento tiene un ritmo propio (HapticPattern) y
-la intensidad multiplica la fuerza de cada toque. La alerta crítica no se escala.
+la intensidad multiplica la fuerza de cada toque. Las alertas de seguridad (P1 y Botón de
+Emergencia, SCRUM-35) no se escalan ni se pueden apagar: son confirmaciones de seguridad.
 
 ## Diseño
 

@@ -32,6 +32,8 @@ struct LumioApp: App {
                 destinationSuggester: dependencies.destinationSuggester,
                 signOut: dependencies.signOut,
                 profile: dependencies.profile,
+                contacts: dependencies.contacts,
+                emergency: dependencies.emergency,
                 accountDeleter: dependencies.accountDeleter,
                 voicePreferences: dependencies.voicePreferences,
                 hapticPreferences: dependencies.hapticPreferences,
@@ -60,6 +62,8 @@ struct LumioApp: App {
                 destinationSuggester: dependencies.destinationSuggester,
                 signOut: dependencies.signOut,
                 profile: dependencies.profile,
+                contacts: dependencies.contacts,
+                emergency: dependencies.emergency,
                 accountDeleter: dependencies.accountDeleter,
                 voicePreferences: dependencies.voicePreferences,
                 hapticPreferences: dependencies.hapticPreferences

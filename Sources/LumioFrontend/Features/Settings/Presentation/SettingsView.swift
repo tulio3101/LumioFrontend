@@ -5,6 +5,8 @@ struct SettingsView: View {
     let signOut: any SigningOut
     /// Personalizar Cuenta (SCRUM-6).
     let profile: any ProfileManaging
+    /// Configurar Contactos de Confianza (SCRUM-319).
+    let contacts: any TrustedContactsManaging
     /// Eliminar Cuenta (SCRUM-7).
     let accountDeleter: any AccountDeleting
     /// Configurar Preferencias de Voz Descriptiva.
@@ -39,6 +41,15 @@ struct SettingsView: View {
             }
             .disabled(isSigningOut)
             .accessibilityHint("Activa o desactiva la vibración, elige qué eventos vibran y con qué intensidad.")
+            Section("Emergencia") {
+                NavigationLink {
+                    TrustedContactsView(service: contacts, onSessionExpired: onSignedOut)
+                } label: {
+                    Label("Contactos de confianza", systemImage: "person.2.fill")
+                }
+                .disabled(isSigningOut)
+                .accessibilityHint("Agrega, edita o elimina a quienes recibirán tu alerta de emergencia por correo.")
+            }
             Section("Cuenta") {
                 NavigationLink {
                     ProfileView(service: profile, onSessionExpired: onSignedOut)

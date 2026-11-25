@@ -215,6 +215,52 @@ Personalizar Cuenta (SCRUM-6), en Preferencias > Mi cuenta (ProfileView + Profil
      muestra en un aviso; los errores de cada campo van en su pista de VoiceOver. Sesión
      rechazada: se borran los tokens y se vuelve a la bienvenida.
 
+Contactos de Confianza (SCRUM-319), en Preferencias > Emergencia > Contactos de confianza
+(TrustedContactsView):
+  1. Los contactos (nombre y correo) viven solo en el backend: GET, POST, PUT y DELETE
+     /contacts con AuthorizedHTTPClient (RemoteTrustedContactsService). Siguen ahí al volver
+     a iniciar sesión; no hay copia local que borrar al cerrar sesión.
+  2. Agregar y editar validan en el teléfono con ContactsPolicy (nombre 1–60 con las reglas
+     del nombre de la cuenta; formato del correo con CredentialsPolicy; correo no repetido
+     entre los contactos cargados; máximo 5, igual que el backend). Con errores no se envía
+     nada y se locutan; editar sin cambiar nada tampoco envía. El correo se envía recortado
+     y en minúsculas.
+  3. Todo resultado, bueno o malo, lo locuta TrustedContactsService por el árbitro (contexto
+     `trusted-contacts`) y se muestra en un aviso: contacto guardado, actualizado, eliminado
+     o por qué no se pudo. Un fallo deja la lista como estaba.
+  4. La app no lee el `code` de los errores del backend (HTTPClientError solo guarda el
+     estado). Por eso 409 se locuta como «ese correo ya está en tu lista o ya tienes 5
+     contactos» y 422 como «el servidor no aceptó los datos… ni tu propio correo»: el
+     backend rechaza el correo de la propia cuenta y la app no lo conoce. Los casos de
+     repetido y máximo se detectan antes, en el teléfono, con mensaje exacto.
+  5. VoiceOver: cada contacto se lee como «nombre, correo» seguido de los botones «Editar a
+     …» y «Eliminar a …». Eliminar pide confirmación. Agregar con el máximo no abre el
+     formulario y lo dice. El formulario es una pantalla de la navegación (no una hoja), con
+     el error de cada campo en su pista; no se mueve el foco para no superponer la voz de
+     VoiceOver con la del árbitro.
+
+Botón de Emergencia (SCRUM-35), fijo sobre la pila de Trayecto (`.emergencyControl` en RootView):
+  1. Un solo botón principal cambia de «Emergencia» a «Cancelar alerta (n)» y a «Reintentar
+     envío» sin cambiar de identidad: el foco de VoiceOver no se pierde y quien activó con
+     doble toque cancela con otro doble toque en el mismo lugar. Es el estilo destructivo
+     (color de error con borde, icono y texto), no depende solo del color.
+  2. `activate()` da feedback al instante (háptica de aviso y audio con prioridad inmediata
+     que recuerda que no sustituye al 123) y abre 10 s para cancelar. `cancel()` no envía nada
+     y lo dice. Una segunda activación durante el margen se ignora.
+  3. Durante el margen se pide la ubicación (CoreLocationEmergencyLocator) **sin pedir
+     permiso**: sin permiso o sin señal la alerta sale sin ubicación y el correo lo dice. Y se
+     cuentan los contactos (GET /contacts, sin audio): sin ninguno se informa de inmediato en
+     lugar de hacer esperar el margen.
+  4. Al terminar el margen, POST /sos con una llave de idempotencia (RemoteEmergencyService).
+     Sin conexión conocida no se intenta y se informa. «Reintentar» reenvía la misma alerta con
+     la misma llave y sin nueva cuenta atrás, así que nunca duplica correos.
+  5. Todo resultado se locuta (contexto `emergency`) con háptica de éxito o error; un envío
+     parcial dice a cuántos llegó, y todo fallo recuerda el 123. Sesión rechazada: se borran los
+     tokens y, al cerrar el aviso, se vuelve a la bienvenida.
+  El backend es el que manda el correo (SES, ADR-310); la app solo ve estados (201, 409
+  `no_trusted_contacts`, 502 `sos_delivery_failed`). Solo correo: sin push ni ubicación en
+  tiempo real.
+
 Eliminar Cuenta (SCRUM-7), en Preferencias > Eliminar cuenta (DeleteAccountView):
   1. Al entrar se explican las consecuencias (cuenta, contactos de confianza, historial
      de rutas y preferencias; no se puede deshacer). Sin VoiceOver las locuta

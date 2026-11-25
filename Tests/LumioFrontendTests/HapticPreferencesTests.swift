@@ -194,6 +194,19 @@ private func pattern(_ cue: HapticCue, _ intensity: HapticIntensity = .medium) -
     #expect(harness.player.played == [pattern(.criticalAlert)])
 }
 
+@Test @MainActor func emergencyEventsAlwaysVibrateAtFullStrength() {
+    let harness = HapticHarness(stored: HapticPreferences(isEnabled: false, intensity: .soft, disabledCues: []))
+
+    harness.service.play(.emergencyActivated)
+    harness.service.play(.emergencySent)
+    harness.service.play(.emergencyFailed)
+
+    #expect(harness.player.played == [pattern(.emergencyActivated), pattern(.emergencySent), pattern(.emergencyFailed)])
+    #expect(harness.player.played.allSatisfy { $0.pulses.allSatisfy { $0.strength == 1 } })
+    #expect(HapticCue.alwaysOn == [.emergencyActivated, .emergencySent, .emergencyFailed, .criticalAlert])
+    #expect(HapticCue.configurable == [.routeReady, .routeFailed, .routeFinished])
+}
+
 // MARK: - Se conservan al cerrar y abrir la app
 
 @Test @MainActor func preferencesSurviveClosingAndReopeningTheApp() throws {

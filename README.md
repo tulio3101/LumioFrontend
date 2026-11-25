@@ -50,6 +50,14 @@ avisa por audio, calcula una ruta nueva al mismo destino y la anuncia; sin red s
 la copia local, lo avisa y recalcula al volver la conexión. También hay «Recalcular ruta»
 a mano en «Tu ruta». El destino se escribe (con sugerencias) mientras no exista el dictado
 (SCRUM-313); la guía de giros durante el trayecto es SCRUM-312.
+Configurar Contactos de Confianza (SCRUM-319) permite agregar, editar y eliminar los contactos
+(nombre y correo, hasta 5) que recibirán por correo la alerta de emergencia, en Preferencias.
+Se validan en el teléfono y en el backend, se guardan en `/contacts` y cada resultado se anuncia
+por audio; el botón de emergencia que los usa es otra HU.
+El Botón de Emergencia (SCRUM-35) está fijo en la parte inferior de Trayecto: al activarlo da
+audio y háptica, deja 10 s para cancelar y luego envía por correo (vía el backend) la ubicación a los
+contactos de confianza. Sin permiso de ubicación sale sin ella; sin contactos o sin conexión lo
+informa por audio. No sustituye a los servicios de emergencia y así se lo dice al usuario.
 El registro y el inicio de sesión con correo están conectados a /users: los tokens se
 guardan en Keychain y se renuevan solos; Google sigue pendiente.
 Audio ya incluye cola, política, árbitro y adaptador AVSpeechSynthesizer.

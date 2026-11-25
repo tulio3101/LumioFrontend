@@ -8,7 +8,8 @@ import Foundation
 ///    pasa por aquí, se filtra con las preferencias en memoria y vibra con su patrón. Nunca
 ///    espera al disco ni a la red.
 /// 3. Las alertas críticas (P1 del AudioArbiter) vibran siempre con su patrón fuerte, sin
-///    importar las preferencias: se detectan cuando el árbitro empieza a reproducirlas.
+///    importar las preferencias: se detectan cuando el árbitro empieza a reproducirlas. Los
+///    eventos del Botón de Emergencia también vibran siempre.
 /// 4. Al cambiar algo lo aplica, lo guarda y, si no se pudo guardar, lo dice por audio.
 @MainActor
 final class HapticPreferencesService: HapticFeedbackPlaying, HapticPreferencesManaging, HapticPreferencesResetting {
