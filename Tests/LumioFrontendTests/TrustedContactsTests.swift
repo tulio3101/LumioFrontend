@@ -119,14 +119,14 @@ private struct ContactsHarness {
         == .duplicate(ofName: "Pedro"))
 }
 
-@Test func valuesAreNormalizedLikeTheBackend() {
+@Test func contactsValuesAreNormalizedLikeTheBackend() {
     #expect(ContactsPolicy.draft(name: "  Ana   María ", email: "  Ana@Example.COM ")
         == ContactDraft(name: "Ana María", email: "ana@example.com"))
     // «é» escrita con tilde combinante se envía compuesta.
     #expect(ContactsPolicy.normalizedName("Jose\u{301}")?.unicodeScalars.count == 4)
 }
 
-@Test func firstInvalidFieldFollowsTheScreenOrder() {
+@Test func contactsFirstInvalidFieldFollowsTheScreenOrder() {
     let validation = ContactsPolicy.validate(name: "R2", email: "x", existing: [])
 
     #expect(validation.firstInvalidField == .name)
@@ -152,7 +152,7 @@ private struct ContactsHarness {
     #expect(harness.arbiter.received.isEmpty)
 }
 
-@Test @MainActor func loadFailureIsSpoken() async {
+@Test @MainActor func contactsLoadFailureIsSpoken() async {
     let harness = ContactsHarness()
     harness.remote.listResult = .failure(URLError(.notConnectedToInternet))
 
@@ -249,7 +249,7 @@ private struct ContactsHarness {
     #expect(harness.lastSpoken?.hasPrefix("Sin conexión.") == true)
 }
 
-@Test @MainActor func expiredSessionClearsTheTokens() async {
+@Test @MainActor func contactsExpiredSessionClearsTheTokens() async {
     let harness = await ContactsHarness().loaded()
     harness.remote.writeResult = .failure(AuthenticationError.sessionExpired)
 
@@ -345,7 +345,7 @@ private struct ContactsHarness {
     #expect(harness.service.contacts == [pedro])
 }
 
-@Test @MainActor func aNewMessageReplacesThePreviousOne() async {
+@Test @MainActor func contactsANewMessageReplacesThePreviousOne() async {
     let harness = await ContactsHarness().loaded()
 
     _ = await harness.service.addContact(name: "", email: "x")
@@ -355,7 +355,7 @@ private struct ContactsHarness {
     #expect(harness.lastSpoken == "Contacto guardado: Luis, luis@example.com.")
 }
 
-@Test func backendErrorsAreClassified() {
+@Test func contactsBackendErrorsAreClassified() {
     #expect(TrustedContactsService.failure(for: URLError(.notConnectedToInternet)) == .offline)
     #expect(TrustedContactsService.failure(for: URLError(.badServerResponse)) == .server)
     #expect(TrustedContactsService.failure(for: AuthenticationError.sessionExpired) == .sessionExpired)
@@ -490,7 +490,7 @@ private struct ContactsFlow {
     #expect(flow.spoken == "No se guardó el contacto. El correo no es válido. Revisa que tenga el formato nombre@dominio.com.")
 }
 
-@Test @MainActor func expiredAccessTokenIsRenewedBeforeSaving() async throws {
+@Test @MainActor func contactsExpiredAccessTokenIsRenewedBeforeSaving() async throws {
     let flow = ContactsFlow(backend: .success(listJSON([])))
     _ = await flow.service.loadContacts()
     let tokenPair = Data("""
@@ -506,7 +506,7 @@ private struct ContactsFlow {
     #expect(flow.http.requests.last?.value(forHTTPHeaderField: "Authorization") == "Bearer access-2")
 }
 
-@Test @MainActor func rejectedSessionClearsTokensAndIsSpoken() async {
+@Test @MainActor func contactsRejectedSessionClearsTokensAndIsSpoken() async {
     let flow = ContactsFlow(backend: .failure(HTTPClientError.statusCode(401)))
 
     let result = await flow.service.loadContacts()
