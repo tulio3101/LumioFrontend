@@ -41,7 +41,8 @@ struct LumioApp: App {
                 safetyMonitor: dependencies.safetyService,
                 obstacleGate: dependencies.obstacleGate,
                 voiceCommands: dependencies.voiceCommands,
-                homeStatus: dependencies.homeStatus
+                homeStatus: dependencies.homeStatus,
+                preferencesSync: dependencies.preferencesSync
             )
             // View.environmentObject() is iOS 13+; Scene.environmentObject() requires iOS 17.
             // Keeping this on the View avoids the availability constraint.

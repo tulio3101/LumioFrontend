@@ -30,6 +30,8 @@ struct RootView: View {
     let voiceCommands: VoiceCommandService?
     /// Pantalla Principal Accesible: estado que se locuta al abrir. nil fuera de iOS.
     let homeStatus: HomeStatusService?
+    /// Respaldo de preferencias: se sincroniza al entrar y se olvida la cuenta al salir.
+    let preferencesSync: PreferencesSynchronizer?
     /// Se decide antes del primer frame para no mostrar la bienvenida de forma transitoria.
     @State private var entry: AppEntry
     /// «Ajustes» en la pantalla principal cambia a la pestaña Preferencias.
@@ -67,9 +69,11 @@ struct RootView: View {
         safetyMonitor: (any SafetyMonitoring)? = nil,
         obstacleGate: (any CameraAssistanceGating)? = nil,
         voiceCommands: VoiceCommandService? = nil,
-        homeStatus: HomeStatusService? = nil
+        homeStatus: HomeStatusService? = nil,
+        preferencesSync: PreferencesSynchronizer? = nil
     ) {
         self.homeStatus = homeStatus
+        self.preferencesSync = preferencesSync
         self.routeCreator = routeCreator
         self.routeModifier = routeModifier
         self.instructionRepeater = instructionRepeater
@@ -116,9 +120,11 @@ struct RootView: View {
         safetyMonitor: (any SafetyMonitoring)? = nil,
         obstacleGate: (any CameraAssistanceGating)? = nil,
         voiceCommands: VoiceCommandService? = nil,
-        homeStatus: HomeStatusService? = nil
+        homeStatus: HomeStatusService? = nil,
+        preferencesSync: PreferencesSynchronizer? = nil
     ) {
         self.homeStatus = homeStatus
+        self.preferencesSync = preferencesSync
         self.routeCreator = routeCreator
         self.routeModifier = routeModifier
         self.instructionRepeater = instructionRepeater
@@ -144,6 +150,24 @@ struct RootView: View {
     #endif
 
     var body: some View {
+        content
+            // Con sesión (al abrir o al iniciar sesión): subir lo pendiente o bajar lo más
+            // reciente. Al cerrar sesión o eliminar la cuenta, la siguiente empieza de cero.
+            .task {
+                if entry == .home { await preferencesSync?.synchronize() }
+            }
+            .onChange(of: entry) { newEntry in
+                switch newEntry {
+                case .home:
+                    Task { await preferencesSync?.synchronize() }
+                case .welcome:
+                    preferencesSync?.forgetAccount()
+                }
+            }
+    }
+
+    @ViewBuilder
+    private var content: some View {
         switch entry {
         case .welcome:
             WelcomeView(

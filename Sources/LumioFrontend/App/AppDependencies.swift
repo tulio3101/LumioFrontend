@@ -43,6 +43,8 @@ struct AppDependencies {
     let voiceCommands: VoiceCommandService
     /// Pantalla Principal Accesible: sesión, permisos, seguridad y ruta, locutados al abrir.
     let homeStatus: HomeStatusService
+    /// Copia de respaldo de las preferencias de voz y vibración en el backend.
+    let preferencesSync: PreferencesSynchronizer
     #endif
 
     init(configuration: AppConfiguration = .main) {
@@ -153,6 +155,22 @@ struct AppDependencies {
             tokens: tokens, routes: store, recentRoutes: recentStore, pendingHistory: history,
             voicePreferences: voiceSettings, hapticPreferences: hapticSettings, arbiter: arbiter
         )
+        // Preferencias de voz y vibración: se aplican del teléfono y se respaldan en
+        // GET/PUT /users/me/preferences en segundo plano; nunca retrasan el audio.
+        let preferencesSynchronizer = PreferencesSynchronizer(
+            remote: RemotePreferencesService(client: routeClient, baseURL: configuration.apiBaseURL),
+            stateStore: FilePreferencesSyncStateStore(fileURL: FilePreferencesSyncStateStore.defaultFileURL()),
+            voice: voiceSettings,
+            haptics: hapticSettings
+        )
+        voiceSettings.onPreferencesChanged = { [weak preferencesSynchronizer] in
+            preferencesSynchronizer?.localPreferencesChanged()
+        }
+        hapticSettings.onPreferencesChanged = { [weak preferencesSynchronizer] in
+            preferencesSynchronizer?.localPreferencesChanged()
+        }
+        preferencesSync = preferencesSynchronizer
+        monitor.start { Task { await preferencesSynchronizer.synchronize() } }
         // El historial pendiente se envía al abrir la app y cada vez que vuelve la conexión.
         monitor.start { Task { await history.flush() } }
         connectivity = monitor

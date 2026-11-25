@@ -12,7 +12,8 @@ import Foundation
 ///    eventos del Botón de Emergencia también vibran siempre.
 /// 4. Al cambiar algo lo aplica, lo guarda y, si no se pudo guardar, lo dice por audio.
 @MainActor
-final class HapticPreferencesService: HapticFeedbackPlaying, HapticPreferencesManaging, HapticPreferencesResetting {
+final class HapticPreferencesService: HapticFeedbackPlaying, HapticPreferencesManaging, HapticPreferencesResetting,
+    SyncableHapticPreferences {
     static let contextID = "haptic-preferences"
 
     private let store: any HapticPreferencesStoring
@@ -22,6 +23,8 @@ final class HapticPreferencesService: HapticFeedbackPlaying, HapticPreferencesMa
 
     private(set) var preferences: HapticPreferences
     private(set) var storedUnreadable: Bool
+    /// Cada cambio del usuario aplicado: PreferencesSynchronizer lo sube en segundo plano.
+    var onPreferencesChanged: (() -> Void)?
 
     init(
         store: any HapticPreferencesStoring,
@@ -64,6 +67,7 @@ final class HapticPreferencesService: HapticFeedbackPlaying, HapticPreferencesMa
         guard new != preferences else { return .unchanged }
         preferences = new
         storedUnreadable = false
+        defer { onPreferencesChanged?() }
         do {
             try store.save(new)
             return .saved
@@ -75,6 +79,13 @@ final class HapticPreferencesService: HapticFeedbackPlaying, HapticPreferencesMa
 
     func preview(_ cue: HapticCue) {
         player?.play(HapticPattern.pattern(for: cue, intensity: preferences.intensity))
+    }
+
+    /// Lo que llegó del backend (más reciente que lo del teléfono). Sin volver a subirlo.
+    func applySynced(_ synced: HapticPreferences) {
+        try? store.save(synced)
+        preferences = synced
+        storedUnreadable = false
     }
 
     func resetToStandard() {

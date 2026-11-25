@@ -53,9 +53,9 @@ Audio/Data/SpeechAudioPlayer.swift          Aplica idioma, voz y velocidad a cad
 - Se aplican a todas las locuciones del AudioArbiter: el ajuste está en SpeechAudioPlayer, el
   único reproductor del árbitro. Seguridad, navegación, narración, comandos de voz y los
   mensajes de cuenta usan la misma configuración.
-- Se leen siempre del teléfono: FileVoicePreferencesStore es la única fuente. No hay
-  sincronización con el backend en esta HU (no hay contrato de preferencias en el backend).
-  Cuando exista, debe ir después de aplicar y guardar en el teléfono, sin bloquear.
+- Se leen siempre del teléfono: FileVoicePreferencesStore es la única fuente al abrir la app.
+  PreferencesSynchronizer las respalda en segundo plano en GET/PUT /users/me/preferences
+  (ver «Respaldo en el backend» en docs/HU-preferencias-hapticas.md); nunca bloquea el audio.
 - Se conservan al cerrar y abrir la app: cada cambio aplicado se guarda en el JSON.
 - Informar cuando una configuración no se puede aplicar (se locuta y se muestra en un aviso):
   - Velocidad fuera de 0,5–2, idioma no disponible o voz no instalada: no se cambia nada.
