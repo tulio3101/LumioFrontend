@@ -42,12 +42,22 @@ final class VoiceCommandService: ObservableObject {
     }
 
     func start() {
+        start(initial: nil)
+    }
+
+    /// Pantalla Principal Accesible: «Indicar destino por voz» y el Magic Tap preguntan
+    /// directamente a dónde ir, con el mismo flujo que el comando «nueva ruta».
+    func startDestinationDictation() {
+        start(initial: .navigate(destination: nil))
+    }
+
+    private func start(initial: VoiceCommand?) {
         guard session == nil else { return }
         interruptedByAlert = false
         let id = UUID()
         sessionID = id
         session = Task { [weak self] in
-            await self?.run()
+            await self?.run(initial: initial)
             self?.finishSession(id)
         }
     }
@@ -80,7 +90,7 @@ final class VoiceCommandService: ObservableObject {
 
     // MARK: - Conversación
 
-    private func run() async {
+    private func run(initial: VoiceCommand?) async {
         phase = .preparing
         guard await permissions.prepareVoiceInput() else {
             await speak(
@@ -92,6 +102,10 @@ final class VoiceCommandService: ObservableObject {
         guard !Task.isCancelled else { return }
         if audio.isPlayingCriticalAlert {
             audio.announce("Hay una alerta en curso. Activa el comando de voz cuando termine.")
+            return
+        }
+        if let initial {
+            await handle(initial)
             return
         }
         await speak("Te escucho.")
