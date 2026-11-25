@@ -7,8 +7,8 @@ import Foundation
 /// 2. Pide al backend que borre la cuenta (DELETE /users/me). Solo si responde 204 se toca
 ///    el teléfono: si falla, la cuenta y todo lo local siguen como estaban.
 /// 3. Borra lo que la cuenta guarda en el teléfono: el historial pendiente (no se envía, la
-///    cuenta ya no existe), la ruta activa, la copia de rutas recientes y los tokens.
-///    Las preferencias (UserPreferences) aún no existen: al crearlas, borrarlas aquí.
+///    cuenta ya no existe), la ruta activa, la copia de rutas recientes, los tokens y las
+///    preferencias de voz (vuelve la voz predeterminada).
 /// 4. Corta el audio de la sesión y anuncia el resultado; los errores también se locutan.
 @MainActor
 final class AccountDeletionService: AccountDeleting {
@@ -19,6 +19,7 @@ final class AccountDeletionService: AccountDeleting {
     private let routes: any ActiveRouteStoring
     private let recentRoutes: (any RecentRoutesStoring)?
     private let pendingHistory: (any PendingHistorySyncing)?
+    private let voicePreferences: (any VoicePreferencesResetting)?
     private let arbiter: (any AudioArbitrating)?
     private let now: () -> Date
     private(set) var isDeleting = false
@@ -29,6 +30,7 @@ final class AccountDeletionService: AccountDeleting {
         routes: any ActiveRouteStoring,
         recentRoutes: (any RecentRoutesStoring)? = nil,
         pendingHistory: (any PendingHistorySyncing)? = nil,
+        voicePreferences: (any VoicePreferencesResetting)? = nil,
         arbiter: (any AudioArbitrating)?,
         now: @escaping () -> Date = Date.init
     ) {
@@ -37,6 +39,7 @@ final class AccountDeletionService: AccountDeleting {
         self.routes = routes
         self.recentRoutes = recentRoutes
         self.pendingHistory = pendingHistory
+        self.voicePreferences = voicePreferences
         self.arbiter = arbiter
         self.now = now
     }
@@ -79,6 +82,7 @@ final class AccountDeletionService: AccountDeleting {
         try? routes.clear()
         try? recentRoutes?.clear()
         tokens.clear()
+        voicePreferences?.resetToStandard()
         // Instrucciones de la ruta y cualquier otro mensaje de la cuenta borrada.
         arbiter?.resetSession()
     }

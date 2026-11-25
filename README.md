@@ -53,6 +53,9 @@ a mano en «Tu ruta». El destino se escribe (con sugerencias) mientras no exist
 El registro y el inicio de sesión con correo están conectados a /users: los tokens se
 guardan en Keychain y se renuevan solos; Google sigue pendiente.
 Audio ya incluye cola, política, árbitro y adaptador AVSpeechSynthesizer.
+En Preferencias > Preferencias de voz se eligen el idioma (variante de español), la voz y la
+velocidad de todo lo que dice Lumio; se guardan en el teléfono y se aplican desde la primera
+locución al abrir la app (ver docs/HU-preferencias-de-voz.md).
 También deduplica eventos P2/P3 y reemplaza narraciones pendientes de capturas
 antiguas mediante metadatos opcionales; las reglas están en la guía de arquitectura.
 No están implementados cámara, seguridad, inicio de sesión con Google ni llamadas de narración.

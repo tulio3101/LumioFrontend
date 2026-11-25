@@ -200,8 +200,8 @@ local y detiene el audio.
 
 Personalizar Cuenta (SCRUM-6), en Preferencias > Mi cuenta (ProfileView + ProfileViewModel):
   1. ProfileService consulta GET /users/me (RemoteProfileService con AuthorizedHTTPClient):
-     correo (solo lectura), nombre y celular. Solo el perfil: las preferencias de voz y
-     háptica son UserPreferences (SCRUM-27, 28 y 32) y se leen del teléfono.
+     correo (solo lectura), nombre y celular. Solo el perfil: las preferencias de voz
+     (VoicePreferences) se leen del teléfono; ver docs/HU-preferencias-de-voz.md.
   2. Guardar valida en el teléfono con ProfilePolicy (las mismas reglas que
      UserProfileUpdate: nombre 1–60 en NFC con letras, espacios, ' . -; celular de 10
      dígitos que empieza por 3). Con errores no se envía nada; si no cambió nada, tampoco.
@@ -225,14 +225,13 @@ Eliminar Cuenta (SCRUM-7), en Preferencias > Eliminar cuenta (DeleteAccountView)
   3. RemoteAccountService: DELETE /users/me con AuthorizedHTTPClient (renueva el access
      token una vez si hace falta). El backend borra en cascada sesiones, rutas e historial.
   4. Solo con 204 se borra el teléfono: se descarta el historial pendiente (no se envía),
-     la ruta activa, las rutas recientes y los tokens; se reinicia el árbitro y se anuncia
+     la ruta activa, las rutas recientes, los tokens y las preferencias de voz (vuelve la
+     voz predeterminada); se reinicia el árbitro y se anuncia
      «Cuenta eliminada…». La app vuelve a la bienvenida.
   5. Errores (todos locutados y mostrados; la cuenta sigue): sin conexión, fallo del
      servidor (500/503) o sesión rechazada; en este último se borran los tokens y se
      vuelve a la bienvenida para iniciar sesión otra vez. Un segundo toque mientras se
      elimina se ignora.
-  Las preferencias (UserPreferences) aún no existen: cuando se creen, AccountDeletionService
-  debe borrarlas del teléfono en el paso 4.
 
 La ruta está lista en cuanto existe la copia local: la guía no depende del backend.
 Si el backend falla, la ruta queda pendiente (remoteID nil o hasPendingDestinationChange)
@@ -270,7 +269,7 @@ local esté disponible.
 | Narration | Servicio remoto y control de frecuencia | HTTPClient, POST /narration |
 | Users | Inicio de sesión con Google | Correo, Keychain, Bearer y refresh implementados |
 | Places | Confirmar contrato de favoritos con backend | El backend actual expone rutas, no asumir CRUD de favoritos |
-| Settings | Preferencias y consumo por TTS | Persistencia local de preferencias si se requiere |
+| Settings | Sincronizar preferencias de voz con el backend cuando exista el contrato | Idioma, voz y velocidad locales aplicados en SpeechAudioPlayer |
 
 Agregar Data/ o Presentation/ cuando exista implementación; no crear repositorios
 ni interfaces vacías para cada clase. Mantener tests por funcionalidad conforme crezcan.
