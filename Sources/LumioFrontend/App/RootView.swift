@@ -15,6 +15,8 @@ struct RootView: View {
     let signOut: any SigningOut
     let profile: any ProfileManaging
     let contacts: any TrustedContactsManaging
+    /// Botón de Emergencia (SCRUM-35): fijo sobre la pestaña Trayecto y sus pantallas.
+    let emergency: any EmergencyManaging
     let accountDeleter: any AccountDeleting
     /// Configurar Preferencias de Voz Descriptiva (Preferencias > Preferencias de voz).
     let voicePreferences: any VoicePreferencesManaging
@@ -47,6 +49,7 @@ struct RootView: View {
         signOut: any SigningOut,
         profile: any ProfileManaging,
         contacts: any TrustedContactsManaging,
+        emergency: any EmergencyManaging,
         accountDeleter: any AccountDeleting,
         voicePreferences: any VoicePreferencesManaging,
         permissions: PermissionsViewModel,
@@ -66,6 +69,7 @@ struct RootView: View {
         self.signOut = signOut
         self.profile = profile
         self.contacts = contacts
+        self.emergency = emergency
         self.accountDeleter = accountDeleter
         self.voicePreferences = voicePreferences
         self.authenticationService = authenticationService
@@ -91,6 +95,7 @@ struct RootView: View {
         signOut: any SigningOut,
         profile: any ProfileManaging,
         contacts: any TrustedContactsManaging,
+        emergency: any EmergencyManaging,
         accountDeleter: any AccountDeleting,
         voicePreferences: any VoicePreferencesManaging,
         safetyMonitor: (any SafetyMonitoring)? = nil,
@@ -109,6 +114,7 @@ struct RootView: View {
         self.signOut = signOut
         self.profile = profile
         self.contacts = contacts
+        self.emergency = emergency
         self.accountDeleter = accountDeleter
         self.voicePreferences = voicePreferences
         self.authenticationService = authenticationService
@@ -150,6 +156,8 @@ struct RootView: View {
                     voiceCommands: voiceCommands
                 )
             }
+            // Fijo en la pila de Trayecto: sigue visible al abrir la ruta activa.
+            .emergencyControl(emergency, onSessionExpired: { entry = .welcome })
             .tabItem { Label("Trayecto", systemImage: "figure.walk") }
 
             NavigationStack {

@@ -239,6 +239,28 @@ Contactos de Confianza (SCRUM-319), en Preferencias > Emergencia > Contactos de 
      el error de cada campo en su pista; no se mueve el foco para no superponer la voz de
      VoiceOver con la del árbitro.
 
+Botón de Emergencia (SCRUM-35), fijo sobre la pila de Trayecto (`.emergencyControl` en RootView):
+  1. Un solo botón principal cambia de «Emergencia» a «Cancelar alerta (n)» y a «Reintentar
+     envío» sin cambiar de identidad: el foco de VoiceOver no se pierde y quien activó con
+     doble toque cancela con otro doble toque en el mismo lugar. Es el estilo destructivo
+     (color de error con borde, icono y texto), no depende solo del color.
+  2. `activate()` da feedback al instante (háptica de aviso y audio con prioridad inmediata
+     que recuerda que no sustituye al 123) y abre 10 s para cancelar. `cancel()` no envía nada
+     y lo dice. Una segunda activación durante el margen se ignora.
+  3. Durante el margen se pide la ubicación (CoreLocationEmergencyLocator) **sin pedir
+     permiso**: sin permiso o sin señal la alerta sale sin ubicación y el correo lo dice. Y se
+     cuentan los contactos (GET /contacts, sin audio): sin ninguno se informa de inmediato en
+     lugar de hacer esperar el margen.
+  4. Al terminar el margen, POST /sos con una llave de idempotencia (RemoteEmergencyService).
+     Sin conexión conocida no se intenta y se informa. «Reintentar» reenvía la misma alerta con
+     la misma llave y sin nueva cuenta atrás, así que nunca duplica correos.
+  5. Todo resultado se locuta (contexto `emergency`) con háptica de éxito o error; un envío
+     parcial dice a cuántos llegó, y todo fallo recuerda el 123. Sesión rechazada: se borran los
+     tokens y, al cerrar el aviso, se vuelve a la bienvenida.
+  El backend es el que manda el correo (SES, ADR-310); la app solo ve estados (201, 409
+  `no_trusted_contacts`, 502 `sos_delivery_failed`). Solo correo: sin push ni ubicación en
+  tiempo real.
+
 Eliminar Cuenta (SCRUM-7), en Preferencias > Eliminar cuenta (DeleteAccountView):
   1. Al entrar se explican las consecuencias (cuenta, contactos de confianza, historial
      de rutas y preferencias; no se puede deshacer). Sin VoiceOver las locuta

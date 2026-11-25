@@ -221,6 +221,12 @@ enum HapticCue: Equatable {
     case routeFailed
     /// La navegación terminó (Finalizar Ruta).
     case routeFinished
+    /// Botón de Emergencia: se activó y empieza el margen para cancelar.
+    case emergencyActivated
+    /// Botón de Emergencia: la alerta llegó a algún contacto.
+    case emergencySent
+    /// Botón de Emergencia: la alerta no se pudo enviar.
+    case emergencyFailed
 }
 
 /// Acompaña los anuncios de Crear Ruta. Los patrones de giro pertenecen a Guiar Giros.

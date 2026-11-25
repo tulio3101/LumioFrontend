@@ -15,6 +15,13 @@ final class UIKitHapticFeedback: HapticFeedbackPlaying {
             generator.notificationOccurred(.error)
         case .routeFinished:
             generator.notificationOccurred(.success)
+        case .emergencyActivated:
+            // Distinto de éxito y de error: avisa que empezó el margen para cancelar.
+            generator.notificationOccurred(.warning)
+        case .emergencySent:
+            generator.notificationOccurred(.success)
+        case .emergencyFailed:
+            generator.notificationOccurred(.error)
         }
     }
 }
