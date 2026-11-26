@@ -67,6 +67,6 @@ final class SessionTeardown: SessionTearingDown {
         // 4. Vaciar la cola de audio (navegación + seguridad). Va al final para que nada quede
         //    sonando; el aviso "Sesión cerrada" se emite DESPUÉS del reset para que sobreviva.
         arbiter?.resetSession()
-        arbiter?.receive(SessionAudio.closed())
+        FeedbackCatalog.emit(.sessionClosed, audio: arbiter)
     }
 }

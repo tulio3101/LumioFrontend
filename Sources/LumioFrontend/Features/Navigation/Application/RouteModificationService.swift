@@ -76,8 +76,9 @@ final class RouteModificationService: RouteModifying {
             }
         } catch {
             let failure = (error as? RouteCreationError) ?? .serviceUnavailable
-            arbiter.receive(instructions.modificationFailureMessage(failure, keeping: current, now: now()))
-            haptics.play(.routeFailed)
+            FeedbackCatalog.emit(
+                .routeModificationFailed(failure, keeping: current), audio: arbiter, haptics: haptics, now: now()
+            )
             throw failure
         }
 
@@ -86,11 +87,10 @@ final class RouteModificationService: RouteModifying {
                 invalidatedContextIDs: [NavigationInstructionBuilder.contextID(for: current)]
             ))
         }
-        arbiter.receive(instructions.updatedMessage(for: updated, now: now()))
+        FeedbackCatalog.emit(.routeModified(updated), audio: arbiter, haptics: haptics, now: now())
         if let first = updated.steps.first {
             arbiter.receive(instructions.message(for: first, in: updated, now: now()))
         }
-        haptics.play(.routeReady)
         return await synchronizer.synchronize(updated)
     }
 }

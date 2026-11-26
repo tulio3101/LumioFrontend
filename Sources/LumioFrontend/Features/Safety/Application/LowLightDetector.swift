@@ -1,8 +1,7 @@
-#if os(iOS)
-import UIKit
+import Foundation
 
 /// Detects insufficient ambient light using ARKit's lightEstimate.ambientIntensity.
-/// SCRUM-249/250: configurable threshold. SCRUM-251: alerts via AudioArbiter + haptics.
+/// SCRUM-249/250: configurable threshold. SCRUM-251: alerts via AudioArbiter + haptic engine (FeedbackCatalog).
 /// SCRUM-252: hysteresis prevents alert/recover flicker at the threshold boundary.
 /// SCRUM-253: fully on-device, no network dependency.
 ///
@@ -18,18 +17,21 @@ final class LowLightDetector {
     let hysteresisMargin: Float
 
     private let audioArbiter: any AudioArbitrating
+    private let haptics: (any HapticFeedbackPlaying)?
     private var isAlertActive = false
-    private let feedbackGenerator = UINotificationFeedbackGenerator()
 
+    /// SCRUM-31: el aviso sale de `FeedbackCatalog` por el árbitro y el motor háptico (que
+    /// aplica las preferencias del usuario); no hay un `UINotificationFeedbackGenerator` propio.
     init(
         audioArbiter: any AudioArbitrating,
+        haptics: (any HapticFeedbackPlaying)? = nil,
         alertThreshold: Float = 100.0,
         hysteresisMargin: Float = 40.0
     ) {
         self.audioArbiter = audioArbiter
+        self.haptics = haptics
         self.alertThreshold = alertThreshold
         self.hysteresisMargin = hysteresisMargin
-        feedbackGenerator.prepare()
     }
 
     /// Call with ARFrame.lightEstimate.ambientIntensity (read as a Float inside the delegate,
@@ -49,12 +51,7 @@ final class LowLightDetector {
     private func emitAlert() {
         Task { @MainActor [weak self] in
             guard let self else { return }
-            self.audioArbiter.receive(AudioMessage(
-                text: "Poca luz. Avanza con precaución.",
-                priority: .immediateRisk,
-                deduplicationKey: "low-light-alert"
-            ))
-            self.feedbackGenerator.notificationOccurred(.warning)
+            FeedbackCatalog.emit(.lowLight, audio: self.audioArbiter, haptics: self.haptics)
         }
     }
 
@@ -62,13 +59,7 @@ final class LowLightDetector {
         Task { @MainActor [weak self] in
             guard let self else { return }
             // SCRUM-36: deja de alertar y lo confirma por audio (P3) al volver la luz adecuada.
-            self.audioArbiter.receive(AudioMessage(
-                text: "Luz suficiente de nuevo.",
-                priority: .environmentInformation,
-                deduplicationKey: "low-light-recovered"
-            ))
-            self.feedbackGenerator.notificationOccurred(.success)
+            FeedbackCatalog.emit(.lowLightRecovered, audio: self.audioArbiter, haptics: self.haptics)
         }
     }
 }
-#endif

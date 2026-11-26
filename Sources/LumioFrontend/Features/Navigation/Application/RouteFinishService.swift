@@ -47,8 +47,7 @@ final class RouteFinishService: RouteFinishing {
         try? history.enqueue(result.finished)
         try? store.clear()
 
-        speak(RouteFinishAnnouncements.finished(result), key: "finished-\(route.id.uuidString)")
-        haptics.play(.routeFinished)
+        FeedbackCatalog.emit(.routeFinished(result), audio: arbiter, haptics: haptics, now: now())
 
         // No se espera a la red: la pantalla y el audio ya confirmaron el final.
         Task { [history] in await history.flush() }

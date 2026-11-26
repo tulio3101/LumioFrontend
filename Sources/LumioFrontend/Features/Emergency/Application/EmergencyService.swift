@@ -81,8 +81,7 @@ final class EmergencyService: EmergencyManaging {
         knownContactCount = nil
         lastAlert = nil
         phase = .countingDown(secondsRemaining: Self.countdownSeconds)
-        haptics.play(.emergencyActivated)
-        speak(EmergencyAnnouncements.activated(seconds: Self.countdownSeconds))
+        emit(.emergencyActivated(seconds: Self.countdownSeconds))
         run = Task { [weak self] in await self?.countdownThenSend(key: key) }
     }
 
@@ -93,7 +92,7 @@ final class EmergencyService: EmergencyManaging {
         run = nil
         locationTask = nil
         phase = .cancelled
-        speak(EmergencyAnnouncements.cancelled)
+        emit(.emergencyCancelled)
     }
 
     func retry() {
@@ -126,7 +125,7 @@ final class EmergencyService: EmergencyManaging {
                 return
             }
             phase = .countingDown(secondsRemaining: remaining)
-            if remaining == Self.reminderSecond { speak(EmergencyAnnouncements.countdown(remaining)) }
+            if remaining == Self.reminderSecond { emit(.emergencyCountdown(remaining)) }
             do { try await sleep(1) } catch { return }
             if Task.isCancelled { return }
             remaining -= 1
@@ -142,7 +141,7 @@ final class EmergencyService: EmergencyManaging {
     private func send(_ alert: EmergencyAlert) async {
         lastAlert = alert
         phase = .sending
-        speak(EmergencyAnnouncements.sending)
+        emit(.emergencySending)
         // Sin red conocida no se intenta: se dice de inmediato en lugar de esperar al tiempo límite.
         guard connectivity.isConnected else {
             fail(.offline)
@@ -152,8 +151,7 @@ final class EmergencyService: EmergencyManaging {
             let delivery = try await remote.send(alert)
             run = nil
             phase = .sent(delivery)
-            haptics.play(.emergencySent)
-            speak(EmergencyAnnouncements.sent(delivery))
+            emit(.emergencySent(delivery))
         } catch {
             fail(Self.failure(for: error))
         }
@@ -163,21 +161,14 @@ final class EmergencyService: EmergencyManaging {
         run = nil
         if failure == .sessionExpired { tokens?.clear() }
         phase = .failed(failure)
-        haptics.play(.emergencyFailed)
-        speak(EmergencyAnnouncements.failed(failure))
+        emit(.emergencyFailed(failure))
     }
 
-    /// Un mensaje nuevo reemplaza al anterior del mismo flujo. Prioridad máxima: lo que el
-    /// usuario pidió en una emergencia pasa por delante de la navegación.
-    private func speak(_ text: String) {
-        guard let arbiter else { return }
-        arbiter.cancel(contextIDs: [Self.contextID])
-        arbiter.receive(AudioMessage(
-            text: text,
-            priority: .immediateRisk,
-            createdAt: now(),
-            contextID: Self.contextID
-        ))
+    /// SCRUM-31: el aviso sale del catálogo (P1, contexto `emergency`) por el árbitro y el motor
+    /// háptico. Un mensaje nuevo reemplaza al anterior del mismo flujo.
+    private func emit(_ event: FeedbackEvent) {
+        arbiter?.cancel(contextIDs: [Self.contextID])
+        FeedbackCatalog.emit(event, audio: arbiter, haptics: haptics, now: now())
     }
 
     nonisolated static func failure(for error: Error) -> EmergencyFailure {

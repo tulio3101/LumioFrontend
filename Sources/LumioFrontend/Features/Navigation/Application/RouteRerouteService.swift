@@ -54,7 +54,9 @@ final class RouteRerouteService: RouteRerouting {
         }
         guard connectivity.isConnected else {
             if trigger != .retry {
-                speak(RerouteAnnouncements.offline(destination: current.destination.name), key: "offline")
+                FeedbackCatalog.emit(
+                    .offline(destination: current.destination.name), audio: arbiter, haptics: haptics, now: now()
+                )
             }
             return .offline
         }
@@ -91,11 +93,10 @@ final class RouteRerouteService: RouteRerouting {
         } catch {
             let failure = (error as? RouteCreationError) ?? .serviceUnavailable
             if trigger != .retry {
-                speak(
-                    RerouteAnnouncements.failure(failure, destination: current.destination.name),
-                    key: "failure-\(failure)"
+                FeedbackCatalog.emit(
+                    .rerouteFailed(failure, destination: current.destination.name),
+                    audio: arbiter, haptics: haptics, now: now()
                 )
-                haptics.play(.routeFailed)
             }
             return .failed(failure)
         }
@@ -103,11 +104,10 @@ final class RouteRerouteService: RouteRerouting {
         arbiter.updateContext(AudioDecisionContext(
             invalidatedContextIDs: [NavigationInstructionBuilder.contextID(for: current)]
         ))
-        arbiter.receive(instructions.reroutedMessage(for: updated, now: now()))
+        FeedbackCatalog.emit(.routeRecalculated(updated), audio: arbiter, haptics: haptics, now: now())
         if let first = updated.steps.first {
             arbiter.receive(instructions.message(for: first, in: updated, now: now()))
         }
-        haptics.play(.routeReady)
         return .rerouted(await synchronizer.synchronize(updated))
     }
 

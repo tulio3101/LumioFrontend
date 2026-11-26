@@ -201,7 +201,7 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
             if outageAnnounced {
                 outageAnnounced = false
                 audioArbiter.cancel(contextIDs: [SafetyAudio.context])
-                audioArbiter.receive(SafetyAudio.detectionRecovered())
+                FeedbackCatalog.emit(.detectionRecovered, audio: audioArbiter, haptics: haptics)
             }
             if !modeAnnounced {
                 modeAnnounced = true
@@ -237,10 +237,9 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
         // SCRUM-321: pausa/reanudación por calor crítico (una sola vez por transición).
         if let paused = output.thermalPaused {
             if paused {
-                audioArbiter.receive(SafetyAudio.thermalPaused())
-                haptics?.play(.warning)
+                FeedbackCatalog.emit(.thermalPaused, audio: audioArbiter, haptics: haptics)
             } else {
-                audioArbiter.receive(SafetyAudio.thermalResumed())
+                FeedbackCatalog.emit(.thermalResumed, audio: audioArbiter, haptics: haptics)
             }
             return
         }

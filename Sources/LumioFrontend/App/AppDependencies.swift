@@ -286,7 +286,7 @@ struct AppDependencies {
             frameSource: frameSource,
             runnerFactory: { try detectorLoader.load() },
             discardRunner: { detectorLoader.discard() },
-            lowLightDetector: LowLightDetector(audioArbiter: audioArbiter),
+            lowLightDetector: LowLightDetector(audioArbiter: audioArbiter, haptics: haptics),
             focusConfig: focusConfig,
             pitchReminder: PhonePitchReminder(
                 audioArbiter: audioArbiter, cooldown: focusConfig.pitchReminderCooldown

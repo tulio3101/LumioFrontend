@@ -72,15 +72,13 @@ final class RouteCreationService: RouteCreating {
             }
         } catch {
             let failure = (error as? RouteCreationError) ?? .serviceUnavailable
-            arbiter.receive(instructions.failureMessage(failure, now: now()))
-            haptics.play(.routeFailed)
+            FeedbackCatalog.emit(.routeCreationFailed(failure), audio: arbiter, haptics: haptics, now: now())
             throw failure
         }
-        arbiter.receive(instructions.readyMessage(for: route, now: now()))
+        FeedbackCatalog.emit(.routeCreated(route), audio: arbiter, haptics: haptics, now: now())
         if let first = route.steps.first {
             arbiter.receive(instructions.message(for: first, in: route, now: now()))
         }
-        haptics.play(.routeReady)
         return await synchronizer.synchronize(route)
     }
 
