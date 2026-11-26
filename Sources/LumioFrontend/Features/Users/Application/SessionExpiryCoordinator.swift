@@ -59,7 +59,7 @@ final class SessionExpiryCoordinator: ObservableObject {
         if hasActiveRoute {
             // Hay ruta: NO apagar la detección ni la navegación. Avisar una sola vez.
             awaitingRouteEnd = true
-            arbiter?.receive(SessionAudio.expiredRouteContinues())
+            FeedbackCatalog.emit(.sessionExpired, audio: arbiter)
         } else {
             await finishTeardown()
         }

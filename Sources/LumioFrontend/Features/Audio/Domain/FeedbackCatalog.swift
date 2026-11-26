@@ -3,6 +3,12 @@ import Foundation
 /// SCRUM-31: un solo catálogo de avisos de sistema (audio + háptica). El texto se reutiliza de
 /// los anuncios que ya existen; la prioridad la decide el AudioArbiter y el patrón el motor
 /// háptico. Nada de TTS ni `UINotificationFeedbackGenerator` fuera de esos dos.
+///
+/// La matriz completa (evento → prioridad → patrón) está en
+/// `docs/HU-recibir-retroalimentacion-del-sistema.md`. Prioridades: 1 seguridad
+/// (`.immediateRisk`), 2 navegación y avisos del sistema (`.routeInformation`), 3 narración e
+/// información (`.environmentInformation`). La cola, la interrupción y la reproducción son del
+/// árbitro (SCRUM-42): el catálogo solo dice qué suena y con qué prioridad.
 struct FeedbackItem {
     let message: AudioMessage
     let haptic: HapticCue?
@@ -14,10 +20,21 @@ enum FeedbackEvent: Equatable {
     case routeRecalculated(ActiveRoute)
     case routeFinished(RouteFinishResult)
     case arrival(RouteFinishResult)
+    /// No se pudo crear la ruta (SCRUM-201: error de una acción).
+    case routeCreationFailed(RouteCreationError)
+    /// No se pudo cambiar el destino; la ruta anterior, si había, sigue activa.
+    case routeModificationFailed(RouteCreationError, keeping: ActiveRoute?)
+    /// No se pudo recalcular la ruta tras un desvío o a pedido.
+    case rerouteFailed(RouteCreationError, destination: String)
     case permissionsDenied
     case modelUnavailable
     case lowLight
     case lowLightRecovered
+    /// SCRUM-321: la detección se pausa por calor crítico (P1) y se reanuda (P2).
+    case thermalPaused
+    case thermalResumed
+    /// SCRUM-37: la detección volvió tras una caída del modelo.
+    case detectionRecovered
     case reducedMode
     case fullMode
     case offline(destination: String?)
@@ -27,6 +44,14 @@ enum FeedbackEvent: Equatable {
     /// SCRUM-41: cae / vuelve la narración (P2, una vez por transición).
     case narrationUnavailable(NarrationOutage)
     case narrationAvailable
+    /// Botón de Emergencia: todo es P1 (lo que el usuario pidió en una emergencia pasa por
+    /// delante de la navegación) en el contexto `emergency`.
+    case emergencyActivated(seconds: Int)
+    case emergencyCountdown(Int)
+    case emergencyCancelled
+    case emergencySending
+    case emergencySent(EmergencyDelivery)
+    case emergencyFailed(EmergencyFailure)
 }
 
 enum FeedbackCatalog {
@@ -44,6 +69,22 @@ enum FeedbackCatalog {
             return finish(result, now: now)
         case .arrival(let result):
             return finish(result, now: now)
+        case .routeCreationFailed(let failure):
+            return FeedbackItem(message: instructions.failureMessage(failure, now: now), haptic: .routeFailed)
+        case .routeModificationFailed(let failure, let route):
+            return FeedbackItem(
+                message: instructions.modificationFailureMessage(failure, keeping: route, now: now),
+                haptic: .routeFailed
+            )
+        case .rerouteFailed(let failure, let destination):
+            return FeedbackItem(
+                message: instructions.rerouteNotice(
+                    RerouteAnnouncements.failure(failure, destination: destination),
+                    key: "failure-\(failure)",
+                    now: now
+                ),
+                haptic: .routeFailed
+            )
         case .permissionsDenied:
             return FeedbackItem(message: SafetyAudio.cameraUnavailable(), haptic: nil)
         case .modelUnavailable:
@@ -70,6 +111,12 @@ enum FeedbackCatalog {
                 ),
                 haptic: nil
             )
+        case .thermalPaused:
+            return FeedbackItem(message: SafetyAudio.thermalPaused(), haptic: .warning)
+        case .thermalResumed:
+            return FeedbackItem(message: SafetyAudio.thermalResumed(), haptic: nil)
+        case .detectionRecovered:
+            return FeedbackItem(message: SafetyAudio.detectionRecovered(now: now), haptic: nil)
         case .reducedMode:
             return FeedbackItem(message: SafetyAudio.reducedMode(now: now), haptic: .safetyReady)
         case .fullMode:
@@ -131,6 +178,18 @@ enum FeedbackCatalog {
                 ),
                 haptic: .narrationAvailable
             )
+        case .emergencyActivated(let seconds):
+            return emergency(EmergencyAnnouncements.activated(seconds: seconds), .emergencyActivated, now: now)
+        case .emergencyCountdown(let seconds):
+            return emergency(EmergencyAnnouncements.countdown(seconds), nil, now: now)
+        case .emergencyCancelled:
+            return emergency(EmergencyAnnouncements.cancelled, nil, now: now)
+        case .emergencySending:
+            return emergency(EmergencyAnnouncements.sending, nil, now: now)
+        case .emergencySent(let delivery):
+            return emergency(EmergencyAnnouncements.sent(delivery), .emergencySent, now: now)
+        case .emergencyFailed(let failure):
+            return emergency(EmergencyAnnouncements.failed(failure), .emergencyFailed, now: now)
         }
     }
 
@@ -147,6 +206,18 @@ enum FeedbackCatalog {
         if let cue = item.haptic {
             haptics?.play(cue)
         }
+    }
+
+    private static func emergency(_ text: String, _ haptic: HapticCue?, now: Date) -> FeedbackItem {
+        FeedbackItem(
+            message: AudioMessage(
+                text: text,
+                priority: .immediateRisk,
+                createdAt: now,
+                contextID: EmergencyService.contextID
+            ),
+            haptic: haptic
+        )
     }
 
     private static func finish(_ result: RouteFinishResult, now: Date) -> FeedbackItem {
