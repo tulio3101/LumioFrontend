@@ -84,6 +84,8 @@ struct SettingsView: View {
                     }
                 }
                 .disabled(isSigningOut)
+                // SCRUM-29: el indicador de progreso no se anuncia solo.
+                .accessibilityLabel(isSigningOut ? "Cerrando sesión" : "Cerrar sesión")
                 .accessibilityHint("Pide confirmación antes de cerrar la sesión.")
 
                 NavigationLink {
