@@ -52,5 +52,11 @@
 	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
+	<!-- SCRUM-33 (diagnóstico Debug): permite sacar las grabaciones de desniveles por Archivos.
+	     Quitar antes de publicar en la App Store. -->
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 </dict>
 </plist>

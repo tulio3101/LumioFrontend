@@ -50,6 +50,26 @@ enum SafetyAudio {
         )
     }
 
+    /// SCRUM-321: calor crítico. La detección se pausa para enfriar el teléfono; se avisa una vez.
+    static func thermalPaused() -> AudioMessage {
+        AudioMessage(
+            text: "El teléfono se está calentando. Pauso la detección un momento.",
+            priority: .immediateRisk,
+            contextID: context,
+            deduplicationKey: "safety-thermal-paused"
+        )
+    }
+
+    /// SCRUM-321: el teléfono enfrió y la detección se reanuda. Se avisa una vez.
+    static func thermalResumed() -> AudioMessage {
+        AudioMessage(
+            text: "Detección reanudada.",
+            priority: .routeInformation,
+            contextID: context,
+            deduplicationKey: "safety-thermal-resumed"
+        )
+    }
+
     /// SCRUM-314: «cámara lista». Se dice una vez por ruta, con la primera inferencia válida
     /// (la capa de seguridad ya funciona), junto con el modo (SCRUM-320/349) y con vibración
     /// (`HapticCue.safetyReady`). P2: el usuario tiene que oírlo antes de confiar en la

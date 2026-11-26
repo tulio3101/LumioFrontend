@@ -1,6 +1,9 @@
 #if os(iOS)
 import Foundation
 import OSLog
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// Implements SafetyMonitoring: drives the detection pipeline, converts detections to
 /// SafetyEvents via onEvent and emits audio alerts through the AudioArbiter (never direct TTS).
@@ -42,6 +45,10 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
         var lastDetections: [Detection] = []
         var lastDetectionDate: Date?
         var fps: Double = 0
+        /// SCRUM-321: telemetría térmica/energía para el panel (el pipeline además registra un
+        /// resumen de fps/latencia/descartados cada 30 s en el log).
+        var thermalState = "nominal"
+        var batteryPercent = 0
         /// SCRUM-33: diagnóstico del último frame (perfil, piso, hazard crudo, YOLO crudas).
         var lastDebug: SafetyDebugFrame?
     }
@@ -69,18 +76,26 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
         guard let until = recordingUntil else { return }
         if now < until {
             if let debug { recordedFrames.append(debug) }
-        } else {
-            recordingUntil = nil
-            recordingActive = false
-            let name = "lumio-safety-\(Int(now.timeIntervalSince1970)).json"
-            if let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first,
-               let data = try? JSONEncoder().encode(recordedFrames) {
-                try? data.write(to: dir.appendingPathComponent(name))
-                lastRecordingName = name
-                logger.info("grabación guardada: \(name) (\(self.recordedFrames.count) frames)")
-            }
-            recordedFrames = []
+            return
         }
+        recordingUntil = nil
+        recordingActive = false
+        let count = recordedFrames.count
+        let name = "lumio-safety-\(Int(now.timeIntervalSince1970)).json"
+        var saved = false
+        if let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first,
+           let data = try? JSONEncoder().encode(recordedFrames) {
+            saved = (try? data.write(to: dir.appendingPathComponent(name))) != nil
+        }
+        recordedFrames = []
+        // Confirmación en panel + audio (P3): "Grabación guardada (N frames)" o el error.
+        let text = saved ? "Grabación guardada, \(count) cuadros." : "No se pudo guardar la grabación."
+        lastRecordingName = saved ? name : "error al guardar"
+        logger.info("\(text)")
+        audioArbiter.receive(AudioMessage(
+            text: text, priority: .environmentInformation,
+            contextID: SafetyAudio.context, deduplicationKey: "safety-recording"
+        ))
     }
     #endif
 
@@ -177,7 +192,7 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
             audioArbiter.cancel(contextIDs: [SafetyAudio.context])
             if !outageAnnounced {
                 outageAnnounced = true
-                audioArbiter.receive(SafetyAudio.modelUnavailable())
+                FeedbackCatalog.emit(.modelUnavailable, audio: audioArbiter, haptics: haptics)
             }
             if case .unavailable = next {
                 logger.error("Detección no disponible: \(next.message)")
@@ -203,14 +218,15 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
     /// primera inferencia válida: el modelo cargó, la cámara entrega frames y la seguridad ya
     /// funciona. Incluye el modo completo (LiDAR) o reducido (sin LiDAR).
     private func announceMode() {
-        audioArbiter.receive(
-            pipeline.isDepthAvailable ? SafetyAudio.fullMode() : SafetyAudio.reducedMode()
+        FeedbackCatalog.emit(
+            pipeline.isDepthAvailable ? .fullMode : .reducedMode,
+            audio: audioArbiter,
+            haptics: haptics
         )
         // SCRUM-33: sin profundidad no se detectan desniveles; se dice una sola vez y no se inventa.
         if !pipeline.isDepthAvailable {
             audioArbiter.receive(SafetyAudio.elevationUnavailable())
         }
-        haptics?.play(.safetyReady)
     }
 
     // MARK: - Detection consumption
@@ -218,6 +234,16 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
     private func handle(_ output: SafetyFrameOutput) {
         // SCRUM-37: solo se avisa con detección confirmada; durante la recuperación no hay avisos.
         guard status == .running else { return }
+        // SCRUM-321: pausa/reanudación por calor crítico (una sola vez por transición).
+        if let paused = output.thermalPaused {
+            if paused {
+                audioArbiter.receive(SafetyAudio.thermalPaused())
+                haptics?.play(.warning)
+            } else {
+                audioArbiter.receive(SafetyAudio.thermalResumed())
+            }
+            return
+        }
         let now = Date()
         #if DEBUG
         debugState.lastDetections = output.tracked.map(\.detection)

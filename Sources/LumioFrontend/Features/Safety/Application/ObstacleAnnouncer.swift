@@ -180,6 +180,7 @@ struct ObstacleAnnouncer {
         case .chair:         return "silla"
         case .dog:           return "perro"
         case .pottedPlant:   return "planta"
+        case .diningTable:   return "mesa"
         case .suitcase:      return "maleta"
         case .backpack:      return "mochila"
         case .umbrella:      return "sombrilla"

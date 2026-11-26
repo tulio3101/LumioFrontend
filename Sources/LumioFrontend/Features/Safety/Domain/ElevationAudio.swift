@@ -22,9 +22,9 @@ enum ElevationAudio {
         case .stepDownOrCurb(let d):
             return .init(text: "escalón hacia abajo, a \(meters(d)) metros",
                          priority: .immediateRisk, isDanger: true, typeKey: "step-down")
-        case .stepUp(let d):
-            return .init(text: "escalón hacia arriba, a \(meters(d)) metros",
-                         priority: .immediateRisk, isDanger: false, typeKey: "step-up")
+        case .stepUp:
+            // FASE 1: el escalón suelto de subida ya no se avisa (ni audio ni háptica).
+            return nil
         case .stairsUp(let d):
             return .init(text: "escaleras hacia arriba, a \(meters(d)) metros",
                          priority: .immediateRisk, isDanger: false, typeKey: "stairs-up")

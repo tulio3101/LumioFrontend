@@ -10,6 +10,10 @@ import simd
 /// SCRUM-223: re-runs the session automatically after system interruptions (phone calls, etc.).
 final class ARKitFrameSource: NSObject, FrameSource {
     private let session = ARSession()
+    /// SCRUM-321: el delegado de ARSession corre en una cola PROPIA (no en main), para que la
+    /// lectura de malla, la desproyección y el muestreo no bloqueen el hilo principal ("UI
+    /// unresponsiveness on the main thread").
+    private let delegateQueue = DispatchQueue(label: "com.lumio.arsession", qos: .userInitiated)
     private(set) var isDepthAvailable = false
     private var activeConfig: ARWorldTrackingConfiguration?
 
@@ -57,6 +61,7 @@ final class ARKitFrameSource: NSObject, FrameSource {
         )
         super.init()
         session.delegate = self
+        session.delegateQueue = delegateQueue   // SCRUM-321: trabajo pesado fuera del main thread
         NotificationCenter.default.addObserver(
             self, selector: #selector(thermalStateChanged),
             name: ProcessInfo.thermalStateDidChangeNotification, object: nil

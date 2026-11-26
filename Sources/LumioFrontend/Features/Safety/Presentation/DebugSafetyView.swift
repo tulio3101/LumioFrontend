@@ -20,19 +20,36 @@ struct DebugSafetySection: View {
     // MARK: Grabar 10 s (SCRUM-33)
 
     private var recorderRow: some View {
-        HStack(spacing: 10) {
-            Button {
-                service.startRecording(seconds: 10)
-            } label: {
-                Label(service.recordingActive ? "Grabando…" : "Grabar 10 s",
-                      systemImage: service.recordingActive ? "record.circle.fill" : "record.circle")
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 10) {
+                Button {
+                    service.startRecording(seconds: 10)
+                } label: {
+                    Label(service.recordingActive ? "Grabando…" : "Grabar 10 s",
+                          systemImage: service.recordingActive ? "record.circle.fill" : "record.circle")
+                }
+                .font(.caption.bold())
+                .disabled(service.recordingActive)
+                if let name = service.lastRecordingName {
+                    Text(name).font(.caption2.monospaced()).foregroundColor(.secondary).lineLimit(1)
+                }
             }
-            .font(.caption.bold())
-            .disabled(service.recordingActive)
-            if let name = service.lastRecordingName {
-                Text(name).font(.caption2.monospaced()).foregroundColor(.secondary).lineLimit(1)
+            if !recordingFiles.isEmpty {
+                ShareLink(items: recordingFiles) {
+                    Label("Compartir grabaciones (\(recordingFiles.count))", systemImage: "square.and.arrow.up")
+                }
+                .font(.caption)
             }
         }
+    }
+
+    /// JSON de grabaciones en Documentos, para el botón Compartir (y Archivos con UIFileSharingEnabled).
+    private var recordingFiles: [URL] {
+        guard let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first,
+              let files = try? FileManager.default.contentsOfDirectory(
+                at: dir, includingPropertiesForKeys: nil
+              ) else { return [] }
+        return files.filter { $0.lastPathComponent.hasPrefix("lumio-safety-") && $0.pathExtension == "json" }
     }
 
     // MARK: Diagnóstico de desniveles + YOLO crudas

@@ -23,20 +23,30 @@ import CoreGraphics
         ("suitcase",      .suitcase),
         ("backpack",      .backpack),
         ("umbrella",      .umbrella),
+        ("dining table",  .diningTable),
     ]
     for (label, expected) in cases {
         #expect(ObstacleClass.from(cocoLabel: label) == expected)
     }
 }
 
-@Test func activeClassSetIsSeventeenOutdoorClasses() {
-    #expect(ObstacleClass.allCases.count == 17)
+@Test func activeClassSetIsEighteenOutdoorClasses() {
+    #expect(ObstacleClass.allCases.count == 18)   // 17 exteriores + mesa (FASE 1)
+}
+
+// FASE 1: mesa re-agregada ("dining table" → "mesa", umbral 0.45, fusiona con la malla .table).
+@Test func diningTableMapsAndAnnouncesAsMesa() {
+    #expect(ObstacleClass.from(cocoLabel: "dining table") == .diningTable)
+    #expect(ObstacleAnnouncer.spanishName(for: .diningTable) == "mesa")
+    #expect(ClassConfidencePolicy.default.threshold(for: .diningTable) == 0.45)
+    // La malla LiDAR .table también se nombra "mesa": un solo concepto.
+    #expect(DepthObstacleKind(meshClass: .table).spanishName == "mesa")
 }
 
 @Test func removedIndoorClassesReturnNil() {
     // Clases de interior puro: quitadas de la lista de exteriores (fuente de falsos positivos).
     let removed = [
-        "toilet", "refrigerator", "tv", "laptop", "bed", "couch", "dining table",
+        "toilet", "refrigerator", "tv", "laptop", "bed", "couch",
     ]
     for label in removed {
         #expect(ObstacleClass.from(cocoLabel: label) == nil, "\(label) debería estar fuera")

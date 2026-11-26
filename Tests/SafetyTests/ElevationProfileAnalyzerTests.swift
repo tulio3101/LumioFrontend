@@ -55,15 +55,31 @@ private func profile(_ heights: [Float?], near: Float = 0.5, step: Float = 0.25)
     }
 }
 
-@Test func singleRiseWithTreadIsStepUp() {
-    if case .stepUp = analyzer.analyze(profile([0, 0, 0, 0.15, 0.15, 0.15]), config: cfg) {} else {
-        Issue.record("esperaba stepUp")
-    }
+// FASE 1: el escalón suelto de subida ya no se avisa (solo escaleras).
+@Test func singleRiseUpIsNotAnnounced() {
+    #expect(analyzer.analyze(profile([0, 0, 0, 0.15, 0.15, 0.15]), config: cfg) == .flat)
 }
 
 // SCRUM-33 corrección 3: un zócalo/base de pared (subida sin huella plana después) NO es escalón.
 @Test func baseboardRiseWithoutTreadIsFlat() {
     #expect(analyzer.analyze(profile([0, 0, 0, 0, 0.12]), config: cfg) == .flat)
+}
+
+// FASE 1: un bache (baja y vuelve a subir al mismo nivel) NO es bordillo.
+@Test func potholeThatReturnsToFloorIsFlat() {
+    #expect(analyzer.analyze(profile([0, 0, 0, -0.15, 0, 0]), config: cfg, hasKnownFloor: true) == .flat)
+}
+
+// FASE 1: un bordillo real (baja y se queda abajo, a corta distancia, con piso plano antes) sí avisa.
+@Test func realCurbThatStaysDownIsAnnounced() {
+    let hazard = analyzer.analyze(profile([0, 0, 0, -0.15, -0.15, -0.15]), config: cfg)
+    if case .stepDownOrCurb = hazard {} else { Issue.record("esperaba stepDownOrCurb") }
+}
+
+// FASE 1: un bordillo lejano (> 2 m) no se avisa todavía.
+@Test func curbBeyondTwoMetersIsNotAnnounced() {
+    // near 2.0 → primera muestra a 2.0 m: la caída queda a > 2 m.
+    #expect(analyzer.analyze(profile([0, 0, 0, -0.15, -0.15, -0.15], near: 2.0), config: cfg) == .flat)
 }
 
 // SCRUM-33 corrección 4: una escalera de bajada que arranca en el borde (sin piso visible antes)

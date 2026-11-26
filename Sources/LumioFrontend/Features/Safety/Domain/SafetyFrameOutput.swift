@@ -18,6 +18,10 @@ struct SafetyFrameOutput: Equatable {
     var tracked: [TrackedDetection]
     var depthObstacles: [DepthObstacleSignal]
     var elevationHazards: [ElevationHazardSignal]
+    /// SCRUM-321: señal de TRANSICIÓN de pausa térmica. nil = sin cambio; true = la detección
+    /// acaba de pausarse por calor crítico; false = acaba de reanudarse al enfriar. Solo se emite
+    /// en el frame del cambio, así SafetyService avisa una sola vez por episodio.
+    var thermalPaused: Bool?
     #if DEBUG
     /// Diagnóstico del frame (solo Debug): perfil, piso, hazard crudo, YOLO crudas. nil en frames
     /// sin datos (p. ej. inclinación fuera de rango).
@@ -27,10 +31,12 @@ struct SafetyFrameOutput: Equatable {
     init(
         tracked: [TrackedDetection] = [],
         depthObstacles: [DepthObstacleSignal] = [],
-        elevationHazards: [ElevationHazardSignal] = []
+        elevationHazards: [ElevationHazardSignal] = [],
+        thermalPaused: Bool? = nil
     ) {
         self.tracked = tracked
         self.depthObstacles = depthObstacles
         self.elevationHazards = elevationHazards
+        self.thermalPaused = thermalPaused
     }
 }

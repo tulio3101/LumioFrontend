@@ -42,26 +42,40 @@ struct ElevationProfileAnalyzer {
         }
         let floorKnown = hasKnownFloor || floorBefore >= config.minFloorSamplesBeforeDrop
 
-        // Saltos abruptos entre muestras MEDIDAS adyacentes. Con piso conocido, la primera muestra
-        // se compara contra el piso (altura 0): una escalera que arranca bajando ya cuenta.
-        var drops: [Float] = []
+        // Caídas MEDIDAS (delta ≤ -curbMinDrop) entre muestras adyacentes. Con piso conocido, la
+        // primera muestra se compara contra el piso (altura 0): una escalera que arranca bajando cuenta.
+        var drops: [(dist: Float, mag: Float)] = []
         var prev: Float? = hasKnownFloor ? 0 : nil
         for s in samples {
             guard let h = s.heightAboveFloor else { prev = nil; continue }
-            if let p = prev, h - p <= -stepMin { drops.append(s.forwardMeters) }
+            if let p = prev, h - p <= -config.curbMinDropMeters { drops.append((s.forwardMeters, p - h)) }
             prev = h
         }
+        let flatBefore = flatFloorSpan(samples, stepMin: stepMin)
 
         // 1. BAJADA (prioridad máxima), solo con piso conocido/válido.
         if floorKnown {
-            if drops.count >= 2 { return .stairsDown(distance: drops[0]) }
-            if drops.count == 1 { return .stepDownOrCurb(distance: drops[0]) }
-            if let holeDist = firstPersistentHole(samples, after: floorBefore, minRun: config.minHoleRun) {
+            // Escalera hacia abajo: varias caídas medidas seguidas (sin restricciones de bordillo).
+            if drops.count >= 2 { return .stairsDown(distance: drops[0].dist) }
+            // Bordillo/escalón hacia abajo (una sola caída) endurecido: caída en rango, piso plano
+            // suficiente antes y a corta distancia. Si no cumple, no se avisa.
+            if drops.count == 1 {
+                let d = drops[0]
+                // El suelo debe QUEDARSE abajo tras la caída: un bache baja y vuelve a subir (no avisa).
+                let staysDown = lastMeasuredHeight(samples).map { $0 <= -config.curbMinDropMeters } ?? true
+                if d.mag <= config.curbMaxDropMeters, d.dist < config.curbMaxDistanceMeters,
+                   flatBefore >= config.curbFlatFloorBeforeMeters, staysDown {
+                    return .stepDownOrCurb(distance: d.dist)
+                }
+            } else if let holeDist = firstPersistentHole(samples, after: floorBefore, minRun: config.minHoleRun),
+                      holeDist < config.curbMaxDistanceMeters,
+                      flatBefore >= config.curbFlatFloorBeforeMeters {
                 return .stepDownOrCurb(distance: holeDist)
             }
         }
 
-        // 2. SUBIDA: solo si cada subida va seguida de una huella plana. Una subida > stepMax es pared.
+        // 2. SUBIDA: solo ESCALERAS (varias subidas con huella). El escalón suelto de subida ya no
+        //    se avisa (FASE 1). Una subida > stepMax es pared.
         switch upHazard(samples, stepMin: stepMin, stepMax: stepMax,
                         minTread: config.minTreadMeters, hasKnownFloor: hasKnownFloor) {
         case .some(let hazard): return hazard
@@ -112,8 +126,26 @@ struct ElevationProfileAnalyzer {
             i += 1
         }
         _ = prevForward
-        guard let first = validRises.first else { return nil }
-        return validRises.count >= 2 ? .stairsUp(distance: first) : .stepUp(distance: first)
+        // FASE 1: una sola subida (escalón suelto) NO se avisa; solo escaleras (≥2 peldaños).
+        guard validRises.count >= 2, let first = validRises.first else { return nil }
+        return .stairsUp(distance: first)
+    }
+
+    /// Altura de la última muestra medida (ignora huecos al final). nil si no hay ninguna.
+    private func lastMeasuredHeight(_ samples: [ElevationSample]) -> Float? {
+        for s in samples.reversed() where s.heightAboveFloor != nil { return s.heightAboveFloor }
+        return nil
+    }
+
+    /// Longitud (m) del tramo de piso plano inicial (|h| < stepMin) antes del primer cambio.
+    private func flatFloorSpan(_ samples: [ElevationSample], stepMin: Float) -> Float {
+        var last = -1
+        for (i, s) in samples.enumerated() {
+            guard let h = s.heightAboveFloor, abs(h) < stepMin else { break }
+            last = i
+        }
+        guard last >= 1 else { return 0 }
+        return samples[last].forwardMeters - samples[0].forwardMeters
     }
 
     /// Primer hueco (run de `nil`) de longitud ≥ `minRun` que empieza en/ tras `after`.

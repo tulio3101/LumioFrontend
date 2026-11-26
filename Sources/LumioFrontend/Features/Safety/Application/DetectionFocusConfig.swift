@@ -76,6 +76,16 @@ struct DetectionFocusConfig: Equatable {
     /// maneja `DepthObstacleDetector`). Valores típicos de escalón peatonal: 8–25 cm.
     var stepMinMeters: Float = 0.08
     var stepMaxMeters: Float = 0.25
+    /// SCRUM-33 (endurecido): un bordillo/escalón hacia abajo (una sola caída) solo se avisa si la
+    /// caída está en [curbMinDrop, curbMaxDrop], hubo piso plano ≥ `curbFlatFloorBefore` antes y
+    /// está a menos de `curbMaxDistance`. Las escaleras (varias caídas) no tienen estas restricciones.
+    var curbMinDropMeters: Float = 0.10
+    var curbMaxDropMeters: Float = 0.25
+    var curbFlatFloorBeforeMeters: Float = 0.25
+    var curbMaxDistanceMeters: Float = 2.0
+    /// Persistencia específica de los desniveles: más estricta que la de profundidad (5 de 7).
+    var elevationMinAppearances: Int = 5
+    var elevationWindowFrames: Int = 7
     /// Margen (m) bajo la cámara para considerar que un plano horizontal es "el piso" (y no una
     /// mesa). El plano de piso es el más cercano por debajo de la cámara menos este margen.
     var floorBelowCameraMargin: Float = 0.5

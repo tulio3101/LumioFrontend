@@ -39,6 +39,7 @@ final class FakeObstaclePipeline: ObstacleDetectionPipeline, @unchecked Sendable
     }
 
     func publish(_ status: SafetyStatus) { statusContinuation.yield(status) }
+    func publishOutput(_ output: SafetyFrameOutput) { continuation.yield(output) }
 
     func stop() {
         stops += 1
@@ -175,6 +176,29 @@ private func eventually(_ condition: () -> Bool) async {
     #expect(ready.count == 1)
     #expect(ready.first?.priority == .routeInformation)
     #expect(haptics.cues == [.safetyReady])
+    service.stop()
+}
+
+// SCRUM-321: al pausar por calor crítico se avisa una vez (P1 + vibración) y al reanudar otra vez.
+@Test @MainActor func thermalPauseAndResumeAreAnnouncedOncePerTransition() async throws {
+    let arbiter = SpyArbiter()
+    let haptics = SpyHaptics()
+    let pipeline = FakeObstaclePipeline(isDepthAvailable: true)
+    let service = SafetyService(pipeline: pipeline, audioArbiter: arbiter, haptics: haptics)
+
+    try await service.start()
+    await eventually { service.status == .running }
+
+    pipeline.publishOutput(SafetyFrameOutput(thermalPaused: true))
+    await eventually { arbiter.received.contains { $0.deduplicationKey == "safety-thermal-paused" } }
+    pipeline.publishOutput(SafetyFrameOutput(thermalPaused: false))
+    await eventually { arbiter.received.contains { $0.deduplicationKey == "safety-thermal-resumed" } }
+
+    let paused = arbiter.received.filter { $0.deduplicationKey == "safety-thermal-paused" }
+    #expect(paused.count == 1)
+    #expect(paused.first?.priority == .immediateRisk)
+    #expect(arbiter.received.filter { $0.deduplicationKey == "safety-thermal-resumed" }.count == 1)
+    #expect(haptics.cues.contains(.warning))   // la pausa también vibra
     service.stop()
 }
 
