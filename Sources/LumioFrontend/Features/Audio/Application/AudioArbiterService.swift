@@ -12,6 +12,12 @@ final class AudioArbiterService: AudioArbitrating {
     private var completionWaiters: [UUID: CheckedContinuation<Bool, Never>] = [:]
     private let deduplication = AudioDeduplicationPolicy()
     private var latestCaptureByContext: [String: UInt64] = [:]
+    /// Cuándo empezó a sonar `current`: con él se estima cuánto le falta (SCRUM-44).
+    private var currentStartedAt = Date.distantPast
+    /// SCRUM-44: programa una reevaluación sin eventos nuevos (un giro que se vuelve urgente
+    /// mientras suena una narración más larga de lo estimado).
+    private let schedule: (TimeInterval, @escaping @MainActor () -> Void) -> Void
+    private var scheduledCheck: Date?
 
     var currentMessage: AudioMessage? { current?.message }
     var pendingMessages: [AudioMessage] {
@@ -24,11 +30,13 @@ final class AudioArbiterService: AudioArbitrating {
     init(
         player: any AudioPlaying,
         policy: any AudioPolicyEvaluating = AudioPolicy(),
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        schedule: @escaping (TimeInterval, @escaping @MainActor () -> Void) -> Void = AudioArbiterService.sleepThenRun
     ) {
         self.player = player
         self.policy = policy
         self.now = now
+        self.schedule = schedule
         player.onFinished = { [weak self] token in
             self?.playbackFinished(token: token)
         }
@@ -149,10 +157,18 @@ final class AudioArbiterService: AudioArbitrating {
 
     func processNext() {
         discardIrrelevant()
+        var transition = AudioTransition.immediate
         if let active = current {
+            let timestamp = now()
             guard let incoming = queue.popNext(where: {
-                policy.shouldInterrupt(current: active.message, incoming: $0, context: context)
-            }) else { return }
+                policy.shouldInterrupt(
+                    current: active.message, startedAt: currentStartedAt, incoming: $0,
+                    context: context, now: timestamp
+                )
+            }) else {
+                scheduleUrgencyCheck()
+                return
+            }
             // Invalidar el token antes de stop: un callback de cancelación es antiguo.
             current = nil
             token = nil
@@ -166,6 +182,12 @@ final class AudioArbiterService: AudioArbitrating {
             } else {
                 publish(active.message, status: .discarded)
             }
+            // SCRUM-44: una indicación que corta una narración empieza tras una pausa breve.
+            // P1 empieza siempre de inmediato.
+            if incoming.message.priority == .routeInformation,
+               active.message.priority == .environmentInformation {
+                transition = .afterInterruption
+            }
             queue.restore(incoming)
         }
 
@@ -174,9 +196,12 @@ final class AudioArbiterService: AudioArbitrating {
             let attempt = PlaybackToken()
             current = next
             token = attempt
+            currentStartedAt = now()
             onMessageChanged?(next.message)
+            let start = next.message.priority == .immediateRisk ? .immediate : transition
+            transition = .immediate
             do {
-                try player.play(next.message, token: attempt)
+                try player.play(next.message, token: attempt, transition: start)
             } catch {
                 // Un error de inicio no deja ocupada la cola ni bloquea alertas futuras.
                 if token == attempt {
@@ -186,6 +211,35 @@ final class AudioArbiterService: AudioArbitrating {
                 }
                 onPlaybackError?(next.message.id, error)
             }
+        }
+        scheduleUrgencyCheck()
+    }
+
+    /// SCRUM-44: mientras suena una narración y espera una indicación de giro, se vuelve a
+    /// evaluar cuando ya no pueda esperar más (`latestStart`). Si la narración termina antes,
+    /// la reevaluación no hace nada.
+    private func scheduleUrgencyCheck() {
+        guard let active = current, active.message.priority == .environmentInformation else { return }
+        let timestamp = now()
+        guard let next = queue.entries
+            .compactMap({ $0.message.priority == .routeInformation ? $0.message.turnDeadline?.latestStart : nil })
+            .filter({ $0 > timestamp })
+            .min() else { return }
+        if let scheduledCheck, scheduledCheck > timestamp, scheduledCheck <= next { return }
+        scheduledCheck = next
+        schedule(next.timeIntervalSince(timestamp)) { [weak self] in
+            guard let self else { return }
+            if self.scheduledCheck == next { self.scheduledCheck = nil }
+            self.processNext()
+        }
+    }
+
+    nonisolated static func sleepThenRun(
+        after delay: TimeInterval, _ action: @escaping @MainActor () -> Void
+    ) {
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(max(0, delay) * 1_000_000_000))
+            action()
         }
     }
 

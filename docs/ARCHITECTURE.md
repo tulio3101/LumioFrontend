@@ -333,12 +333,12 @@ con el reproductor nativo en plataformas Apple.
 
 Reglas conocidas:
 - P1 interrumpe P2/P3. Misma prioridad conserva FIFO por recepción, no createdAt.
-- P2 solo interrumpe P3 si el contexto del giro lo exige.
+- P2 solo interrumpe P3 si el giro no puede esperar (SCRUM-44, ver abajo).
 - P3 interrumpido se descarta.
-- P2 interrumpido se reevalúa; definir reinicio desde el comienzo como en el prototipo.
+- P2 interrumpido se reevalúa y vuelve a sonar desde el comienzo.
 - Relevancia combina vencimiento y validez del contexto. No confundirla con estado.
 
-Los umbrales del spike siguen pendientes de resolver; no se codifican números aquí.
+Los umbrales de giro del spike están en `TurnGeometry` (SCRUM-44).
 AudioDecisionContext expresa datos de decisión sin inventar cómo se calculan:
 urgentNavigationMessageIDs contiene los mensajes de giro urgentes e
 invalidatedContextIDs identifica giros/rutas/escenas que ya no son válidos.
@@ -364,6 +364,29 @@ consentimiento y manejar rechazo, falta de hardware y modo reducido. No anunciar
 “listo” sin seguridad inicializada. Para la app real faltan anuncios VoiceOver,
 feedback háptico y pruebas accesibles en dispositivo; etiquetas de controles no
 sustituyen ese trabajo.
+
+## HU: Preparar la Cámara y la Seguridad al Iniciar el Trayecto (SCRUM-314)
+
+1. Modelo una sola vez: `ReusableModelLoader` guarda el `YOLORunner` cargado y cada ruta
+   reutiliza el mismo. `AppDependencies` lo precarga con `warmUp()` en una tarea
+   desacoplada de prioridad `utility` al abrir la app; si la ruta empieza antes, `load()`
+   espera esa misma carga (no abre otra). Nunca corre en el hilo principal. Si la carga
+   falla no se guarda nada y la ruta lo intenta otra vez con los reintentos de SCRUM-37;
+   cuando `RecoveringModel` reconstruye tras un fallo de inferencia, llama antes a
+   `discard()` para no reutilizar el modelo que falló.
+2. Cámara: al iniciar la ruta, `DestinationViewModel` comprueba el permiso con
+   `CameraAssistanceGating` (SCRUM-315) y `DetectionPipeline` abre la captura solo con el
+   modelo listo.
+3. «Cámara lista» solo con la primera inferencia válida de la sesión (la seguridad ya
+   funciona): `SafetyAudio.fullMode()`/`reducedMode()` dicen «Cámara lista. La detección de
+   obstáculos está activa.» y el modo, como P2 que vence a los 15 s, y `SafetyService`
+   vibra `HapticCue.safetyReady` (siempre activo, como las alertas). Nunca solo en pantalla.
+4. Si el modelo o la cámara no arrancan, el aviso P1 de SCRUM-37 dice que la detección no
+   está disponible y que la navegación sigue; no se dice «cámara lista» ni vibra.
+5. Nada de esto llama al backend: la precarga, el permiso y la detección son locales y los
+   servicios remotos (perfil, preferencias, historial) arrancan aparte sin bloquearlo.
+
+Pruebas: `SafetyStartupTests` (portables) y, en iOS, `SafetyServiceStopTests`.
 
 ## Contratos de backend
 
@@ -434,6 +457,33 @@ Las prioridades salen del spike SCRUM-309 y las aplica `AudioPolicy` en el árbi
 
 Pruebas en `Tests/LumioFrontendTests/AudioPriorityTests.swift`: clasificación por productor
 y escenarios 2, 3, 6–11 del spike.
+
+## HU: Interrumpir Narración ante Eventos Prioritarios (SCRUM-44)
+
+Reglas del spike SCRUM-309, en `AudioPolicy.shouldInterrupt`:
+
+- Una alerta P1 interrumpe siempre la narración y empieza sin pausa.
+- Una indicación P2 de giro lleva `turnDeadline` (`TurnDeadline`: cuándo llega el usuario
+  al punto de giro y si es `.sharp`, 1,5 s, o `.wide`, 2,5 s). Espera a que termine la
+  narración si después quedaría más que ese margen; si no, la interrumpe. Lo que le falta a
+  la narración lo estima `SpeechDurationEstimator` (13 caracteres por segundo, a propósito
+  lento para interrumpir antes y no tarde). El margen es inclusivo: quedar justo en 1,5 s
+  ya interrumpe.
+- Si la narración dura más de lo estimado, el árbitro programa una revisión para
+  `latestStart` (giro − margen) y entonces interrumpe. Si ya terminó, la revisión no hace nada.
+- Sin `turnDeadline` sigue valiendo la marca del productor en
+  `AudioDecisionContext.urgentNavigationMessageIDs`.
+- La narración interrumpida se descarta y no se reanuda; P2 no interrumpe a otra P2 ni a P1.
+- Transición: una indicación que corta una narración se reproduce con
+  `AudioTransition.afterInterruption`; `SpeechAudioPlayer` la empieza tras 0,3 s de pausa
+  (`preUtteranceDelay`) para que el cambio se note.
+
+Contrato para Guiar Giros (SCRUM-312): crear el mensaje del giro con
+`turnDeadline: TurnDeadline(distanceMeters:speedMetersPerSecond:geometry:now:)` (sin
+velocidad útil usa 1 m/s) y volver a enviarlo, con la misma clave, si cambia la estimación.
+La velocidad típica y los 13 caracteres por segundo son valores iniciales a validar en campo.
+
+Pruebas en `Tests/LumioFrontendTests/NarrationInterruptionTests.swift`.
 
 ## HU: Consentir el Envío de Imágenes para la Narración (SCRUM-324)
 

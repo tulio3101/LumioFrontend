@@ -235,14 +235,19 @@ struct AppDependencies {
         #endif
         #if os(iOS)
         // SCRUM-37: SafetyService existe siempre, aunque el modelo falle. La carga de Core ML
-        // ya no ocurre aquí (hilo principal): el pipeline la hace en RecoveringModel al iniciar
-        // la detección (al iniciar la ruta), con reintentos 1/2/4 s para fallos recuperables.
-        // Un modelo ausente o que no se recupera se publica en SafetyService.status y se avisa
-        // por audio una sola vez; la navegación sigue y se ofrece «Reintentar detección».
+        // nunca ocurre en el hilo principal. Un modelo ausente o que no se recupera se publica
+        // en SafetyService.status y se avisa por audio una sola vez; la navegación sigue y se
+        // ofrece «Reintentar detección».
+        // SCRUM-314: el modelo se carga una sola vez (ReusableModelLoader) y se precarga en
+        // segundo plano al abrir la app; cada ruta reutiliza el mismo. La precarga no espera
+        // a la red ni retrasa la pantalla principal.
+        let detectorLoader = ReusableModelLoader<any ObstacleDetecting> { try YOLORunner() }
+        detectorLoader.warmUp()
         let focusConfig = DetectionFocusConfig()
         let pipeline = DetectionPipeline(
             frameSource: ARKitFrameSource(),
-            runnerFactory: { try YOLORunner() },
+            runnerFactory: { try detectorLoader.load() },
+            discardRunner: { detectorLoader.discard() },
             lowLightDetector: LowLightDetector(audioArbiter: audioArbiter),
             focusConfig: focusConfig,
             pitchReminder: PhonePitchReminder(
@@ -255,7 +260,8 @@ struct AppDependencies {
             announcer: ObstacleAnnouncer(
                 announcementInterval: focusConfig.perTrackCooldownSeconds,
                 dangerDistanceMeters: focusConfig.dangerDistanceMeters
-            )
+            ),
+            haptics: hapticPreferences
         )
         // La compuerta reutiliza el PermissionsViewModel de la pantalla de permisos para el flujo
         // accesible de solicitud de cámara.
