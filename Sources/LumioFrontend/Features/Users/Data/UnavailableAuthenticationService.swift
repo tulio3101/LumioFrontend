@@ -1,4 +1,4 @@
-/// Marcador explícito: no simula cuentas ni sesiones hasta conectar /users y el SDK de Google.
+/// Marcador explícito para plataformas sin backend: no simula cuentas ni sesiones.
 struct UnavailableAuthenticationService: Authenticating {
     func register(_ credentials: AccountCredentials) async throws {
         throw FeatureUnavailable.authentication

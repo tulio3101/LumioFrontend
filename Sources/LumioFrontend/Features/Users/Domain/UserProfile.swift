@@ -9,6 +9,8 @@ struct UserProfile: Identifiable, Equatable {
     var displayName: String?
     /// Celular colombiano de 10 dígitos sin prefijo.
     var phone: String?
+    /// SCRUM-62: tiene una cuenta de Google asociada (puede iniciar sesión con Google).
+    var googleLinked = false
 }
 
 /// Lo que se guarda con PATCH /users/me: los dos campos; nil quita el dato.
@@ -23,6 +25,8 @@ protocol ProfileRemoting {
     func updateProfile(_ changes: ProfileChanges) async throws -> UserProfile
     /// PUT /users/me/password. El backend cierra las sesiones de los demás dispositivos.
     func changePassword(current: String, new: String) async throws
+    /// POST /users/me/google (SCRUM-62): asocia la cuenta de Google del ID token.
+    func linkGoogle(idToken: String) async throws -> UserProfile
 }
 
 // MARK: - Validación
@@ -183,6 +187,8 @@ protocol ProfileManaging: AnyObject {
     func loadProfile() async -> Result<UserProfile, ProfileFailure>
     func saveProfile(displayName: String, phone: String) async -> ProfileSaveOutcome
     func changePassword(current: String, new: String, confirmation: String) async -> PasswordChangeOutcome
+    /// SCRUM-62: abre Google y asocia esa cuenta a la de Lumio; lo anuncia por audio.
+    func linkGoogle() async -> GoogleLinkOutcome
 }
 
 // MARK: - Textos

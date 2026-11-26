@@ -63,7 +63,10 @@ audio y háptica, deja 10 s para cancelar y luego envía por correo (vía el bac
 contactos de confianza. Sin permiso de ubicación sale sin ella; sin contactos o sin conexión lo
 informa por audio. No sustituye a los servicios de emergencia y así se lo dice al usuario.
 El registro y el inicio de sesión con correo están conectados a /users: los tokens se
-guardan en Keychain y se renuevan solos; Google sigue pendiente.
+guardan en Keychain y se renuevan solos. «Continuar con Google» inicia sesión o crea la cuenta
+con Google, y en Preferencias > Mi cuenta se puede asociar Google a una cuenta con contraseña;
+la cancelación, la falta de red y los errores se dicen por audio (ver
+docs/HU-iniciar-sesion-con-google.md).
 En Iniciar sesión, «¿Olvidaste tu contraseña?» envía un código de 6 dígitos al correo y permite
 crear una contraseña nueva sin revelar si la cuenta existe (ver docs/HU-recuperar-contrasena.md).
 Audio ya incluye cola, política, árbitro y adaptador AVSpeechSynthesizer.
@@ -75,13 +78,15 @@ vibran y con qué intensidad; las alertas de seguridad siempre vibran
 (ver docs/HU-preferencias-hapticas.md).
 También deduplica eventos P2/P3 y reemplaza narraciones pendientes de capturas
 antiguas mediante metadatos opcionales; las reglas están en la guía de arquitectura.
-No están implementados cámara, seguridad, inicio de sesión con Google ni llamadas de narración.
+No están implementados cámara, seguridad ni llamadas de narración.
 El audio nativo está pendiente de validación en Xcode/dispositivo. No hay modelo Core ML ni claves de servicios incluidos.
 
 ## Configuración del backend (desarrollo)
 
 `Resources/Info.plist` define `LumioAPIBaseURL` (por defecto `http://localhost:8000`;
-en un iPhone físico usa la IP del equipo que corre el backend). Crea una cuenta desde la
+en un iPhone físico usa la IP del equipo que corre el backend) y `GoogleClientID` (client ID
+de Google de tipo iOS, el mismo que `GOOGLE_CLIENT_IDS` del backend; vacío deja Google sin
+activar). Crea una cuenta desde la
 app: las rutas se guardan con el access token de esa sesión. Sin sesión (solo DEBUG,
 «Entrar sin sesión») o sin conexión, la ruta funciona igual pero queda pendiente de
 guardarse en el servidor. «Mi cuenta», «Cerrar sesión» y «Eliminar cuenta» están en Preferencias.

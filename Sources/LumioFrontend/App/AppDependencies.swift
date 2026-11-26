@@ -103,10 +103,8 @@ struct AppDependencies {
             routeSync: sync,
             account: account
         )
-        // SCRUM-360: al iniciar sesión, esta cuenta reenvía sus rutas finalizadas aparcadas.
-        authenticationService = RemoteAuthenticationService(
-            api: authAPI, store: tokens, account: account, pendingHistory: history
-        )
+        // SCRUM-62: pantalla de Google (OAuth con PKCE); nil sin GoogleClientID en el Info.plist.
+        let google = configuration.google.map { WebGoogleIDTokenProvider(configuration: $0, client: http) }
         let location = CoreLocationCurrentLocationProvider()
         let geocoder = MapKitDestinationGeocoder()
         let calculator = MapKitWalkingRouteCalculator()
@@ -126,6 +124,14 @@ struct AppDependencies {
         arrivalMonitor = ArrivalMonitor(tracker: tracking.makeClient(), store: store, finisher: finisher)
         // El estado de la red decide si se puede recalcular; al volver se reintenta.
         let monitor = NetworkConnectivityMonitor()
+        // SCRUM-360: al iniciar sesión, esta cuenta reenvía sus rutas finalizadas aparcadas.
+        // SCRUM-62: Google avisa por el árbitro la cancelación, la falta de red y los errores.
+        authenticationService = AnnouncedAuthenticationService(
+            base: RemoteAuthenticationService(
+                api: authAPI, store: tokens, google: google, account: account, pendingHistory: history
+            ),
+            announcer: GoogleSignInAnnouncer(arbiter: arbiter, connectivity: monitor)
+        )
         let rerouter = RouteRerouteService(
             location: location, geocoder: geocoder, calculator: calculator,
             store: store, sync: sync, arbiter: arbiter, connectivity: monitor,
@@ -154,9 +160,10 @@ struct AppDependencies {
         // SCRUM-360: `signOut` y `sessionExpiry` se arman más abajo, tras construir safetyService,
         // para que el teardown central incluya la detección de obstáculos.
         // Personalizar Cuenta: GET/PATCH /users/me y PUT /users/me/password con sesión.
+        // SCRUM-62: también asocia una cuenta de Google (POST /users/me/google).
         profile = ProfileService(
             remote: RemoteProfileService(client: routeClient, baseURL: configuration.apiBaseURL),
-            tokens: tokens, arbiter: arbiter
+            tokens: tokens, arbiter: arbiter, google: google, connectivity: monitor
         )
         // Contactos de Confianza: GET/POST/PUT/DELETE /contacts con sesión. Viven solo en el
         // backend: no hay copia local que borrar al cerrar sesión.

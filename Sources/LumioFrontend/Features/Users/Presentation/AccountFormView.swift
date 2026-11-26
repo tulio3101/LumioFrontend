@@ -46,7 +46,7 @@ struct AccountFormView: View {
         .toolbar(.visible, for: .navigationBar)
         #endif
         .onChange(of: model.failure) { failure in
-            if let failure {
+            if let failure, !failure.isAnnouncedByAudio {
                 announceForAccessibility("\(failure.title). \(failure.message)")
             }
         }

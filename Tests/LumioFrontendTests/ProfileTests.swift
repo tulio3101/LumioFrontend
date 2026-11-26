@@ -41,6 +41,17 @@ final class FakeProfileRemote: ProfileRemoting {
         passwordChanges.append((current, new))
         try passwordResult.get()
     }
+
+    /// SCRUM-62: ver GoogleSignInTests.
+    var linkResult: Result<Void, Error> = .success(())
+    private(set) var linkedTokens: [String] = []
+
+    func linkGoogle(idToken: String) async throws -> UserProfile {
+        linkedTokens.append(idToken)
+        try linkResult.get()
+        profile.googleLinked = true
+        return profile
+    }
 }
 
 @MainActor

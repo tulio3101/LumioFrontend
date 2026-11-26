@@ -33,6 +33,11 @@ final class ProfileViewModel: ObservableObject {
     @Published private(set) var passwordBanner: Banner?
     @Published private(set) var isChangingPassword = false
 
+    /// SCRUM-62: asociar una cuenta de Google.
+    @Published private(set) var googleLinked = false
+    @Published private(set) var googleBanner: Banner?
+    @Published private(set) var isLinkingGoogle = false
+
     private var attemptedSave = false
     private var attemptedPasswordChange = false
     private let service: any ProfileManaging
@@ -43,7 +48,7 @@ final class ProfileViewModel: ObservableObject {
         self.onSessionExpired = onSessionExpired
     }
 
-    var isBusy: Bool { isSaving || isChangingPassword }
+    var isBusy: Bool { isSaving || isChangingPassword || isLinkingGoogle }
 
     func load() async {
         loadState = .loading
@@ -117,7 +122,28 @@ final class ProfileViewModel: ObservableObject {
         }
     }
 
+    /// El audio lo da ProfileService; aquí solo el aviso en pantalla.
+    func linkGoogle() async {
+        guard !isBusy, !googleLinked else { return }
+        isLinkingGoogle = true
+        defer { isLinkingGoogle = false }
+        switch await service.linkGoogle() {
+        case .linked(let profile):
+            googleLinked = profile.googleLinked
+            googleBanner = Banner(status: .success, title: "Cuenta de Google asociada", message: GoogleSignInAnnouncements.linked)
+        case .failed(.sessionExpired):
+            onSessionExpired()
+        case .failed(let failure):
+            googleBanner = Banner(
+                status: failure == .cancelled ? .warning : .error,
+                title: GoogleSignInAnnouncements.title(for: failure, linking: true),
+                message: GoogleSignInAnnouncements.message(for: failure)
+            )
+        }
+    }
+
     private func show(_ profile: UserProfile) {
+        googleLinked = profile.googleLinked
         email = profile.email
         displayName = profile.displayName ?? ""
         phone = profile.phone ?? ""

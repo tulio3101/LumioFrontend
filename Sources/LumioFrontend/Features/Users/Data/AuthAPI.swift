@@ -31,6 +31,21 @@ struct AuthAPI: @unchecked Sendable {
         }
     }
 
+    /// POST /users/login/google con el ID token de Google. Entra o crea la cuenta (sin
+    /// contraseña) según el identificador de Google; el backend verifica el token.
+    func loginWithGoogle(idToken: String) async throws -> AuthTokens {
+        do {
+            let data = try await client.send(request("users/login/google", body: GoogleTokenDTO(idToken: idToken)))
+            return try Self.tokens(from: data)
+        } catch HTTPClientError.statusCode(401) {
+            throw GoogleSignInFailure.rejected
+        } catch HTTPClientError.statusCode(409) {
+            throw GoogleSignInFailure.accountConflict
+        } catch HTTPClientError.statusCode(503) {
+            throw GoogleSignInFailure.unavailable
+        }
+    }
+
     /// POST /users/refresh. Rota la sesión: el refresh token usado deja de valer.
     func refresh(_ refreshToken: String) async throws -> AuthTokens {
         do {
@@ -66,6 +81,15 @@ struct AuthAPI: @unchecked Sendable {
 struct CredentialsDTO: Encodable, Equatable {
     let email: String
     let password: String
+}
+
+/// GoogleAuthRequest del backend (iniciar sesión y asociar).
+struct GoogleTokenDTO: Encodable, Equatable {
+    let idToken: String
+
+    enum CodingKeys: String, CodingKey {
+        case idToken = "id_token"
+    }
 }
 
 struct RefreshDTO: Encodable, Equatable {

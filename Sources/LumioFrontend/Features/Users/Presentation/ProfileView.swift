@@ -2,7 +2,8 @@
 import SwiftUI
 
 /// Personalizar Cuenta (SCRUM-6), en Preferencias > Mi cuenta. Muestra el correo (no
-/// editable), el nombre y el celular, y permite cambiar la contraseña.
+/// editable), el nombre y el celular, permite asociar una cuenta de Google (SCRUM-62) y
+/// cambiar la contraseña.
 ///
 /// Los resultados y errores los locuta ProfileService por el AudioArbiter y además se
 /// muestran en un aviso. Cada campo lleva su error en la pista de VoiceOver; no se mueve
@@ -54,6 +55,7 @@ struct ProfileView: View {
         case .loaded:
             VStack(alignment: .leading, spacing: 32) {
                 profileSection
+                googleSection
                 passwordSection
             }
             .disabled(model.isBusy)
@@ -118,6 +120,37 @@ struct ProfileView: View {
             }
             .buttonStyle(LumioPrimaryButtonStyle())
             .accessibilityHint("Valida tu nombre y tu celular y los guarda.")
+        }
+    }
+
+    // MARK: Google (SCRUM-62)
+
+    private var googleSection: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            sectionHeader(
+                "Cuenta de Google",
+                subtitle: model.googleLinked
+                    ? "Tu cuenta está asociada a Google. Puedes iniciar sesión con Google."
+                    : "Asóciala para iniciar sesión con Google, sin escribir tu contraseña."
+            )
+
+            if let banner = model.googleBanner {
+                LumioStatusBanner(banner.status, title: banner.title, message: banner.message)
+            }
+
+            if !model.googleLinked {
+                Button {
+                    focusedField = nil
+                    Task { await model.linkGoogle() }
+                } label: {
+                    HStack(spacing: 10) {
+                        if model.isLinkingGoogle { ProgressView().tint(LumioColor.actionPrimary) }
+                        Text(model.isLinkingGoogle ? "Conectando con Google…" : "Asociar cuenta de Google")
+                    }
+                }
+                .buttonStyle(LumioSecondaryButtonStyle())
+                .accessibilityHint("Abre Google para elegir la cuenta que quieres asociar.")
+            }
         }
     }
 
