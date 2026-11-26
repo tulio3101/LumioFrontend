@@ -20,12 +20,18 @@ struct PermissionsView: View {
             Section("Permisos del dispositivo") {
                 ForEach(AppPermission.allCases) { permission in
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(permission.title).font(.headline).accessibilityAddTraits(.isHeader)
-                        Text((model.statuses[permission] ?? .notDetermined).label)
-                        Text(permission.purpose)
-                        if permission == .notifications {
-                            Text("Se solicitarán cuando una función las necesite. Actualmente ninguna función conectada las requiere.")
+                        // SCRUM-29: nombre, estado y para qué sirve se leen juntos, como
+                        // encabezado de la fila; los botones siguen siendo elementos propios.
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(permission.title).font(.headline)
+                            Text((model.statuses[permission] ?? .notDetermined).label)
+                            Text(permission.purpose)
+                            if permission == .notifications {
+                                Text("Se solicitarán cuando una función las necesite. Actualmente ninguna función conectada las requiere.")
+                            }
                         }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityAddTraits(.isHeader)
                         Button("Escuchar estado de \(permission.title)") {
                             Task { await model.say(model.feedback(for: permission)) }
                         }
@@ -41,7 +47,11 @@ struct PermissionsView: View {
                 }
             }
             if !model.message.isEmpty {
-                Section("Último mensaje") { Text(model.message) }
+                Section("Último mensaje") {
+                    Text(model.message)
+                        // SCRUM-29: el mensaje cambia tras cada acción; VoiceOver lo relee.
+                        .accessibilityAddTraits(.updatesFrequently)
+                }
             }
         }
         // List usa estilo automático: varios botones de una fila pueden activarse juntos.

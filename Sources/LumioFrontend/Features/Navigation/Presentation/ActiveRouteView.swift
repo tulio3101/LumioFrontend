@@ -133,7 +133,8 @@ struct ActiveRouteView: View {
                 }
                 .buttonStyle(LumioSecondaryButtonStyle())
                 .disabled(model.isRerouting || model.isFinishing)
-                .accessibilityLabel("Recalcular ruta")
+                // SCRUM-29: mientras recalcula, VoiceOver lo dice en lugar de solo atenuarlo.
+                .accessibilityLabel(model.isRerouting ? "Recalculando la ruta" : "Recalcular ruta")
                 .accessibilityHint("Calcula de nuevo la ruta al mismo destino desde donde estás. Necesita conexión.")
                 Button {
                     confirmsFinish = true
@@ -147,7 +148,7 @@ struct ActiveRouteView: View {
                 }
                 .buttonStyle(LumioSecondaryButtonStyle())
                 .disabled(model.isFinishing)
-                .accessibilityLabel("Finalizar ruta")
+                .accessibilityLabel(model.isFinishing ? "Finalizando la ruta" : "Finalizar ruta")
                 .accessibilityHint("Detiene las indicaciones y guarda la ruta en tu historial. Pide confirmación.")
                 stepsSection(route)
             }
