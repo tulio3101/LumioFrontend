@@ -118,7 +118,7 @@ struct RecentRoutesView: View {
                     }
                 }
             }
-            .lumioCard(padding: 0, cornerRadius: 18)
+            .lumioCard(padding: 0)
         }
     }
 

@@ -178,7 +178,7 @@ struct RoutePlannerView: View {
             }
         }
         .fixedSize(horizontal: false, vertical: true)
-        .lumioCard(padding: 16, cornerRadius: 18)
+        .lumioCard(padding: 16)
         .accessibilityElement(children: .combine)
     }
 
@@ -208,7 +208,7 @@ struct RoutePlannerView: View {
                         }
                     }
                 }
-                .lumioCard(padding: 0, cornerRadius: 18)
+                .lumioCard(padding: 0)
             }
             .transition(.opacity)
         } else if let query = model.suggestionsQuery, fieldError == nil {
@@ -255,7 +255,7 @@ struct RoutePlannerView: View {
                         }
                     }
                 }
-                .lumioCard(padding: 0, cornerRadius: 18)
+                .lumioCard(padding: 0)
             }
             .transition(.opacity)
         }
@@ -368,7 +368,7 @@ struct RoutePlannerView: View {
     }
 
     private var fieldShape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: 14, style: .continuous)
+        RoundedRectangle(cornerRadius: LumioRadius.field, style: .continuous)
     }
 }
 

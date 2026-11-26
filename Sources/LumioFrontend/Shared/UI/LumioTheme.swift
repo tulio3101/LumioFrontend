@@ -109,7 +109,7 @@ struct LumioPrimaryButtonStyle: ButtonStyle {
             .multilineTextAlignment(.center)
             .padding(.horizontal, 20)
             .padding(.vertical, 14)
-            .frame(maxWidth: .infinity, minHeight: 54)
+            .frame(maxWidth: .infinity, minHeight: 56)
             .foregroundStyle(LumioColor.onActionPrimary)
             .background {
                 buttonShape
@@ -133,7 +133,7 @@ struct LumioSecondaryButtonStyle: ButtonStyle {
             .multilineTextAlignment(.center)
             .padding(.horizontal, 20)
             .padding(.vertical, 14)
-            .frame(maxWidth: .infinity, minHeight: 54)
+            .frame(maxWidth: .infinity, minHeight: 56)
             .foregroundStyle(LumioColor.actionPrimary)
             .background(configuration.isPressed ? LumioColor.background : LumioColor.surface, in: buttonShape)
             .overlay(buttonShape.strokeBorder(LumioColor.controlBorder, lineWidth: 1))
@@ -151,7 +151,7 @@ struct LumioDestructiveButtonStyle: ButtonStyle {
             .multilineTextAlignment(.center)
             .padding(.horizontal, 20)
             .padding(.vertical, 14)
-            .frame(maxWidth: .infinity, minHeight: 54)
+            .frame(maxWidth: .infinity, minHeight: 56)
             .foregroundStyle(LumioColor.errorText)
             .background(LumioColor.errorBackground, in: buttonShape)
             .overlay(buttonShape.strokeBorder(LumioColor.errorText, lineWidth: configuration.isPressed ? 2 : 1))
@@ -172,5 +172,18 @@ private struct PressFeedback: ViewModifier {
     }
 }
 
-private let buttonShape = RoundedRectangle(cornerRadius: 14, style: .continuous)
+/// Escala única de redondeo para toda la app, para que todas las pantallas compartan el mismo
+/// lenguaje visual: campos pequeños, controles/botones y tarjetas/paneles.
+enum LumioRadius {
+    /// Campos de texto y controles pequeños.
+    static let field: CGFloat = 12
+    /// Botones, chips, banners y superficies de control.
+    static let control: CGFloat = 16
+    /// Tarjetas y paneles de contenido.
+    static let card: CGFloat = 20
+    /// Vistas internas (p. ej. la previsualización de cámara en Debug).
+    static let preview: CGFloat = 8
+}
+
+private let buttonShape = RoundedRectangle(cornerRadius: LumioRadius.control, style: .continuous)
 #endif

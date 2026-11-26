@@ -147,7 +147,7 @@ struct DebugSafetySection: View {
             ZStack(alignment: .topLeading) {
                 ARCameraPreview(session: source.arSession)
                     .frame(height: 280)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .clipShape(RoundedRectangle(cornerRadius: LumioRadius.preview))
                 DetectionBoxesOverlay(detections: service.debugState.lastDetections)
                     .frame(height: 280)
             }
