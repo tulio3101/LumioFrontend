@@ -89,7 +89,9 @@ struct ActiveRouteView: View {
                         focus: $instructionHasFocus,
                         onQueryStatus: model.startRouteStatusQuery,
                         onReroute: recalculate,
-                        onFinish: { confirmsFinish = true }
+                        onFinish: { confirmsFinish = true },
+                        // SCRUM-39: también desde el menú de acciones de VoiceOver.
+                        onDescribe: narration.map { service in { service.requestDescription() } }
                     ) {
                         model.repeatCurrentInstruction()
                     }
@@ -208,6 +210,18 @@ struct ActiveRouteView: View {
 
 // MARK: Componentes de ruta
 
+private extension View {
+    /// SCRUM-39: la acción solo aparece si hay narración.
+    @ViewBuilder
+    func describeEnvironmentAction(_ action: (() -> Void)?) -> some View {
+        if let action {
+            accessibilityAction(named: "Describir entorno", action)
+        } else {
+            self
+        }
+    }
+}
+
 /// La indicación que se sigue ahora, en grande, con la acción para volver a oírla.
 private struct CurrentInstructionCard: View {
     let step: RouteStep
@@ -217,6 +231,8 @@ private struct CurrentInstructionCard: View {
     let onQueryStatus: () -> Void
     let onReroute: () -> Void
     let onFinish: () -> Void
+    /// SCRUM-39: «Describir entorno» en el menú de acciones. nil sin narración.
+    var onDescribe: (() -> Void)? = nil
     let onRepeat: () -> Void
 
     var body: some View {
@@ -254,6 +270,7 @@ private struct CurrentInstructionCard: View {
             .accessibilityAction(named: "Consultar ruta", onQueryStatus)
             .accessibilityAction(named: "Recalcular ruta", onReroute)
             .accessibilityAction(named: "Finalizar ruta", onFinish)
+            .describeEnvironmentAction(onDescribe)
 
             Button(action: onRepeat) {
                 Label("Repetir indicación", systemImage: "speaker.wave.2.fill")

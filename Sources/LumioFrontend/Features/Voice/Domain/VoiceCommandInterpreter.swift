@@ -82,7 +82,7 @@ struct VoiceCommandInterpreter {
 
     static let helpPrompt = """
         Puedes decir: llévame a, seguido del destino. Repetir instrucción. Cómo voy. \
-        Llegué. Terminar ruta. O ayuda. Para cerrar sin hacer nada, di nada.
+        Llegué. Terminar ruta. Describe el entorno. O ayuda. Para cerrar sin hacer nada, di nada.
         """
 
     static let unrecognizedPrompt =
@@ -218,6 +218,22 @@ struct VoiceCommandInterpreter {
         ("detener la navegacion", [.finishRoute(arrived: false)]),
         ("terminar navegacion", [.finishRoute(arrived: false)]),
         ("terminar la navegacion", [.finishRoute(arrived: false)]),
+        // Solicitar narración del entorno (SCRUM-39)
+        ("describe", [.describeEnvironment]),
+        ("describir", [.describeEnvironment]),
+        ("describe el entorno", [.describeEnvironment]),
+        ("describir el entorno", [.describeEnvironment]),
+        ("describir entorno", [.describeEnvironment]),
+        ("describe lo que hay", [.describeEnvironment]),
+        ("que hay delante", [.describeEnvironment]),
+        ("que hay adelante", [.describeEnvironment]),
+        ("que tengo delante", [.describeEnvironment]),
+        ("que tengo enfrente", [.describeEnvironment]),
+        ("que hay alrededor", [.describeEnvironment]),
+        ("que hay a mi alrededor", [.describeEnvironment]),
+        ("que ves", [.describeEnvironment]),
+        ("narrar entorno", [.describeEnvironment]),
+        ("narrar el entorno", [.describeEnvironment]),
         // Cerrar la escucha
         ("nada", [.stopListening]),
         ("olvidalo", [.stopListening]),

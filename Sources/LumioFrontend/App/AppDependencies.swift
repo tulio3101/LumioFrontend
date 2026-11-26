@@ -315,7 +315,9 @@ struct AppDependencies {
             consent: consent,
             connectivity: monitor,
             arbiter: audioArbiter,
-            tokens: tokens
+            tokens: tokens,
+            // SCRUM-39: una escena igual a la recién descrita se repite sin enviar otra foto.
+            signatures: VisionSceneSignatureProvider()
         )
         // SCRUM-40: con la ruta activa, la escena que cambia pide sola otra descripción (huella
         // VNFeaturePrint en el teléfono, mínimo 10 s entre narraciones y solo con el canal libre).
