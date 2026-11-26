@@ -17,6 +17,8 @@ struct SettingsView: View {
     let onSignedOut: () -> Void
     #if os(iOS)
     let permissions: PermissionsViewModel
+    /// SCRUM-324: consentimiento para enviar fotos a la narración. nil: no se muestra.
+    var narrationConsent: NarrationConsentService? = nil
     #endif
 
     @State private var confirmsSignOut = false
@@ -41,6 +43,17 @@ struct SettingsView: View {
             }
             .disabled(isSigningOut)
             .accessibilityHint("Activa o desactiva la vibración, elige qué eventos vibran y con qué intensidad.")
+            #if os(iOS)
+            if let narrationConsent {
+                NavigationLink {
+                    NarrationConsentView(service: narrationConsent)
+                } label: {
+                    Label("Narración del entorno", systemImage: "camera.viewfinder")
+                }
+                .disabled(isSigningOut)
+                .accessibilityHint("Decide si Lumio puede enviar fotos de la cámara para describir lo que tienes delante.")
+            }
+            #endif
             Section("Emergencia") {
                 NavigationLink {
                     TrustedContactsView(service: contacts, onSessionExpired: onSignedOut)

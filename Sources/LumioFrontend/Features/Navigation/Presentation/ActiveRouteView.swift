@@ -7,6 +7,8 @@ import SwiftUI
 /// del recálculo, «Cambiar destino», «Recalcular ruta» y la lista completa de pasos.
 struct ActiveRouteView: View {
     @ObservedObject var model: DestinationViewModel
+    /// SCRUM-38: «Describir entorno». nil sin narración (pruebas, otras plataformas).
+    var narration: EnvironmentNarrationService? = nil
 
     @State private var isChangingDestination = false
     @State private var confirmsFinish = false
@@ -42,9 +44,20 @@ struct ActiveRouteView: View {
                 focusInstruction()
             }
         }
-        .onAppear(perform: focusInstruction)
+        .onAppear {
+            focusInstruction()
+            // SCRUM-40: la narración vigila cambios de escena solo mientras se ve la ruta.
+            if model.guidanceRoute != nil { narration?.startAutoUpdates() }
+        }
         // «Ruta actualizada» se confirma una sola vez: al volver a esta pantalla ya no está.
-        .onDisappear { model.acknowledgeRouteUpdate() }
+        .onDisappear {
+            model.acknowledgeRouteUpdate()
+            narration?.stopAutoUpdates()
+        }
+        // La ruta se finaliza sin salir de esta vista: deja de vigilar al instante.
+        .onChange(of: model.guidanceRoute == nil) { noRoute in
+            if noRoute { narration?.stopAutoUpdates() }
+        }
         // Prevención de errores y estado honesto en el historial: el usuario dice si llegó.
         .confirmationDialog("¿Finalizar la ruta?", isPresented: $confirmsFinish, titleVisibility: .visible) {
             Button("Llegué a mi destino") { finish(.completed) }
@@ -80,6 +93,10 @@ struct ActiveRouteView: View {
                     ) {
                         model.repeatCurrentInstruction()
                     }
+                }
+                // Justo después de la indicación: con VoiceOver se llega con un deslizamiento.
+                if let narration {
+                    DescribeEnvironmentButton(service: narration)
                 }
                 RouteSummaryCard(route: route)
                 RouteProgressCard(
@@ -578,6 +595,27 @@ extension DestinationViewModel {
         guard !isQueryingStatus, !isLoading else { return }
         if route != nil { announceForAccessibility("Consultando tu ruta.") }
         Task { await queryRouteStatus() }
+    }
+}
+/// SCRUM-38: pide una descripción del entorno. El resultado llega por audio (P3): no
+/// interrumpe alertas ni indicaciones. Mientras se describe, el botón no envía otra foto.
+private struct DescribeEnvironmentButton: View {
+    @ObservedObject var service: EnvironmentNarrationService
+
+    var body: some View {
+        Button {
+            service.requestDescription()
+        } label: {
+            if service.isDescribing {
+                Label("Describiendo el entorno…", systemImage: "ellipsis")
+            } else {
+                Label("Describir entorno", systemImage: "eye")
+            }
+        }
+        .buttonStyle(LumioSecondaryButtonStyle())
+        .disabled(service.isDescribing)
+        .accessibilityLabel(service.isDescribing ? "Describiendo el entorno" : "Describir entorno")
+        .accessibilityHint("Toma una foto con la cámara y describe por audio lo que tienes delante. Necesita conexión.")
     }
 }
 #endif

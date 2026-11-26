@@ -28,10 +28,18 @@ struct RootView: View {
     let obstacleGate: (any CameraAssistanceGating)?
     /// HU Interactuar mediante voz: botón «Comando de voz» en Trayecto. nil fuera de iOS.
     let voiceCommands: VoiceCommandService?
+    #if os(iOS)
+    /// SCRUM-324: Preferencias > Narración del entorno.
+    let narrationConsent: NarrationConsentService?
+    #endif
+    /// SCRUM-38: «Describir entorno» en la ruta activa. nil fuera de iOS.
+    let environmentNarration: EnvironmentNarrationService?
     /// Pantalla Principal Accesible: estado que se locuta al abrir. nil fuera de iOS.
     let homeStatus: HomeStatusService?
     /// Respaldo de preferencias: se sincroniza al entrar y se olvida la cuenta al salir.
     let preferencesSync: PreferencesSynchronizer?
+    /// Recuperar Contraseña (desde «Iniciar sesión»). nil fuera de iOS.
+    let passwordRecovery: (any PasswordRecovering)?
     /// Se decide antes del primer frame para no mostrar la bienvenida de forma transitoria.
     @State private var entry: AppEntry
     /// «Ajustes» en la pantalla principal cambia a la pestaña Preferencias.
@@ -73,8 +81,14 @@ struct RootView: View {
         obstacleGate: (any CameraAssistanceGating)? = nil,
         voiceCommands: VoiceCommandService? = nil,
         homeStatus: HomeStatusService? = nil,
-        preferencesSync: PreferencesSynchronizer? = nil
+        preferencesSync: PreferencesSynchronizer? = nil,
+        narrationConsent: NarrationConsentService? = nil,
+        passwordRecovery: (any PasswordRecovering)? = nil,
+        environmentNarration: EnvironmentNarrationService? = nil
     ) {
+        self.narrationConsent = narrationConsent
+        self.passwordRecovery = passwordRecovery
+        self.environmentNarration = environmentNarration
         self.homeStatus = homeStatus
         self.preferencesSync = preferencesSync
         self.routeCreator = routeCreator
@@ -125,8 +139,10 @@ struct RootView: View {
         obstacleGate: (any CameraAssistanceGating)? = nil,
         voiceCommands: VoiceCommandService? = nil,
         homeStatus: HomeStatusService? = nil,
-        preferencesSync: PreferencesSynchronizer? = nil
+        preferencesSync: PreferencesSynchronizer? = nil,
+        passwordRecovery: (any PasswordRecovering)? = nil
     ) {
+        self.passwordRecovery = passwordRecovery
         self.homeStatus = homeStatus
         self.preferencesSync = preferencesSync
         self.routeCreator = routeCreator
@@ -149,6 +165,7 @@ struct RootView: View {
         self.safetyMonitor = safetyMonitor
         self.obstacleGate = obstacleGate
         self.voiceCommands = voiceCommands
+        self.environmentNarration = nil
         _entry = State(initialValue: AppEntry(session: sessionService))
     }
     #endif
@@ -184,7 +201,8 @@ struct RootView: View {
             WelcomeView(
                 authenticationService: authenticationService,
                 onAuthenticated: { entry = .home },
-                continueWithoutSession: developmentBypass
+                continueWithoutSession: developmentBypass,
+                passwordRecovery: passwordRecovery
             )
         case .home:
             home
@@ -209,6 +227,7 @@ struct RootView: View {
                     voiceCommands: voiceCommands,
                     emergency: emergency,
                     homeStatus: homeStatus,
+                    environmentNarration: environmentNarration,
                     onOpenSettings: { tab = .settings }
                 )
             }
@@ -222,7 +241,8 @@ struct RootView: View {
                 SettingsView(
                     signOut: signOut, profile: profile, contacts: contacts, accountDeleter: accountDeleter,
                     voicePreferences: voicePreferences, hapticPreferences: hapticPreferences,
-                    onSignedOut: { entry = .welcome }, permissions: permissions
+                    onSignedOut: { entry = .welcome }, permissions: permissions,
+                    narrationConsent: narrationConsent
                 )
                 #else
                 SettingsView(

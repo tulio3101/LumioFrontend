@@ -30,6 +30,8 @@ struct DestinationView: View {
     /// Pantalla Principal Accesible: emergencia desde el rotor, estado al abrir y ajustes.
     private let emergency: (any EmergencyManaging)?
     private let homeStatus: HomeStatusService?
+    /// SCRUM-38: «Describir entorno» en la ruta activa.
+    private let environmentNarration: EnvironmentNarrationService?
     private let onOpenSettings: (() -> Void)?
     @State private var statusText: String?
 
@@ -48,8 +50,10 @@ struct DestinationView: View {
         voiceCommands: VoiceCommandService? = nil,
         emergency: (any EmergencyManaging)? = nil,
         homeStatus: HomeStatusService? = nil,
+        environmentNarration: EnvironmentNarrationService? = nil,
         onOpenSettings: (() -> Void)? = nil
     ) {
+        self.environmentNarration = environmentNarration
         self.voiceCommands = voiceCommands
         self.emergency = emergency
         self.homeStatus = homeStatus
@@ -136,7 +140,7 @@ struct DestinationView: View {
         #endif
         .voiceCommandControl(voiceCommands)
         .navigationDestination(isPresented: $showsRoute) {
-            ActiveRouteView(model: model)
+            ActiveRouteView(model: model, narration: environmentNarration)
                 .voiceCommandControl(voiceCommands)
         }
         .navigationDestination(isPresented: $showsRecentRoutes) {

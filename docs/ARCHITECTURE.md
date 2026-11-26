@@ -198,6 +198,13 @@ borra la sesión (la ruta queda pendiente en el teléfono). StoredSessionService
 pantalla inicial sin red. SignOutService (Preferencias) revoca la sesión, borra la ruta
 local y detiene el audio.
 
+Recuperar Contraseña, desde «¿Olvidaste tu contraseña?» en Iniciar sesión (PasswordRecoveryView
++ PasswordRecoveryViewModel): PasswordRecoveryService valida en el teléfono y usa
+RemotePasswordRecoveryService sin access token (POST /users/password-reset, siempre el mismo
+aviso exista o no la cuenta; POST /users/password-reset/confirm con código de 6 dígitos y
+`new_password`). Locuta por el árbitro (contexto `password-recovery`). Ver
+docs/HU-recuperar-contrasena.md.
+
 Personalizar Cuenta (SCRUM-6), en Preferencias > Mi cuenta (ProfileView + ProfileViewModel):
   1. ProfileService consulta GET /users/me (RemoteProfileService con AuthorizedHTTPClient):
      correo (solo lectura), nombre y celular. Solo el perfil: las preferencias de voz
@@ -312,7 +319,7 @@ local esté disponible.
 | Audio | Conectar productores y validar en dispositivo | Cola/árbitro implementados; AVSpeechSynthesizer mediante AudioPlaying |
 | Safety | Cámara, inferencia y distancia confiable | AVFoundation, Vision/Core ML, ARKit |
 | Navigation | Seguimiento y eventos de giro (SCRUM-312) | Crear Ruta implementada con MapKit y CoreLocation |
-| Narration | Servicio remoto y control de frecuencia | HTTPClient, POST /narration |
+| Narration | Afinar `changeThreshold` del cambio de escena en el iPhone (SCRUM-40) | Narración a pedido y automática por cambio de escena: foto del ARSession de la seguridad, POST /vision/analyze (multipart) y P3 en el árbitro (docs/HU-narracion-del-entorno.md, docs/HU-actualizar-narracion-ante-cambios-de-entorno.md) |
 | Users | Inicio de sesión con Google | Correo, Keychain, Bearer y refresh implementados |
 | Places | Confirmar contrato de favoritos con backend | El backend actual expone rutas, no asumir CRUD de favoritos |
 | Settings | Validar en dispositivo voz, vibración y respaldo | Voz en SpeechAudioPlayer, vibración en HapticPreferencesService, respaldo en PreferencesSynchronizer (GET/PUT /users/me/preferences; docs/HU-preferencias-hapticas.md) |
@@ -484,6 +491,68 @@ velocidad útil usa 1 m/s) y volver a enviarlo, con la misma clave, si cambia la
 La velocidad típica y los 13 caracteres por segundo son valores iniciales a validar en campo.
 
 Pruebas en `Tests/LumioFrontendTests/NarrationInterruptionTests.swift`.
+
+## HU: Consentir el Envío de Imágenes para la Narración (SCRUM-324)
+
+Preferencias > Narración del entorno (`NarrationConsentView` + `NarrationConsentService`):
+
+1. El aviso (`NarrationConsentPolicy.explanation`, ADR-308) dice que se envían fotos a un
+   servicio en la nube de AWS, que Lumio no las guarda, que no se describe a las personas,
+   que AWS puede conservarlas un tiempo para prevenir abusos y que sin consentimiento la
+   detección y la navegación funcionan igual. Sin VoiceOver lo lee el árbitro al entrar (P2,
+   contexto `narration-consent`); con VoiceOver el foco va al texto. «Escuchar explicación»
+   lo repite.
+2. Consentimiento explícito: «Acepto el envío de fotos» / «No acepto». Con consentimiento,
+   «Retirar consentimiento» pide confirmación. Cada resultado se locuta.
+3. Se guarda solo en el teléfono como `{granted, version, decidedAt}`
+   (`FileNarrationConsentStore`, Application Support). Un archivo ilegible cuenta como no
+   preguntado. Si cambia el aviso, se sube `currentVersion` y el estado pasa a `.outdated`.
+4. Revocar corta la narración que suene o espere (`NarrationAudio.contextID`) y llama a
+   `onRevoked` para que la narración cancele la solicitud en vuelo y apague la automática.
+
+Contrato para Narración del Entorno (SCRUM-38) y Solicitar Narración (SCRUM-39):
+- Antes de narrar: `requireConsentBeforeNarration()` (true si se puede; si no, explica el
+  aviso o recuerda dónde activarlo).
+- Antes de cada envío: `NarrationConsentChecking.consentVersionForUpload`; nil = no llamar a
+  `POST /vision/analyze`. Con valor, va en `consent_version`; el backend responde 403
+  `consent_required` sin él.
+
+Pruebas en `Tests/LumioFrontendTests/NarrationConsentTests.swift`.
+
+## HU: Narración del Entorno (SCRUM-38)
+
+Botón «Describir entorno» en la ruta activa (`ActiveRouteView`) →
+`EnvironmentNarrationService` (detalle en `docs/HU-narracion-del-entorno.md`):
+
+1. Consentimiento (`NarrationConsentGating`) y conexión antes de tomar la foto.
+2. `ARKitFrameSource` implementa `NarrationFrameCapturing`: atiende el pedido con el siguiente
+   frame con seguimiento normal, antes de la compuerta del detector y sin tocarla, así que no
+   frena ni consume frames de la seguridad. `NarrationFrameEncoder`: 768 px, vertical, JPEG
+   0,7, sin metadatos, en memoria.
+3. `RemoteEnvironmentNarrationService`: `POST /vision/analyze` con sesión y
+   `multipart/form-data`, timeout de 5 s.
+4. La descripción entra como P3 (`NarrationAudio`); si llega más de 4 s después de la foto se
+   descarta. Una sola solicitud en vuelo; «Describiendo…» si tarda más de 1,5 s.
+5. Las fallas se informan por audio (P2, contexto `narration-status`) y nunca tocan el loop de
+   seguridad. Retirar el consentimiento cancela la solicitud en vuelo.
+
+Pruebas en `Tests/LumioFrontendTests/EnvironmentNarrationTests.swift`.
+
+## HU: Actualizar Narración ante Cambios de Entorno (SCRUM-40)
+
+`AutoNarrationScheduler` (detalle en `docs/HU-actualizar-narracion-ante-cambios-de-entorno.md`)
+vigila la escena mientras se ve la ruta activa y pide otra descripción solo si cambió:
+
+1. Revisa cada 5 s, de lo más barato a lo más caro: consentimiento, conexión, una sola solicitud
+   en vuelo, tope de 90 por ruta, pausa tras fallas y mínimo de 10 s desde la última narración.
+2. Solo con el canal libre (`AudioChannelObserving`) toma la foto del `ARSession` de la seguridad
+   y calcula su huella `VNFeaturePrint` en el teléfono (`SceneSignatureProviding`).
+3. Si la huella se aleja de la última escena narrada, envía esa misma foto con `trigger=auto`
+   (`describeEnvironment(trigger:preCapturedFrame:)`). La descripción entra como P3.
+4. Las fallas automáticas no se locutan; se espera 30/60/120 s. Sin red no se hace nada. Nada de
+   esto toca el loop de seguridad.
+
+Pruebas en `Tests/LumioFrontendTests/AutoNarrationTests.swift`.
 
 ## HU: descartar mensajes duplicados u obsoletos
 

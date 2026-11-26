@@ -42,6 +42,16 @@ final class ARKitFrameSource: NSObject, FrameSource {
     }
     private let anchorState = OSAllocatedUnfairLock(initialState: AnchorState())
 
+    /// SCRUM-38: pedidos de foto para la narración, atendidos con el siguiente frame con
+    /// seguimiento normal. Independientes de `processingGate`: no consumen ni retrasan los
+    /// frames del loop de seguridad.
+    private let narrationRequests = OSAllocatedUnfairLock(
+        uncheckedState: [UUID: CheckedContinuation<NarrationCapture, Never>]()
+    )
+    private let narrationEncoder = NarrationFrameEncoder()
+    /// Si en este tiempo no llega un frame útil (cámara tapada o movida), se informa.
+    static let narrationCaptureTimeout: TimeInterval = 1.5
+
     private let logger = Logger(subsystem: "com.lumio.app", category: "ARKitFrameSource")
     /// El piso es el plano horizontal **bajo los pies**: su extensión contiene la posición xz de la
     /// cámara y está entre estos metros por debajo de ella (SCRUM-33). Así una mesa (muy cerca) o un
@@ -95,6 +105,7 @@ final class ARKitFrameSource: NSObject, FrameSource {
 
     func stop() {
         activeConfig = nil
+        resolveNarrationRequests(with: .cameraInactive)
         session.pause()
         meshStore.reset()
         anchorState.withLock { $0 = AnchorState() }
@@ -146,8 +157,60 @@ final class ARKitFrameSource: NSObject, FrameSource {
     #endif
 }
 
+// MARK: SCRUM-38 · Foto para la narración
+
+extension ARKitFrameSource: NarrationFrameCapturing {
+    func captureNarrationFrame() async -> NarrationCapture {
+        guard activeConfig != nil else { return .cameraInactive }
+        let id = UUID()
+        return await withCheckedContinuation { continuation in
+            narrationRequests.withLockUnchecked { $0[id] = continuation }
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(
+                deadline: .now() + Self.narrationCaptureTimeout
+            ) { [weak self] in
+                self?.resolveNarrationRequest(id, with: .noUsableFrame)
+            }
+        }
+    }
+
+    private nonisolated func resolveNarrationRequest(_ id: UUID, with capture: NarrationCapture) {
+        narrationRequests.withLockUnchecked { $0.removeValue(forKey: id) }?.resume(returning: capture)
+    }
+
+    private nonisolated func resolveNarrationRequests(with capture: NarrationCapture) {
+        let pending = narrationRequests.withLockUnchecked { requests in
+            defer { requests.removeAll() }
+            return Array(requests.values)
+        }
+        for continuation in pending { continuation.resume(returning: capture) }
+    }
+
+    /// Solo trabaja si alguien pidió una foto y el frame sirve (seguimiento normal: la cámara
+    /// no está tapada ni movida). Reduce la imagen aquí para no retener el `ARFrame` y
+    /// codifica el JPEG fuera de la cola del delegado.
+    private nonisolated func serveNarrationRequests(from frame: ARFrame) {
+        let hasRequests = narrationRequests.withLockUnchecked { !$0.isEmpty }
+        guard hasRequests, case .normal = frame.camera.trackingState else { return }
+        let capturedAt = Date()
+        guard let image = narrationEncoder.downscaledImage(from: frame.capturedImage) else { return }
+        let pending = narrationRequests.withLockUnchecked { requests in
+            defer { requests.removeAll() }
+            return Array(requests.values)
+        }
+        guard !pending.isEmpty else { return }
+        DispatchQueue.global(qos: .userInitiated).async {
+            let capture: NarrationCapture = NarrationFrameEncoder.jpeg(from: image)
+                .map { .frame(NarrationFrame(jpeg: $0, capturedAt: capturedAt)) } ?? .noUsableFrame
+            for continuation in pending { continuation.resume(returning: capture) }
+        }
+    }
+}
+
 extension ARKitFrameSource: ARSessionDelegate {
     nonisolated func session(_ session: ARSession, didUpdate frame: ARFrame) {
+        // SCRUM-38: antes de la compuerta del detector, para que una foto pedida no espere a
+        // que termine la inferencia. No toca `processingGate`.
+        serveNarrationRequests(from: frame)
         // Synchronous gate check BEFORE creating any objects or copying the pixelBuffer.
         // If the detector is still processing the previous frame, drop this one immediately
         // so ARKit can reclaim it — preventing the "retaining N ARFrames" accumulation.
@@ -254,6 +317,7 @@ extension ARKitFrameSource: ARSessionDelegate {
         // SCRUM-37: el fin inesperado de la captura termina el flujo; el pipeline lo publica
         // como captura no disponible y se puede reintentar (Reintentar detección).
         activeConfig = nil
+        resolveNarrationRequests(with: .cameraInactive)
         session.pause()
         frameStream.withLockUnchecked { $0.continuation }.finish()
     }

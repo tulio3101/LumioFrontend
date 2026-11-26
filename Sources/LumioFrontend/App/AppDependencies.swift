@@ -48,6 +48,12 @@ struct AppDependencies {
     let homeStatus: HomeStatusService
     /// Copia de respaldo de las preferencias de voz y vibración en el backend.
     let preferencesSync: PreferencesSynchronizer
+    /// SCRUM-324: consentimiento para enviar fotos a la narración; solo en el teléfono.
+    let narrationConsent: NarrationConsentService
+    /// Recuperar Contraseña: POST /users/password-reset y /confirm, sin sesión.
+    let passwordRecovery: PasswordRecoveryService
+    /// SCRUM-38: «Describir entorno» en la ruta. Usa la cámara de la seguridad sin frenarla.
+    let environmentNarration: EnvironmentNarrationService
     #endif
 
     init(configuration: AppConfiguration = .main) {
@@ -79,6 +85,11 @@ struct AppDependencies {
         sessionService = session
         // SCRUM-360: identidad de la cuenta para el historial pendiente por usuario.
         let account = UserDefaultsCurrentAccount()
+        authenticationService = RemoteAuthenticationService(api: authAPI, store: tokens)
+        passwordRecovery = PasswordRecoveryService(
+            remote: RemotePasswordRecoveryService(client: http, baseURL: configuration.apiBaseURL),
+            arbiter: arbiter
+        )
         let routeClient: any HTTPClient = authAPI.map {
             AuthorizedHTTPClient(base: http, api: $0, store: tokens)
         } ?? http
@@ -249,8 +260,10 @@ struct AppDependencies {
         let detectorLoader = ReusableModelLoader<any ObstacleDetecting> { try YOLORunner() }
         detectorLoader.warmUp()
         let focusConfig = DetectionFocusConfig()
+        // La narración (SCRUM-38) toma sus fotos de la misma sesión de ARKit.
+        let frameSource = ARKitFrameSource()
         let pipeline = DetectionPipeline(
-            frameSource: ARKitFrameSource(),
+            frameSource: frameSource,
             runnerFactory: { try detectorLoader.load() },
             discardRunner: { detectorLoader.discard() },
             lowLightDetector: LowLightDetector(audioArbiter: audioArbiter),
@@ -277,6 +290,35 @@ struct AppDependencies {
             permissions: permissionsViewModel, audio: audioArbiter
         )
         // Comandos de voz: reutilizan el flujo accesible de permisos y hablan por el árbitro.
+        let consent = NarrationConsentService(
+            store: FileNarrationConsentStore(fileURL: FileNarrationConsentStore.defaultFileURL()),
+            arbiter: audioArbiter
+        )
+        narrationConsent = consent
+        // Narración del Entorno: POST /vision/analyze con sesión; la descripción suena como P3.
+        let narration = EnvironmentNarrationService(
+            capturer: frameSource,
+            describer: RemoteEnvironmentNarrationService(
+                client: routeClient, baseURL: configuration.apiBaseURL
+            ),
+            consent: consent,
+            connectivity: monitor,
+            arbiter: audioArbiter,
+            tokens: tokens
+        )
+        // SCRUM-40: con la ruta activa, la escena que cambia pide sola otra descripción (huella
+        // VNFeaturePrint en el teléfono, mínimo 10 s entre narraciones y solo con el canal libre).
+        narration.autoUpdates = AutoNarrationScheduler(
+            service: narration,
+            capturer: frameSource,
+            signatures: VisionSceneSignatureProvider(),
+            consent: consent,
+            connectivity: monitor,
+            channel: audioArbiter
+        )
+        // Retirar el consentimiento corta la solicitud en vuelo y las actualizaciones.
+        consent.onRevoked = { [weak narration] in narration?.cancel() }
+        environmentNarration = narration
         let voice = VoiceCommandService(
             listener: DeviceSpeechListener(),
             permissions: PermissionsVoiceGate(permissions: permissionsViewModel),
