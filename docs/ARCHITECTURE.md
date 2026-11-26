@@ -319,7 +319,7 @@ local esté disponible.
 | Audio | Conectar productores y validar en dispositivo | Cola/árbitro implementados; AVSpeechSynthesizer mediante AudioPlaying |
 | Safety | Cámara, inferencia y distancia confiable | AVFoundation, Vision/Core ML, ARKit |
 | Navigation | Seguimiento y eventos de giro (SCRUM-312) | Crear Ruta implementada con MapKit y CoreLocation |
-| Narration | Disparo automático por cambio de escena (SCRUM-40) | Narración a pedido implementada: foto del ARSession de la seguridad, POST /vision/analyze (multipart) y P3 en el árbitro (docs/HU-narracion-del-entorno.md) |
+| Narration | Afinar `changeThreshold` del cambio de escena en el iPhone (SCRUM-40) | Narración a pedido y automática por cambio de escena: foto del ARSession de la seguridad, POST /vision/analyze (multipart) y P3 en el árbitro (docs/HU-narracion-del-entorno.md, docs/HU-actualizar-narracion-ante-cambios-de-entorno.md) |
 | Users | Inicio de sesión con Google | Correo, Keychain, Bearer y refresh implementados |
 | Places | Confirmar contrato de favoritos con backend | El backend actual expone rutas, no asumir CRUD de favoritos |
 | Settings | Validar en dispositivo voz, vibración y respaldo | Voz en SpeechAudioPlayer, vibración en HapticPreferencesService, respaldo en PreferencesSynchronizer (GET/PUT /users/me/preferences; docs/HU-preferencias-hapticas.md) |
@@ -537,6 +537,22 @@ Botón «Describir entorno» en la ruta activa (`ActiveRouteView`) →
    seguridad. Retirar el consentimiento cancela la solicitud en vuelo.
 
 Pruebas en `Tests/LumioFrontendTests/EnvironmentNarrationTests.swift`.
+
+## HU: Actualizar Narración ante Cambios de Entorno (SCRUM-40)
+
+`AutoNarrationScheduler` (detalle en `docs/HU-actualizar-narracion-ante-cambios-de-entorno.md`)
+vigila la escena mientras se ve la ruta activa y pide otra descripción solo si cambió:
+
+1. Revisa cada 5 s, de lo más barato a lo más caro: consentimiento, conexión, una sola solicitud
+   en vuelo, tope de 90 por ruta, pausa tras fallas y mínimo de 10 s desde la última narración.
+2. Solo con el canal libre (`AudioChannelObserving`) toma la foto del `ARSession` de la seguridad
+   y calcula su huella `VNFeaturePrint` en el teléfono (`SceneSignatureProviding`).
+3. Si la huella se aleja de la última escena narrada, envía esa misma foto con `trigger=auto`
+   (`describeEnvironment(trigger:preCapturedFrame:)`). La descripción entra como P3.
+4. Las fallas automáticas no se locutan; se espera 30/60/120 s. Sin red no se hace nada. Nada de
+   esto toca el loop de seguridad.
+
+Pruebas en `Tests/LumioFrontendTests/AutoNarrationTests.swift`.
 
 ## HU: descartar mensajes duplicados u obsoletos
 

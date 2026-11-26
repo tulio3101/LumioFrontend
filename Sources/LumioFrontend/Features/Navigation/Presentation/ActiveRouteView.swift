@@ -44,9 +44,20 @@ struct ActiveRouteView: View {
                 focusInstruction()
             }
         }
-        .onAppear(perform: focusInstruction)
+        .onAppear {
+            focusInstruction()
+            // SCRUM-40: la narración vigila cambios de escena solo mientras se ve la ruta.
+            if model.guidanceRoute != nil { narration?.startAutoUpdates() }
+        }
         // «Ruta actualizada» se confirma una sola vez: al volver a esta pantalla ya no está.
-        .onDisappear { model.acknowledgeRouteUpdate() }
+        .onDisappear {
+            model.acknowledgeRouteUpdate()
+            narration?.stopAutoUpdates()
+        }
+        // La ruta se finaliza sin salir de esta vista: deja de vigilar al instante.
+        .onChange(of: model.guidanceRoute == nil) { noRoute in
+            if noRoute { narration?.stopAutoUpdates() }
+        }
         // Prevención de errores y estado honesto en el historial: el usuario dice si llegó.
         .confirmationDialog("¿Finalizar la ruta?", isPresented: $confirmsFinish, titleVisibility: .visible) {
             Button("Llegué a mi destino") { finish(.completed) }

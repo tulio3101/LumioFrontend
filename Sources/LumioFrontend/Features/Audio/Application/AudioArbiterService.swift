@@ -260,3 +260,14 @@ final class AudioArbiterService: AudioArbitrating {
         onMessageChanged?(message)
     }
 }
+
+/// SCRUM-40: la narración automática solo pide una descripción cuando el canal está libre.
+@MainActor
+protocol AudioChannelObserving: AnyObject {
+    /// true si no suena ni espera ningún mensaje (alerta, indicación o narración).
+    var isChannelFree: Bool { get }
+}
+
+extension AudioArbiterService: AudioChannelObserving {
+    var isChannelFree: Bool { current == nil && queue.entries.isEmpty }
+}
