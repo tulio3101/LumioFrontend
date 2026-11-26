@@ -41,10 +41,10 @@ struct RemoteAuthenticationService: Authenticating {
         } catch {
             throw AuthenticationError.tokenStorageFailed
         }
-        // SCRUM-360: misma identidad que con correo (el correo normalizado), para reenviar las
-        // rutas aparcadas de esta cuenta.
+        // SCRUM-360: la cuenta se identifica por su correo, para reenviar las rutas aparcadas de
+        // esta cuenta. Google puede traer mayúsculas; se pasa a minúsculas como lo guarda el backend.
         if let email = idToken.email {
-            account?.currentAccountID = CredentialsPolicy.normalizedEmail(email)
+            account?.currentAccountID = CredentialsPolicy.normalizedEmail(email).lowercased()
         }
         await pendingHistory?.flush()
     }
