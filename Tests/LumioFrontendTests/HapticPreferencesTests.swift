@@ -205,7 +205,7 @@ private func pattern(_ cue: HapticCue, _ intensity: HapticIntensity = .medium) -
     #expect(harness.player.played.allSatisfy { $0.pulses.allSatisfy { $0.strength == 1 } })
     // SCRUM-33: los desniveles/obstáculos (danger, warning) también vibran siempre (seguridad).
     #expect(HapticCue.alwaysOn == [.danger, .warning, .emergencyActivated, .emergencySent, .emergencyFailed, .criticalAlert, .safetyReady])
-    #expect(HapticCue.configurable == [.routeReady, .routeFailed, .routeFinished])
+    #expect(HapticCue.configurable == [.routeReady, .routeFailed, .routeFinished, .turnLeft, .turnRight])
 }
 
 // MARK: - Se conservan al cerrar y abrir la app

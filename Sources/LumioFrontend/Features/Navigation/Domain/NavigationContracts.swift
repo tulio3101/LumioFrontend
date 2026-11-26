@@ -109,6 +109,15 @@ struct LocationFix: Equatable {
     let coordinate: GeoCoordinate
     /// Radio de incertidumbre en metros; negativo si la lectura no es válida.
     let horizontalAccuracy: Double
+    /// Velocidad en m/s según el GPS; nil si no la da. Guiar Giros (SCRUM-312) la usa para
+    /// anunciar cada giro a tiempo.
+    let speedMetersPerSecond: Double?
+
+    init(coordinate: GeoCoordinate, horizontalAccuracy: Double, speedMetersPerSecond: Double? = nil) {
+        self.coordinate = coordinate
+        self.horizontalAccuracy = horizontalAccuracy
+        self.speedMetersPerSecond = speedMetersPerSecond
+    }
 }
 
 /// Seguimiento continuo de la ubicación mientras hay ruta activa, también con el teléfono
@@ -226,6 +235,10 @@ enum HapticCue: String, Codable, CaseIterable, Equatable {
     case routeFailed
     /// La navegación terminó (Finalizar Ruta).
     case routeFinished
+    /// Guiar Giros (SCRUM-312): anuncio de un giro a la izquierda.
+    case turnLeft
+    /// Guiar Giros (SCRUM-312): anuncio de un giro a la derecha.
+    case turnRight
     /// SCRUM-33: peligro grave (desnivel hacia abajo). 3 impactos fuertes.
     case danger
     /// SCRUM-33: aviso (subida o un obstáculo a menos de 1 m). 2 impactos medios.
@@ -242,7 +255,7 @@ enum HapticCue: String, Codable, CaseIterable, Equatable {
     case safetyReady
 }
 
-/// Acompaña los anuncios de Crear Ruta. Los patrones de giro pertenecen a Guiar Giros.
+/// Acompaña los anuncios de ruta, incluidos los giros de Guiar Giros (SCRUM-312).
 /// En la app lo implementa HapticPreferencesService, que aplica las preferencias hápticas.
 @MainActor
 protocol HapticFeedbackPlaying {

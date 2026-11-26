@@ -105,7 +105,8 @@ DestinationViewModel.queryRouteStatus -> RouteStatusQuerying -> RouteStatusServi
      pantalla muestra las mismas frases. El mensaje P2 va en el contexto de la revisión
      con clave `route-status`: no se duplica y se descarta si cambia el destino.
 No se guarda el paso estimado; el ViewModel solo lo usa para mostrar y repetir la misma
-indicación que se acaba de oír (`guidanceRoute`). Avanzar `currentStep` es de SCRUM-312.
+indicación que se acaba de oír (`guidanceRoute`). Durante el trayecto, Guiar Giros
+(SCRUM-312) avanza `currentStep` en la copia local con cada giro.
 
 Consultar Rutas Recientes (SCRUM-24): DestinationViewModel.loadRecentRoutes ->
 RecentRoutesQuerying -> RecentRoutesService:
@@ -306,17 +307,12 @@ Contratos para las HUs siguientes:
   y confirmado por audio) o, sin red ni ubicación, `.query` (texto confirmado) a
   `DestinationViewModel.navigate(to:)`, que llama a `createRoute(to:)` o, con ruta activa,
   a `changeDestination(to:)`. Ver docs/HU-indicar-destino-por-voz.md.
-- Guiar Giros (SCRUM-312) lee la copia local (`ActiveRouteStoring`), usa
-  `RouteStep.maneuverCoordinate` para anunciar a tiempo y
-  `NavigationInstructionBuilder.message(for:in:now:)` para crear el mensaje P2. Usa
-  siempre `NavigationInstructionBuilder.contextID(for: route)`: cambia con cada
-  revisión; al crear una ruta o cambiar su destino se invalida el contexto anterior.
-  Al cambiar el destino `currentStep` vuelve a 0. Puede reutilizar
-  `RouteProgressEstimator` para decidir cuándo avanzar `currentStep`; Consultar Ruta
-  ya usa ese paso cuando no hay GPS.
-- Guiar Giros (SCRUM-312) puede pedir otro cliente a `SharedLocationTracker` (ya sigue la
-  ubicación durante la ruta) y debe finalizar con `RouteFinishing`, no borrando la copia
-  local. Tras un recálculo (SCRUM-26) la revisión cambia y `currentStep` vuelve a 0.
+- Guiar Giros (SCRUM-312, implementada; ver la sección propia más abajo y
+  docs/HU-guiar-giros.md) lee la copia local (`ActiveRouteStoring`), observa
+  `SharedLocationTracker` y avanza `currentStep` con `RouteProgressEstimator`. Sus mensajes
+  usan `NavigationInstructionBuilder.contextID(for: route)`, que cambia con cada revisión;
+  al cambiar el destino o recalcular, `currentStep` vuelve a 0 y los giros se anuncian de
+  nuevo. La llegada la sigue finalizando `ArrivalMonitor` con `RouteFinishing`.
 
 Antes de empezar un trayecto con asistencia completa, hay que comprobar que la seguridad
 local esté disponible.
@@ -327,7 +323,7 @@ local esté disponible.
 | --- | --- | --- |
 | Audio | Conectar productores y validar en dispositivo | Cola/árbitro implementados; AVSpeechSynthesizer mediante AudioPlaying |
 | Safety | Cámara, inferencia y distancia confiable; fuente de profundidad dual para el modo reducido (SCRUM-349) | AVFoundation, Vision/Core ML, ARKit. Proximidad por `ProximityPolicy` según el spike SCRUM-309 (docs/HU-alertar-proximidad-de-objetos.md) |
-| Navigation | Seguimiento y eventos de giro (SCRUM-312) | Crear Ruta implementada con MapKit y CoreLocation |
+| Navigation | Validar la guía de giros caminando una ruta real (SCRUM-329) | Crear Ruta con MapKit y CoreLocation; giros guiados por GPS sobre la copia local (docs/HU-guiar-giros.md) |
 | Narration | Afinar `changeThreshold` del cambio de escena en el iPhone (SCRUM-40) | Narración a pedido y automática por cambio de escena: foto del ARSession de la seguridad, POST /vision/analyze (multipart) y P3 en el árbitro (docs/HU-narracion-del-entorno.md, docs/HU-actualizar-narracion-ante-cambios-de-entorno.md) |
 | Users | Validar Google en dispositivo con el client ID real | Correo, Google (OAuth con PKCE y asociar a la cuenta; docs/HU-iniciar-sesion-con-google.md), Keychain, Bearer y refresh implementados |
 | Places | Confirmar contrato de favoritos con backend | El backend actual expone rutas, no asumir CRUD de favoritos |
@@ -494,12 +490,46 @@ Reglas del spike SCRUM-309, en `AudioPolicy.shouldInterrupt`:
   `AudioTransition.afterInterruption`; `SpeechAudioPlayer` la empieza tras 0,3 s de pausa
   (`preUtteranceDelay`) para que el cambio se note.
 
-Contrato para Guiar Giros (SCRUM-312): crear el mensaje del giro con
+Guiar Giros (SCRUM-312) crea cada mensaje de giro con
 `turnDeadline: TurnDeadline(distanceMeters:speedMetersPerSecond:geometry:now:)` (sin
-velocidad útil usa 1 m/s) y volver a enviarlo, con la misma clave, si cambia la estimación.
+velocidad útil usa 1 m/s). Un reenvío con la misma clave se descarta como duplicado mientras
+el anterior espera, así que la estimación se renueva con el segundo anuncio («Ahora», otra
+clave), no reenviando el primero.
 La velocidad típica y los 13 caracteres por segundo son valores iniciales a validar en campo.
 
 Pruebas en `Tests/LumioFrontendTests/NarrationInterruptionTests.swift`.
+
+## HU: Guiar Giros durante el Trayecto (SCRUM-312)
+
+Detalle en `docs/HU-guiar-giros.md`.
+
+```text
+CoreLocationRouteTracker (lecturas con velocidad)
+  -> SharedLocationTracker  -> ArrivalMonitor, RouteDeviationMonitor (clientes)
+                            -> TurnGuidanceMonitor (observador: recibe mientras haya clientes)
+       ActiveRouteStoring.load()                 solo copia local, sin backend
+       RouteProgressEstimator                    maniobra que viene y metros hasta ella
+       ActiveRouteStoring.save(currentStep)      solo hacia delante
+       TurnGuidancePolicy.stage                  aviso previo (30–60 m) o «Ahora» (8–15 m)
+       AudioArbitrating.receive(P2 + TurnDeadline)
+       HapticFeedbackPlaying.play(.turnLeft / .turnRight)
+```
+
+- Observador y no cliente: la guía vive exactamente mientras la llegada o la desviación siguen
+  el GPS (ruta activa), sin otro arranque en `DestinationViewModel` ni cambios en `RootView`.
+- Contextos: «Ahora» y los avisos de llegada, GPS y red van en el de la revisión; el aviso
+  previo, en `<revisión>-turn-<paso>`, para cortarlo con `cancel(contextIDs:)` cuando toca
+  «Ahora», cuando el giro quedó atrás, al cambiar de revisión o al terminar la ruta.
+- No anuncia con lecturas de más de 25 m de error, a más de 30 m del trayecto (Recalcular
+  Ruta) ni a menos de 25 m del destino (llegada). La primera maniobra junto al origen no se
+  repite.
+- GPS débil: 3 lecturas imprecisas seguidas o 15 s sin lecturas (temporizador de 5 s).
+  Red: `ConnectivityObserving.isConnected` en cada lectura y en el temporizador; la vuelta se
+  avisa también con `start(onReconnect:)`. La detección de obstáculos no se toca.
+- `HapticCue.turnLeft` (dos toques lentos) y `.turnRight` (tres toques lentos) son
+  configurables; el backend los acepta en `haptic_disabled_events`.
+
+Pruebas en `Tests/LumioFrontendTests/TurnGuidanceTests.swift`.
 
 ## HU: Consentir el Envío de Imágenes para la Narración (SCRUM-324)
 
