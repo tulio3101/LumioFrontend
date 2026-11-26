@@ -32,6 +32,8 @@ struct RootView: View {
     /// SCRUM-324: Preferencias > Narración del entorno.
     let narrationConsent: NarrationConsentService?
     #endif
+    /// SCRUM-38: «Describir entorno» en la ruta activa. nil fuera de iOS.
+    let environmentNarration: EnvironmentNarrationService?
     /// Pantalla Principal Accesible: estado que se locuta al abrir. nil fuera de iOS.
     let homeStatus: HomeStatusService?
     /// Respaldo de preferencias: se sincroniza al entrar y se olvida la cuenta al salir.
@@ -75,9 +77,11 @@ struct RootView: View {
         voiceCommands: VoiceCommandService? = nil,
         homeStatus: HomeStatusService? = nil,
         preferencesSync: PreferencesSynchronizer? = nil,
-        narrationConsent: NarrationConsentService? = nil
+        narrationConsent: NarrationConsentService? = nil,
+        environmentNarration: EnvironmentNarrationService? = nil
     ) {
         self.narrationConsent = narrationConsent
+        self.environmentNarration = environmentNarration
         self.homeStatus = homeStatus
         self.preferencesSync = preferencesSync
         self.routeCreator = routeCreator
@@ -151,6 +155,7 @@ struct RootView: View {
         self.safetyMonitor = safetyMonitor
         self.obstacleGate = obstacleGate
         self.voiceCommands = voiceCommands
+        self.environmentNarration = nil
         _entry = State(initialValue: AppEntry(session: sessionService))
     }
     #endif
@@ -204,6 +209,7 @@ struct RootView: View {
                     voiceCommands: voiceCommands,
                     emergency: emergency,
                     homeStatus: homeStatus,
+                    environmentNarration: environmentNarration,
                     onOpenSettings: { tab = .settings }
                 )
             }

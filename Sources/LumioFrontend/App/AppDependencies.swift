@@ -47,6 +47,8 @@ struct AppDependencies {
     let preferencesSync: PreferencesSynchronizer
     /// SCRUM-324: consentimiento para enviar fotos a la narración; solo en el teléfono.
     let narrationConsent: NarrationConsentService
+    /// SCRUM-38: «Describir entorno» en la ruta. Usa la cámara de la seguridad sin frenarla.
+    let environmentNarration: EnvironmentNarrationService
     #endif
 
     init(configuration: AppConfiguration = .main) {
@@ -244,8 +246,10 @@ struct AppDependencies {
         let detectorLoader = ReusableModelLoader<any ObstacleDetecting> { try YOLORunner() }
         detectorLoader.warmUp()
         let focusConfig = DetectionFocusConfig()
+        // La narración (SCRUM-38) toma sus fotos de la misma sesión de ARKit.
+        let frameSource = ARKitFrameSource()
         let pipeline = DetectionPipeline(
-            frameSource: ARKitFrameSource(),
+            frameSource: frameSource,
             runnerFactory: { try detectorLoader.load() },
             discardRunner: { detectorLoader.discard() },
             lowLightDetector: LowLightDetector(audioArbiter: audioArbiter),
@@ -272,10 +276,25 @@ struct AppDependencies {
             permissions: permissionsViewModel, audio: audioArbiter
         )
         // Comandos de voz: reutilizan el flujo accesible de permisos y hablan por el árbitro.
-        narrationConsent = NarrationConsentService(
+        let consent = NarrationConsentService(
             store: FileNarrationConsentStore(fileURL: FileNarrationConsentStore.defaultFileURL()),
             arbiter: audioArbiter
         )
+        narrationConsent = consent
+        // Narración del Entorno: POST /vision/analyze con sesión; la descripción suena como P3.
+        let narration = EnvironmentNarrationService(
+            capturer: frameSource,
+            describer: RemoteEnvironmentNarrationService(
+                client: routeClient, baseURL: configuration.apiBaseURL
+            ),
+            consent: consent,
+            connectivity: monitor,
+            arbiter: audioArbiter,
+            tokens: tokens
+        )
+        // Retirar el consentimiento corta la solicitud en vuelo.
+        consent.onRevoked = { [weak narration] in narration?.cancel() }
+        environmentNarration = narration
         let voice = VoiceCommandService(
             listener: DeviceSpeechListener(),
             permissions: PermissionsVoiceGate(permissions: permissionsViewModel),
