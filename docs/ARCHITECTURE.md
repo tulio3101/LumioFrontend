@@ -612,6 +612,23 @@ corre mientras se ve la ruta activa y le dice a `EnvironmentNarrationService` si
 
 Pruebas en `Tests/LumioFrontendTests/NarrationAvailabilityTests.swift`.
 
+## HU: Recibir Retroalimentación del Sistema (SCRUM-31)
+
+`FeedbackCatalog` es la matriz de avisos del sistema (detalle en
+`docs/HU-recibir-retroalimentacion-del-sistema.md`): cada `FeedbackEvent` tiene un mensaje con
+su prioridad (1 seguridad, 2 navegación, 3 narración) y, si corresponde, un `HapticCue`.
+`FeedbackCatalog.emit` lo envía al AudioArbiter y al motor háptico; no hay otro camino.
+
+1. Rutas, emergencia, seguridad (calor, recuperación, poca luz), narración y sesión emiten por el
+   catálogo. Obstáculos, giros y descripciones arman su texto aparte, pero van por el mismo árbitro
+   y el mismo motor háptico.
+2. Solo `SpeechAudioPlayer` suena y solo `UIKitHapticFeedback` vibra; dos pruebas recorren
+   `Sources` para impedir otro reproductor o generador.
+3. Los anuncios de VoiceOver (`announceForAccessibility`) son estados de la interfaz que el
+   árbitro no dice; quedan en la capa de presentación.
+
+Pruebas en `Tests/LumioFrontendTests/FeedbackMatrixTests.swift`.
+
 ## HU: descartar mensajes duplicados u obsoletos
 
 Implementada en AudioDeduplicationPolicy y AudioArbiterService. No requiere API ni
