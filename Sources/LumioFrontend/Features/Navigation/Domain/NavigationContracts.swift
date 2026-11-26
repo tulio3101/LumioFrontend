@@ -239,6 +239,10 @@ enum HapticCue: String, Codable, CaseIterable, Equatable {
     case turnLeft
     /// Guiar Giros (SCRUM-312): anuncio de un giro a la derecha.
     case turnRight
+    /// SCRUM-41: la narración del entorno dejó de estar disponible.
+    case narrationUnavailable
+    /// SCRUM-41: la narración del entorno vuelve a estar disponible.
+    case narrationAvailable
     /// SCRUM-33: peligro grave (desnivel hacia abajo). 3 impactos fuertes.
     case danger
     /// SCRUM-33: aviso (subida o un obstáculo a menos de 1 m). 2 impactos medios.

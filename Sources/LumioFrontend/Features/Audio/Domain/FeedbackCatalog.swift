@@ -24,10 +24,9 @@ enum FeedbackEvent: Equatable {
     case backendError
     case sessionClosed
     case sessionExpired
-    /// SCRUM-41: cae / vuelve la narración (P3, una vez por transición).
-    case narrationUnavailable
+    /// SCRUM-41: cae / vuelve la narración (P2, una vez por transición).
+    case narrationUnavailable(NarrationOutage)
     case narrationAvailable
-    case narrationRequestDropped
 }
 
 enum FeedbackCatalog {
@@ -105,38 +104,32 @@ enum FeedbackCatalog {
             return FeedbackItem(message: SessionAudio.closed(), haptic: nil)
         case .sessionExpired:
             return FeedbackItem(message: SessionAudio.expiredRouteContinues(), haptic: nil)
-        case .narrationUnavailable:
+        case .narrationUnavailable(let outage):
+            // Aviso del sistema (P2): el usuario debe saber que no habrá descripciones. Va en el
+            // contexto de estado de la narración, no en el de las descripciones, para que una
+            // descripción nueva no lo cancele.
             return FeedbackItem(
                 message: AudioMessage(
-                    text: "Narración no disponible. Sin conexión con el servidor.",
-                    priority: .environmentInformation,
+                    text: EnvironmentNarrationMessages.outage(outage),
+                    priority: .routeInformation,
                     createdAt: now,
-                    contextID: NarrationAudio.contextID,
+                    expiresAt: now.addingTimeInterval(10),
+                    contextID: NarrationAudio.statusContextID,
                     deduplicationKey: "narration-unavailable"
                 ),
-                haptic: nil
+                haptic: .narrationUnavailable
             )
         case .narrationAvailable:
             return FeedbackItem(
                 message: AudioMessage(
-                    text: "Narración disponible de nuevo.",
-                    priority: .environmentInformation,
+                    text: EnvironmentNarrationMessages.available,
+                    priority: .routeInformation,
                     createdAt: now,
-                    contextID: NarrationAudio.contextID,
+                    expiresAt: now.addingTimeInterval(10),
+                    contextID: NarrationAudio.statusContextID,
                     deduplicationKey: "narration-available"
                 ),
-                haptic: nil
-            )
-        case .narrationRequestDropped:
-            return FeedbackItem(
-                message: AudioMessage(
-                    text: "Narración no disponible. Inténtalo cuando vuelva la conexión.",
-                    priority: .environmentInformation,
-                    createdAt: now,
-                    contextID: NarrationAudio.contextID,
-                    deduplicationKey: "narration-request-dropped"
-                ),
-                haptic: nil
+                haptic: .narrationAvailable
             )
         }
     }

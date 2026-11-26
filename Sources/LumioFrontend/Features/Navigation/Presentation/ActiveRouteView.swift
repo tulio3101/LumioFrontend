@@ -599,8 +599,14 @@ extension DestinationViewModel {
 }
 /// SCRUM-38: pide una descripción del entorno. El resultado llega por audio (P3): no
 /// interrumpe alertas ni indicaciones. Mientras se describe, el botón no envía otra foto.
+///
+/// SCRUM-41: con la narración caída el botón lo muestra y VoiceOver lo lee en el valor. Sigue
+/// activo: al pulsarlo, el servicio dice por audio que sigue sin estar disponible y comprueba
+/// de nuevo. La vista no locuta nada.
 private struct DescribeEnvironmentButton: View {
     @ObservedObject var service: EnvironmentNarrationService
+
+    private var isUnavailable: Bool { service.narrationAvailability.isUnavailable }
 
     var body: some View {
         Button {
@@ -608,6 +614,8 @@ private struct DescribeEnvironmentButton: View {
         } label: {
             if service.isDescribing {
                 Label("Describiendo el entorno…", systemImage: "ellipsis")
+            } else if isUnavailable {
+                Label("Narración no disponible", systemImage: "eye.slash")
             } else {
                 Label("Describir entorno", systemImage: "eye")
             }
@@ -615,7 +623,12 @@ private struct DescribeEnvironmentButton: View {
         .buttonStyle(LumioSecondaryButtonStyle())
         .disabled(service.isDescribing)
         .accessibilityLabel(service.isDescribing ? "Describiendo el entorno" : "Describir entorno")
-        .accessibilityHint("Toma una foto con la cámara y describe por audio lo que tienes delante. Necesita conexión.")
+        .accessibilityValue(isUnavailable ? "No disponible" : "")
+        .accessibilityHint(
+            isUnavailable
+                ? "La narración no está disponible ahora. La detección de obstáculos sigue activa. Toca para volver a comprobar."
+                : "Toma una foto con la cámara y describe por audio lo que tienes delante. Necesita conexión."
+        )
     }
 }
 #endif

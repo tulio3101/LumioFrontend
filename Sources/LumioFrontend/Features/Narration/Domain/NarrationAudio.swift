@@ -8,6 +8,10 @@ enum NarrationAudio {
     /// Un solo contexto para todas las narraciones: permite cancelarlas juntas (por ejemplo,
     /// al revocar el consentimiento) sin tocar la navegación ni la seguridad.
     static let contextID = "narration"
+    /// Avisos de estado de la narración («Describiendo…», fallas y, desde SCRUM-41, caída y
+    /// vuelta del servicio). Distinto de `contextID` para que una descripción nueva no los
+    /// cancele ni ellos a ella.
+    static let statusContextID = "narration-status"
     /// Una narración que espera turno más de este tiempo desde la captura ya no describe
     /// lo que el usuario tiene delante y se descarta antes de sonar.
     static let defaultLifetime: TimeInterval = 10

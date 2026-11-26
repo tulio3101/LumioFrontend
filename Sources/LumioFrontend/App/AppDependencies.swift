@@ -327,6 +327,15 @@ struct AppDependencies {
             connectivity: monitor,
             channel: audioArbiter
         )
+        // SCRUM-41: durante la ruta vigila la red y GET /vision/status (sin sesión ni foto).
+        // Avisa por el árbitro (P2) y con vibración al caer y al volver; mientras está caída no
+        // salen fotos automáticas y al volver se reanudan. La detección no depende de esto.
+        narration.availability = NarrationAvailabilityMonitor(
+            connectivity: monitor,
+            status: RemoteNarrationStatusService(client: http, baseURL: configuration.apiBaseURL),
+            audio: audioArbiter,
+            haptics: hapticSettings
+        )
         // Retirar el consentimiento corta la solicitud en vuelo y las actualizaciones.
         consent.onRevoked = { [weak narration] in narration?.cancel() }
         environmentNarration = narration
