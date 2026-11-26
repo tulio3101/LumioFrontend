@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Info.plist para xtool (xtool.yml → infoPath). xtool copia este archivo tal cual y no
+	     reemplaza variables de Xcode, así que los tres valores de abajo van fijos. El resto debe
+	     ser idéntico a Resources/Info.plist (lo vigila XtoolInfoPlistTests). -->
+	<key>CFBundleDevelopmentRegion</key>
+	<string>es</string>
+	<key>CFBundleDisplayName</key>
+	<string>Lumio</string>
+	<key>CFBundleExecutable</key>
+	<string>LumioFrontend</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.lumio.app</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Lumio</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>LumioAPIBaseURL</key>
+	<string>https://32.195.93.230.sslip.io</string>
+	<!-- SCRUM-62: client ID de Google de tipo iOS (xxx.apps.googleusercontent.com). No es
+	     secreto. Vacío: «Continuar con Google» avisa que no está disponible. -->
+	<key>GoogleClientID</key>
+	<string>307538905897-1jrvjo87gcnag4sg0kt6e8go8q3d15pe.apps.googleusercontent.com</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Lumio usa la cámara para detectar obstáculos frente a ti y avisarte por voz mientras caminas.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Lumio se conecta al servidor en tu red local para guardar y sincronizar tus rutas.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Lumio usa tu ubicación para calcular la ruta a pie desde donde estás, guiarte por voz y avisarte al llegar, también con la pantalla bloqueada.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Lumio usa el micrófono para escuchar tus comandos de voz y el destino que indiques hablando.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Lumio usa el reconocimiento de voz para entender tus comandos y el destino que dices.</string>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<true/>
+		<key>UISceneConfigurations</key>
+		<dict/>
+	</dict>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<!-- SCRUM-33 (diagnóstico Debug): permite sacar las grabaciones de desniveles por Archivos.
+	     Quitar antes de publicar en la App Store. -->
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+</dict>
+</plist>
