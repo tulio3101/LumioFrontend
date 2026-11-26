@@ -31,9 +31,9 @@ struct RootView: View {
     #if os(iOS)
     /// SCRUM-324: Preferencias > Narración del entorno.
     let narrationConsent: NarrationConsentService?
-    /// SCRUM-38: «Describir entorno» en la ruta activa.
-    let environmentNarration: EnvironmentNarrationService?
     #endif
+    /// SCRUM-38: «Describir entorno» en la ruta activa. nil fuera de iOS.
+    let environmentNarration: EnvironmentNarrationService?
     /// Pantalla Principal Accesible: estado que se locuta al abrir. nil fuera de iOS.
     let homeStatus: HomeStatusService?
     /// Respaldo de preferencias: se sincroniza al entrar y se olvida la cuenta al salir.
@@ -155,6 +155,7 @@ struct RootView: View {
         self.safetyMonitor = safetyMonitor
         self.obstacleGate = obstacleGate
         self.voiceCommands = voiceCommands
+        self.environmentNarration = nil
         _entry = State(initialValue: AppEntry(session: sessionService))
     }
     #endif
