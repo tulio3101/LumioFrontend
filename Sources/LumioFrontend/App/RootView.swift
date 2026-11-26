@@ -31,6 +31,8 @@ struct RootView: View {
     #if os(iOS)
     /// SCRUM-324: Preferencias > Narración del entorno.
     let narrationConsent: NarrationConsentService?
+    /// SCRUM-25: compartir ubicación (Preferencias y aviso en Trayecto).
+    let locationSharing: LocationSharingService?
     #endif
     /// SCRUM-38: «Describir entorno» en la ruta activa. nil fuera de iOS.
     let environmentNarration: EnvironmentNarrationService?
@@ -84,8 +86,10 @@ struct RootView: View {
         preferencesSync: PreferencesSynchronizer? = nil,
         narrationConsent: NarrationConsentService? = nil,
         passwordRecovery: (any PasswordRecovering)? = nil,
-        environmentNarration: EnvironmentNarrationService? = nil
+        environmentNarration: EnvironmentNarrationService? = nil,
+        locationSharing: LocationSharingService? = nil
     ) {
+        self.locationSharing = locationSharing
         self.narrationConsent = narrationConsent
         self.passwordRecovery = passwordRecovery
         self.environmentNarration = environmentNarration
@@ -233,6 +237,9 @@ struct RootView: View {
             }
             // Fijo en la pila de Trayecto: sigue visible al abrir la ruta activa.
             .emergencyControl(emergency, onSessionExpired: { entry = .welcome })
+            #if os(iOS)
+            .locationSharingBanner(locationSharing)
+            #endif
             .tabItem { Label("Trayecto", systemImage: "figure.walk") }
             .tag(HomeTab.route)
 
@@ -242,7 +249,8 @@ struct RootView: View {
                     signOut: signOut, profile: profile, contacts: contacts, accountDeleter: accountDeleter,
                     voicePreferences: voicePreferences, hapticPreferences: hapticPreferences,
                     onSignedOut: { entry = .welcome }, permissions: permissions,
-                    narrationConsent: narrationConsent
+                    narrationConsent: narrationConsent,
+                    locationSharing: locationSharing
                 )
                 #else
                 SettingsView(
