@@ -298,7 +298,17 @@ struct AppDependencies {
             arbiter: audioArbiter,
             tokens: tokens
         )
-        // Retirar el consentimiento corta la solicitud en vuelo.
+        // SCRUM-40: con la ruta activa, la escena que cambia pide sola otra descripción (huella
+        // VNFeaturePrint en el teléfono, mínimo 10 s entre narraciones y solo con el canal libre).
+        narration.autoUpdates = AutoNarrationScheduler(
+            service: narration,
+            capturer: frameSource,
+            signatures: VisionSceneSignatureProvider(),
+            consent: consent,
+            connectivity: monitor,
+            channel: audioArbiter
+        )
+        // Retirar el consentimiento corta la solicitud en vuelo y las actualizaciones.
         consent.onRevoked = { [weak narration] in narration?.cancel() }
         environmentNarration = narration
         let voice = VoiceCommandService(

@@ -16,6 +16,11 @@ import FoundationNetworking
 ///
 /// Una sola solicitud en vuelo. Si la respuesta llega más de 4 s después de la foto, se
 /// descarta: ya no describe lo que el usuario tiene delante (ADR-308).
+///
+/// SCRUM-40: el mismo canal sirve a las actualizaciones automáticas (`trigger: .auto`) que
+/// pide `AutoNarrationScheduler` cuando la escena cambia. Esas no avisan «Describiendo…» ni
+/// hablan al fallar: el usuario no las pidió y repetir un aviso cada pocos segundos lo
+/// molestaría más que ayudarlo.
 @MainActor
 final class EnvironmentNarrationService: ObservableObject {
     /// Avisos de estado de la narración. Distinto de `NarrationAudio.contextID` para que una
@@ -27,6 +32,14 @@ final class EnvironmentNarrationService: ObservableObject {
     static let describingNoticeDelay: TimeInterval = 1.5
 
     @Published private(set) var isDescribing = false
+    /// SCRUM-40: cuándo se envió la última foto al backend (botón o automática). El
+    /// planificador cuenta el mínimo entre narraciones desde aquí.
+    private(set) var lastRequestAt: Date?
+    /// SCRUM-40: avisa de cada descripción que entró al árbitro, con la foto que la originó,
+    /// para que el planificador tome esa escena como la última narrada.
+    var onDescribed: ((NarrationFrame) -> Void)?
+    /// SCRUM-40: actualizaciones automáticas por cambio de escena (opcional).
+    var autoUpdates: AutoNarrationScheduler?
 
     private let capturer: (any NarrationFrameCapturing)?
     private let describer: any EnvironmentDescribing
@@ -74,25 +87,42 @@ final class EnvironmentNarrationService: ObservableObject {
     /// Corta la solicitud en vuelo y lo que estuviera por sonar (p. ej., al retirar el
     /// consentimiento). No dice nada: quien cancela ya lo informa.
     func cancel() {
+        autoUpdates?.stop()
         request?.cancel()
         request = nil
         isDescribing = false
         arbiter?.cancel(contextIDs: [NarrationAudio.contextID, Self.statusContextID])
     }
 
+    /// SCRUM-40: con el planificador activo, empieza a vigilar los cambios de escena. Lo llama
+    /// la pantalla de la ruta activa.
+    func startAutoUpdates() { autoUpdates?.start() }
+    func stopAutoUpdates() { autoUpdates?.stop() }
+
+    /// `preCapturedFrame`: la foto que el planificador ya tomó para comparar escenas; así la
+    /// automática no abre una segunda captura. Sin ella, el servicio toma la suya.
     @discardableResult
-    func describeEnvironment(trigger: NarrationTrigger = .gesture) async -> EnvironmentNarrationOutcome {
+    func describeEnvironment(
+        trigger: NarrationTrigger = .gesture, preCapturedFrame: NarrationFrame? = nil
+    ) async -> EnvironmentNarrationOutcome {
         guard !isDescribing else { return .alreadyDescribing }
         defer { request = nil }
-        guard consent.requireConsentBeforeNarration() else { return .consentRequired }
-        guard connectivity.isConnected else { return unavailable(.offline) }
-        guard let capturer else { return unavailable(.cameraInactive) }
+        if trigger == .auto {
+            // Una automática nunca habla: sin consentimiento vigente simplemente no sale.
+            guard consent.consentVersionForUpload != nil else { return .consentRequired }
+        } else {
+            guard consent.requireConsentBeforeNarration() else { return .consentRequired }
+        }
+        guard connectivity.isConnected else { return unavailable(.offline, trigger: trigger) }
+        guard preCapturedFrame != nil || capturer != nil else {
+            return unavailable(.cameraInactive, trigger: trigger)
+        }
 
         isDescribing = true
         defer { isDescribing = false }
         let notice = Task { [weak self, sleep] in
             try? await sleep(Self.describingNoticeDelay)
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, trigger == .gesture else { return }
             self?.announceDescribing()
         }
         // Si «Describiendo…» llegó a sonar, lo reemplaza el aviso de falla (`say`) o se corta
@@ -100,25 +130,32 @@ final class EnvironmentNarrationService: ObservableObject {
         defer { notice.cancel() }
 
         let frame: NarrationFrame
-        switch await capturer.captureNarrationFrame() {
-        case .frame(let captured): frame = captured
-        case .cameraInactive: return unavailable(.cameraInactive)
-        case .noUsableFrame: return unavailable(.noUsableFrame)
+        if let preCapturedFrame {
+            frame = preCapturedFrame
+        } else if let capturer {
+            switch await capturer.captureNarrationFrame() {
+            case .frame(let captured): frame = captured
+            case .cameraInactive: return unavailable(.cameraInactive, trigger: trigger)
+            case .noUsableFrame: return unavailable(.noUsableFrame, trigger: trigger)
+            }
+        } else {
+            return unavailable(.cameraInactive, trigger: trigger)
         }
         if Task.isCancelled { return .cancelled }
         // Pudo retirarse mientras se tomaba la foto: entonces no se envía.
         guard let version = consent.consentVersionForUpload else { return .cancelled }
 
         let text: String
+        lastRequestAt = now()
         do {
             text = try await describer.describe(frame, trigger: trigger, consentVersion: version)
         } catch {
             if Task.isCancelled || error is CancellationError { return .cancelled }
-            return unavailable(Self.reason(for: error))
+            return unavailable(Self.reason(for: error), trigger: trigger)
         }
         if Task.isCancelled { return .cancelled }
         guard now().timeIntervalSince(frame.capturedAt) <= Self.maxResponseAge else {
-            return unavailable(.stale)
+            return unavailable(.stale, trigger: trigger)
         }
         notice.cancel()
         arbiter?.cancel(contextIDs: [Self.statusContextID])
@@ -126,6 +163,7 @@ final class EnvironmentNarrationService: ObservableObject {
         arbiter?.receive(NarrationAudio.message(
             text: text, capturedAt: frame.capturedAt, captureSequence: captureSequence
         ))
+        onDescribed?(frame)
         return .described(text)
     }
 
@@ -154,8 +192,13 @@ final class EnvironmentNarrationService: ObservableObject {
 
     // MARK: Audio
 
-    private func unavailable(_ reason: EnvironmentNarrationUnavailable) -> EnvironmentNarrationOutcome {
+    private func unavailable(
+        _ reason: EnvironmentNarrationUnavailable, trigger: NarrationTrigger = .gesture
+    ) -> EnvironmentNarrationOutcome {
         if reason == .sessionRequired { tokens?.clear() }
+        // SCRUM-40: una actualización automática que falla se calla; el planificador espera
+        // antes de volver a intentar y el botón sigue informando sus propias fallas.
+        if trigger == .auto { return .unavailable(reason) }
         say(EnvironmentNarrationMessages.message(for: reason), key: "unavailable", priority: .routeInformation)
         return .unavailable(reason)
     }
