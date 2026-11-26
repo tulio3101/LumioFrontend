@@ -14,13 +14,6 @@ import Testing
     #expect(!message.isExpired(at: .distantFuture))
 }
 
-@Test func narrationDecodesBackendContract() throws {
-    let data = Data(#"{"text":"Hay un parque","language":"es","priority":"normal"}"#.utf8)
-    let response = try JSONDecoder().decode(NarrationResponseDTO.self, from: data)
-    #expect(response.text == "Hay un parque")
-    #expect(response.priority == .normal)
-}
-
 @Test @MainActor func navigationStubDoesNotInventRoutes() async {
     let service = UnavailableNavigationService()
     do {

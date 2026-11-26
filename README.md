@@ -100,7 +100,7 @@ Sources/LumioFrontend/
     Navigation/            Domain, Data, Presentation: ejemplo completo de capas
     Safety/Domain/         Eventos y contrato de monitor local
     Audio/                 Domain, Application (árbitro), Data (reproductor nativo)
-    Narration/             Contrato local y DTOs del backend
+    Narration/             Consentimiento (SCRUM-324) y Narración del Entorno (SCRUM-38)
     Users/                 Sesión (Keychain, Bearer, refresh), registro/login, perfil, cerrar sesión y eliminar cuenta
     Welcome/Presentation/  Bienvenida sin sesión activa
     Places/Domain/         Lugares guardados y contrato de carga

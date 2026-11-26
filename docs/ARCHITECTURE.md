@@ -319,7 +319,7 @@ local esté disponible.
 | Audio | Conectar productores y validar en dispositivo | Cola/árbitro implementados; AVSpeechSynthesizer mediante AudioPlaying |
 | Safety | Cámara, inferencia y distancia confiable | AVFoundation, Vision/Core ML, ARKit |
 | Navigation | Seguimiento y eventos de giro (SCRUM-312) | Crear Ruta implementada con MapKit y CoreLocation |
-| Narration | Servicio remoto y control de frecuencia | HTTPClient, POST /narration |
+| Narration | Disparo automático por cambio de escena (SCRUM-40) | Narración a pedido implementada: foto del ARSession de la seguridad, POST /vision/analyze (multipart) y P3 en el árbitro (docs/HU-narracion-del-entorno.md) |
 | Users | Inicio de sesión con Google | Correo, Keychain, Bearer y refresh implementados |
 | Places | Confirmar contrato de favoritos con backend | El backend actual expone rutas, no asumir CRUD de favoritos |
 | Settings | Validar en dispositivo voz, vibración y respaldo | Voz en SpeechAudioPlayer, vibración en HapticPreferencesService, respaldo en PreferencesSynchronizer (GET/PUT /users/me/preferences; docs/HU-preferencias-hapticas.md) |
@@ -518,6 +518,25 @@ Contrato para Narración del Entorno (SCRUM-38) y Solicitar Narración (SCRUM-39
   `consent_required` sin él.
 
 Pruebas en `Tests/LumioFrontendTests/NarrationConsentTests.swift`.
+
+## HU: Narración del Entorno (SCRUM-38)
+
+Botón «Describir entorno» en la ruta activa (`ActiveRouteView`) →
+`EnvironmentNarrationService` (detalle en `docs/HU-narracion-del-entorno.md`):
+
+1. Consentimiento (`NarrationConsentGating`) y conexión antes de tomar la foto.
+2. `ARKitFrameSource` implementa `NarrationFrameCapturing`: atiende el pedido con el siguiente
+   frame con seguimiento normal, antes de la compuerta del detector y sin tocarla, así que no
+   frena ni consume frames de la seguridad. `NarrationFrameEncoder`: 768 px, vertical, JPEG
+   0,7, sin metadatos, en memoria.
+3. `RemoteEnvironmentNarrationService`: `POST /vision/analyze` con sesión y
+   `multipart/form-data`, timeout de 5 s.
+4. La descripción entra como P3 (`NarrationAudio`); si llega más de 4 s después de la foto se
+   descarta. Una sola solicitud en vuelo; «Describiendo…» si tarda más de 1,5 s.
+5. Las fallas se informan por audio (P2, contexto `narration-status`) y nunca tocan el loop de
+   seguridad. Retirar el consentimiento cancela la solicitud en vuelo.
+
+Pruebas en `Tests/LumioFrontendTests/EnvironmentNarrationTests.swift`.
 
 ## HU: descartar mensajes duplicados u obsoletos
 
