@@ -25,7 +25,7 @@ import FoundationNetworking
 final class EnvironmentNarrationService: ObservableObject {
     /// Avisos de estado de la narración. Distinto de `NarrationAudio.contextID` para que una
     /// descripción nueva no se cancele junto con «Describiendo…».
-    static let statusContextID = "narration-status"
+    static let statusContextID = NarrationAudio.statusContextID
     /// ADR-308: la descripción vale hasta 4 s después de tomar la foto.
     static let maxResponseAge: TimeInterval = 4
     /// ADR-308: «Describiendo…» solo si la respuesta tarda más de esto.
@@ -40,6 +40,18 @@ final class EnvironmentNarrationService: ObservableObject {
     var onDescribed: ((NarrationFrame) -> Void)?
     /// SCRUM-40: actualizaciones automáticas por cambio de escena (opcional).
     var autoUpdates: AutoNarrationScheduler?
+    /// SCRUM-41: si la narración está disponible, para la pantalla y el planificador.
+    @Published private(set) var narrationAvailability: NarrationAvailability = .checking
+    /// SCRUM-41: vigila la red y el servicio mientras la ruta está abierta (opcional). Cada
+    /// solicitud le informa su resultado; al volver el servicio se reanudan las automáticas.
+    var availability: (any NarrationAvailabilityObserving)? {
+        didSet {
+            narrationAvailability = availability?.availability ?? .checking
+            availability?.onChange = { [weak self] state in
+                self?.availabilityChanged(to: state)
+            }
+        }
+    }
 
     private let capturer: (any NarrationFrameCapturing)?
     private let describer: any EnvironmentDescribing
@@ -96,8 +108,25 @@ final class EnvironmentNarrationService: ObservableObject {
 
     /// SCRUM-40: con el planificador activo, empieza a vigilar los cambios de escena. Lo llama
     /// la pantalla de la ruta activa.
-    func startAutoUpdates() { autoUpdates?.start() }
-    func stopAutoUpdates() { autoUpdates?.stop() }
+    /// SCRUM-41: también empieza (y deja) de vigilar la disponibilidad de la narración.
+    func startAutoUpdates() {
+        availability?.start()
+        autoUpdates?.start()
+    }
+
+    func stopAutoUpdates() {
+        autoUpdates?.stop()
+        availability?.stop()
+    }
+
+    /// SCRUM-41: al volver el servicio, las automáticas se reanudan sin esperar su pausa.
+    private func availabilityChanged(to state: NarrationAvailability) {
+        let wasUnavailable = narrationAvailability.isUnavailable
+        narrationAvailability = state
+        if wasUnavailable, state == .available {
+            autoUpdates?.resume()
+        }
+    }
 
     /// `preCapturedFrame`: la foto que el planificador ya tomó para comparar escenas; así la
     /// automática no abre una segunda captura. Sin ella, el servicio toma la suya.
@@ -114,6 +143,9 @@ final class EnvironmentNarrationService: ObservableObject {
             guard consent.requireConsentBeforeNarration() else { return .consentRequired }
         }
         guard connectivity.isConnected else { return unavailable(.offline, trigger: trigger) }
+        if case .unavailable(let outage) = narrationAvailability {
+            return duringOutage(outage, trigger: trigger)
+        }
         guard preCapturedFrame != nil || capturer != nil else {
             return unavailable(.cameraInactive, trigger: trigger)
         }
@@ -163,6 +195,7 @@ final class EnvironmentNarrationService: ObservableObject {
         arbiter?.receive(NarrationAudio.message(
             text: text, capturedAt: frame.capturedAt, captureSequence: captureSequence
         ))
+        availability?.narrationSucceeded()
         onDescribed?(frame)
         return .described(text)
     }
@@ -196,10 +229,27 @@ final class EnvironmentNarrationService: ObservableObject {
         _ reason: EnvironmentNarrationUnavailable, trigger: NarrationTrigger = .gesture
     ) -> EnvironmentNarrationOutcome {
         if reason == .sessionRequired { tokens?.clear() }
+        // SCRUM-41: una falla de red o del servicio pide comprobar la disponibilidad ya. Si el
+        // usuario pulsó el botón, oye el motivo aquí y la caída no se le vuelve a anunciar.
+        availability?.narrationFailed(reason, userNotified: trigger == .gesture)
         // SCRUM-40: una actualización automática que falla se calla; el planificador espera
         // antes de volver a intentar y el botón sigue informando sus propias fallas.
         if trigger == .auto { return .unavailable(reason) }
         say(EnvironmentNarrationMessages.message(for: reason), key: "unavailable", priority: .routeInformation)
+        return .unavailable(reason)
+    }
+
+    /// SCRUM-41: durante una caída no se toma ni se envía la foto, y no se encola: una foto vieja
+    /// ya no describe lo que el usuario tiene delante. El botón responde enseguida (P2) y pide
+    /// comprobar ya; si el servicio volvió, el monitor avisa «Narración disponible de nuevo».
+    /// La automática se calla.
+    private func duringOutage(
+        _ outage: NarrationOutage, trigger: NarrationTrigger
+    ) -> EnvironmentNarrationOutcome {
+        let reason: EnvironmentNarrationUnavailable = outage == .offline ? .offline : .serviceUnavailable
+        guard trigger == .gesture else { return .unavailable(reason) }
+        availability?.recheck()
+        say(EnvironmentNarrationMessages.stillUnavailable(outage), key: "unavailable", priority: .routeInformation)
         return .unavailable(reason)
     }
 

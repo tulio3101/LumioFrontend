@@ -324,7 +324,7 @@ local esté disponible.
 | Audio | Conectar productores y validar en dispositivo | Cola/árbitro implementados; AVSpeechSynthesizer mediante AudioPlaying |
 | Safety | Cámara, inferencia y distancia confiable; fuente de profundidad dual para el modo reducido (SCRUM-349) | AVFoundation, Vision/Core ML, ARKit. Proximidad por `ProximityPolicy` según el spike SCRUM-309 (docs/HU-alertar-proximidad-de-objetos.md) |
 | Navigation | Validar la guía de giros caminando una ruta real (SCRUM-329) | Crear Ruta con MapKit y CoreLocation; giros guiados por GPS sobre la copia local (docs/HU-guiar-giros.md) |
-| Narration | Afinar `changeThreshold` del cambio de escena en el iPhone (SCRUM-40) | Narración a pedido y automática por cambio de escena: foto del ARSession de la seguridad, POST /vision/analyze (multipart) y P3 en el árbitro (docs/HU-narracion-del-entorno.md, docs/HU-actualizar-narracion-ante-cambios-de-entorno.md) |
+| Narration | Afinar `changeThreshold` del cambio de escena en el iPhone (SCRUM-40) | Narración a pedido y automática por cambio de escena: foto del ARSession de la seguridad, POST /vision/analyze (multipart) y P3 en el árbitro; disponibilidad con GET /vision/status y avisos P2 (docs/HU-narracion-del-entorno.md, docs/HU-actualizar-narracion-ante-cambios-de-entorno.md, docs/HU-gestionar-disponibilidad-de-la-narracion.md) |
 | Users | Validar Google en dispositivo con el client ID real | Correo, Google (OAuth con PKCE y asociar a la cuenta; docs/HU-iniciar-sesion-con-google.md), Keychain, Bearer y refresh implementados |
 | Places | Confirmar contrato de favoritos con backend | El backend actual expone rutas, no asumir CRUD de favoritos |
 | Settings | Validar en dispositivo voz, vibración y respaldo | Voz en SpeechAudioPlayer, vibración en HapticPreferencesService, respaldo en PreferencesSynchronizer (GET/PUT /users/me/preferences; docs/HU-preferencias-hapticas.md) |
@@ -592,6 +592,25 @@ vigila la escena mientras se ve la ruta activa y pide otra descripción solo si 
    esto toca el loop de seguridad.
 
 Pruebas en `Tests/LumioFrontendTests/AutoNarrationTests.swift`.
+
+## HU: Gestionar Disponibilidad de la Narración (SCRUM-41)
+
+`NarrationAvailabilityMonitor` (detalle en `docs/HU-gestionar-disponibilidad-de-la-narracion.md`)
+corre mientras se ve la ruta activa y le dice a `EnvironmentNarrationService` si hay narración:
+
+1. Estados `checking`, `available` y `unavailable(.offline | .serviceDown)`.
+2. Sin red no llama al servidor; con red consulta `GET /vision/status`
+   (`RemoteNarrationStatusService`, sin sesión ni foto). Cada 30 s si está disponible; si no, a
+   los 2, 4, 8, 16 y 30 s y al volver la red. Los resultados reales de cada solicitud también
+   cuentan.
+3. Avisa una vez al caer y una al volver por el `FeedbackCatalog`: P2 `.routeInformation`,
+   contexto `narration-status` y vibración `narrationUnavailable` / `narrationAvailable`.
+4. Durante la caída no salen fotos: las automáticas se saltan (`skipped(.narrationUnavailable)`)
+   y el botón responde al instante y pide comprobar ya. Sin cola. Al volver,
+   `AutoNarrationScheduler.resume()` olvida la pausa por fallas.
+5. No depende de la seguridad ni la toca. Se conecta solo en `AppDependencies`.
+
+Pruebas en `Tests/LumioFrontendTests/NarrationAvailabilityTests.swift`.
 
 ## HU: descartar mensajes duplicados u obsoletos
 

@@ -76,6 +76,12 @@ locución al abrir la app (ver docs/HU-preferencias-de-voz.md).
 En Preferencias > Vibración se activa o desactiva la vibración, se elige qué eventos de la ruta
 vibran y con qué intensidad; las alertas de seguridad siempre vibran
 (ver docs/HU-preferencias-hapticas.md).
+Gestionar Disponibilidad de la Narración (SCRUM-41): durante la ruta, Lumio vigila la red y
+`GET /vision/status` y avisa por audio (P2) y con vibración, una vez, cuando la narración se cae
+y cuando vuelve, recordando que la detección de obstáculos sigue activa. Mientras está caída no
+envía fotos automáticas y el botón «Describir entorno» responde enseguida y vuelve a comprobar;
+al volver, las descripciones automáticas se reanudan (ver
+docs/HU-gestionar-disponibilidad-de-la-narracion.md).
 También deduplica eventos P2/P3 y reemplaza narraciones pendientes de capturas
 antiguas mediante metadatos opcionales; las reglas están en la guía de arquitectura.
 No están implementados cámara, seguridad ni llamadas de narración.

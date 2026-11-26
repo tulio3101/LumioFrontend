@@ -93,4 +93,29 @@ enum EnvironmentNarrationMessages {
             return "La descripción tardó demasiado y ya no corresponde a lo que tienes delante. Vuelve a intentarlo."
         }
     }
+
+    // MARK: SCRUM-41: disponibilidad
+
+    /// La narración se cayó durante la ruta (una vez por caída).
+    static func outage(_ outage: NarrationOutage) -> String {
+        switch outage {
+        case .offline:
+            return "Narración no disponible: no hay conexión. La detección de obstáculos sigue activa."
+        case .serviceDown:
+            return "Narración no disponible por ahora. La detección de obstáculos sigue activa."
+        }
+    }
+
+    /// Volvió el servicio: el botón y las descripciones automáticas funcionan otra vez.
+    static let available = "Narración disponible de nuevo."
+
+    /// El usuario pulsó «Describir entorno» durante una caída: no se envía la foto.
+    static func stillUnavailable(_ outage: NarrationOutage) -> String {
+        switch outage {
+        case .offline:
+            return "La narración sigue sin conexión. Te aviso cuando vuelva. La detección de obstáculos sigue activa."
+        case .serviceDown:
+            return "La narración sigue sin estar disponible. Te aviso cuando vuelva. La detección de obstáculos sigue activa."
+        }
+    }
 }
