@@ -23,6 +23,8 @@ final class SessionTeardown: SessionTearingDown {
     /// Rutas finalizadas sin red: se intentan enviar con esta cuenta antes de limpiar; lo que no
     /// llegue se descarta para no subirlo luego con otra.
     private let pendingHistory: (any PendingHistorySyncing)?
+    /// SCRUM-25: dejar de compartir la ubicación antes de que se borren los tokens.
+    private let locationSharing: (any LocationSharingStopping)?
 
     init(
         safetyMonitor: (any SafetyMonitoring)? = nil,
@@ -31,8 +33,10 @@ final class SessionTeardown: SessionTearingDown {
         arbiter: (any AudioArbitrating)? = nil,
         routes: any ActiveRouteStoring,
         recentRoutes: (any RecentRoutesStoring)? = nil,
-        pendingHistory: (any PendingHistorySyncing)? = nil
+        pendingHistory: (any PendingHistorySyncing)? = nil,
+        locationSharing: (any LocationSharingStopping)? = nil
     ) {
+        self.locationSharing = locationSharing
         self.safetyMonitor = safetyMonitor
         self.arrivalMonitor = arrivalMonitor
         self.deviationMonitor = deviationMonitor
@@ -43,6 +47,9 @@ final class SessionTeardown: SessionTearingDown {
     }
 
     func tearDown() async {
+        // 0. SCRUM-25: cerrar el enlace de ubicación con esta cuenta (necesita su sesión).
+        await locationSharing?.stopSharing()
+
         // 1. Parar los productores de la ruta activa ANTES de vaciar el audio, para que no
         //    vuelvan a encolar indicaciones ni alertas después de salir. Parar los dos monitores
         //    apaga el GPS compartido (SharedLocationTracker); stop() de SafetyService pausa y

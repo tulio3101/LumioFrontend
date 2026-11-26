@@ -52,6 +52,8 @@ struct AppDependencies {
     let narrationConsent: NarrationConsentService
     /// SCRUM-32: narración automática y avisos; solo en el teléfono, se leen en memoria.
     let accessibilityPreferences: AccessibilityPreferencesService
+    /// SCRUM-25: compartir la ubicación con los contactos de confianza.
+    let locationSharing: LocationSharingService
     /// Recuperar Contraseña: POST /users/password-reset y /confirm, sin sesión.
     let passwordRecovery: PasswordRecoveryService
     /// SCRUM-38: «Describir entorno» en la ruta. Usa la cámara de la seguridad sin frenarla.
@@ -132,6 +134,15 @@ struct AppDependencies {
         arrivalMonitor = ArrivalMonitor(tracker: tracking.makeClient(), store: store, finisher: finisher)
         // El estado de la red decide si se puede recalcular; al volver se reintenta.
         let monitor = NetworkConnectivityMonitor()
+        // SCRUM-25: enlace por correo a los contactos de confianza, con la posición cada 30 s.
+        let sharing = LocationSharingService(
+            remote: RemoteLocationSharingService(client: routeClient, baseURL: configuration.apiBaseURL),
+            location: location,
+            connectivity: monitor,
+            arbiter: arbiter,
+            tokens: tokens
+        )
+        locationSharing = sharing
         // SCRUM-360: al iniciar sesión, esta cuenta reenvía sus rutas finalizadas aparcadas.
         // SCRUM-62: Google avisa por el árbitro la cancelación, la falta de red y los errores.
         authenticationService = AnnouncedAuthenticationService(
@@ -384,7 +395,8 @@ struct AppDependencies {
             arbiter: arbiter,
             routes: store,
             recentRoutes: recentStore,
-            pendingHistory: history
+            pendingHistory: history,
+            locationSharing: sharing
         )
         signOut = SignOutService(session: session, teardown: teardown)
         self.sessionExpiry = SessionExpiryCoordinator(teardown: teardown, routes: store, arbiter: arbiter)
