@@ -12,7 +12,8 @@ Esta HU construye el canal completo, de la foto al audio, con un disparo a pedid
 **«Describir entorno»** en la pantalla de la ruta activa. Quedan para sus propias HU:
 
 - SCRUM-39 (Solicitar Narración): otros mecanismos de solicitud y la gestión de solicitudes
-  repetidas más allá de «una sola en vuelo».
+  repetidas más allá de «una sola en vuelo». Ya implementada, ver
+  `docs/HU-solicitar-narracion-del-entorno.md`.
 - SCRUM-40 (Actualizar ante cambios): el disparo automático por cambio de escena
   (`VNFeaturePrint`, mínimo 10 s entre narraciones, canal libre). Ya implementada, ver
   `docs/HU-actualizar-narracion-ante-cambios-de-entorno.md`.

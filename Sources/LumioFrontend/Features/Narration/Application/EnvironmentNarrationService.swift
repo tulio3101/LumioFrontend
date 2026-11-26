@@ -48,6 +48,11 @@ final class EnvironmentNarrationService: ObservableObject {
     private let arbiter: (any AudioArbitrating)?
     /// Se borran si la sesión ya no vale, para que la app vuelva a pedir iniciar sesión.
     private let tokens: (any TokenStoring)?
+    /// SCRUM-39: huella de la foto para no volver a describir una escena que no cambió.
+    private let signatures: (any SceneSignatureProviding)?
+    private let repeatPolicy: NarrationRepeatPolicy
+    /// SCRUM-39: la última descripción pedida a mano, para repetirla sin volver a enviar.
+    private var lastDescription: (text: String, capturedAt: Date, signature: SceneSignature?)?
     private let sleep: (TimeInterval) async throws -> Void
     private let now: () -> Date
 
@@ -61,6 +66,8 @@ final class EnvironmentNarrationService: ObservableObject {
         connectivity: any ConnectivityObserving,
         arbiter: (any AudioArbitrating)?,
         tokens: (any TokenStoring)? = nil,
+        signatures: (any SceneSignatureProviding)? = nil,
+        repeatPolicy: NarrationRepeatPolicy = NarrationRepeatPolicy(),
         sleep: @escaping (TimeInterval) async throws -> Void = {
             try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000))
         },
@@ -72,13 +79,19 @@ final class EnvironmentNarrationService: ObservableObject {
         self.connectivity = connectivity
         self.arbiter = arbiter
         self.tokens = tokens
+        self.signatures = signatures
+        self.repeatPolicy = repeatPolicy
         self.sleep = sleep
         self.now = now
     }
 
-    /// Botón «Describir entorno». No espera: el resultado llega por audio.
+    /// Botón «Describir entorno», comando de voz o acción de VoiceOver (SCRUM-39). No
+    /// espera: el resultado llega por audio. Si ya hay una en curso no se envía otra y se dice.
     func requestDescription() {
-        guard request == nil else { return }
+        guard request == nil, !isDescribing else {
+            say(EnvironmentNarrationMessages.alreadyDescribing, key: "already-describing", priority: .environmentInformation)
+            return
+        }
         request = Task { [weak self] in
             await self?.describeEnvironment() ?? .cancelled
         }
@@ -91,6 +104,8 @@ final class EnvironmentNarrationService: ObservableObject {
         request?.cancel()
         request = nil
         isDescribing = false
+        // Con el consentimiento retirado tampoco se repite lo descrito antes.
+        lastDescription = nil
         arbiter?.cancel(contextIDs: [NarrationAudio.contextID, Self.statusContextID])
     }
 
@@ -116,6 +131,11 @@ final class EnvironmentNarrationService: ObservableObject {
         guard connectivity.isConnected else { return unavailable(.offline, trigger: trigger) }
         guard preCapturedFrame != nil || capturer != nil else {
             return unavailable(.cameraInactive, trigger: trigger)
+        }
+        // SCRUM-39: pedir otra vez enseguida repite la última descripción, sin foto ni red.
+        if trigger == .gesture, let last = lastDescription,
+           repeatPolicy.replaysWithoutPhoto(lastCapturedAt: last.capturedAt, now: now()) {
+            return replay(last.text)
         }
 
         isDescribing = true
@@ -144,6 +164,13 @@ final class EnvironmentNarrationService: ObservableObject {
         if Task.isCancelled { return .cancelled }
         // Pudo retirarse mientras se tomaba la foto: entonces no se envía.
         guard let version = consent.consentVersionForUpload else { return .cancelled }
+        // SCRUM-39: si la escena es la misma que se acaba de describir, se repite sin enviar.
+        let signature = trigger == .gesture ? signatures?.signature(for: frame.jpeg) : nil
+        if let last = lastDescription, repeatPolicy.replaysSameScene(
+            last: last.signature, lastCapturedAt: last.capturedAt, current: signature, now: now()
+        ) {
+            return replay(last.text)
+        }
 
         let text: String
         lastRequestAt = now()
@@ -164,7 +191,22 @@ final class EnvironmentNarrationService: ObservableObject {
             text: text, capturedAt: frame.capturedAt, captureSequence: captureSequence
         ))
         onDescribed?(frame)
+        if trigger == .gesture {
+            lastDescription = (text, frame.capturedAt, signature)
+        }
         return .described(text)
+    }
+
+    /// SCRUM-39: repite la última descripción como P3, igual que una nueva.
+    private func replay(_ text: String) -> EnvironmentNarrationOutcome {
+        captureSequence += 1
+        arbiter?.cancel(contextIDs: [Self.statusContextID])
+        arbiter?.receive(NarrationAudio.message(
+            text: EnvironmentNarrationMessages.repeated(text),
+            capturedAt: now(),
+            captureSequence: captureSequence
+        ))
+        return .repeated(text)
     }
 
     // MARK: Errores

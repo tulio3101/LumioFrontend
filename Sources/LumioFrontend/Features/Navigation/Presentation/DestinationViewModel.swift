@@ -88,6 +88,8 @@ final class DestinationViewModel: ObservableObject {
     /// Detección de obstáculos (SCRUM-33). Corre en paralelo a la detección de llegada: solo
     /// mientras hay ruta activa. nil si la plataforma o el modelo no la ofrecen.
     private let safetyMonitor: (any SafetyMonitoring)?
+    /// SCRUM-39: «describe el entorno» por voz. La asigna la pantalla; nil sin narración.
+    weak var narration: (any NarrationRequesting)?
     /// Compuerta de permiso de cámara (SCRUM-315). Sin ella no se comprueba el permiso.
     private let obstacleGate: (any CameraAssistanceGating)?
     private let instructions = NavigationInstructionBuilder()

@@ -194,7 +194,7 @@ final class AutoNarrationScheduler {
             backoffUntil = now().addingTimeInterval(
                 configuration.backoff(afterFailures: consecutiveFailures)
             )
-        case .consentRequired, .alreadyDescribing, .cancelled:
+        case .consentRequired, .alreadyDescribing, .cancelled, .repeated:
             break
         }
     }

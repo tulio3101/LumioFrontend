@@ -156,6 +156,7 @@ struct DestinationView: View {
         .onAppear {
             hasAppeared = true
             voiceCommands?.actions = model
+            model.narration = environmentNarration
         }
         .task { await model.restoreActiveRoute() }
         // Al abrir la app se locuta el estado una vez; después solo se muestra.
