@@ -15,7 +15,10 @@ final class DeviceSpeechListener: SpeechListening {
     private let endOfSpeechSilence: UInt64
 
     private let recognizer: SFSpeechRecognizer?
-    private let audioEngine = AVAudioEngine()
+    /// Se crea en cada escucha, después de activar la sesión de grabación: un motor creado antes
+    /// conserva el formato de la sesión de reproducción del árbitro (`.playback`/`.voicePrompt`)
+    /// y `installTap` lanza una excepción de Objective-C que cierra la app.
+    private var audioEngine: AVAudioEngine?
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
     private var continuation: CheckedContinuation<String, Error>?
@@ -78,14 +81,22 @@ final class DeviceSpeechListener: SpeechListening {
         }
         self.request = request
 
-        let input = audioEngine.inputNode
-        let format = input.outputFormat(forBus: 0)
-        input.removeTap(onBus: 0)
+        guard session.isInputAvailable else { throw MicrophoneError.noInput }
+        let engine = AVAudioEngine()
+        audioEngine = engine
+        let input = engine.inputNode
+        // Formato real del micrófono. Si no es válido (0 Hz o 0 canales: la sesión aún no
+        // cambió de ruta o el micrófono está ocupado), installTap lanzaría una NSException que
+        // Swift no puede atrapar: se avisa «No pude escuchar» en lugar de cerrar la app.
+        let format = input.inputFormat(forBus: 0)
+        guard format.sampleRate > 0, format.channelCount > 0 else {
+            throw MicrophoneError.invalidFormat(sampleRate: format.sampleRate, channels: format.channelCount)
+        }
         input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
             request.append(buffer)
         }
-        audioEngine.prepare()
-        try audioEngine.start()
+        engine.prepare()
+        try engine.start()
 
         task = recognizer.recognitionTask(with: request) { [weak self] result, error in
             let text = result?.bestTranscription.formattedString
@@ -135,8 +146,16 @@ final class DeviceSpeechListener: SpeechListening {
         task = nil
         request?.endAudio()
         request = nil
-        if audioEngine.isRunning { audioEngine.stop() }
-        audioEngine.inputNode.removeTap(onBus: 0)
+        if let engine = audioEngine {
+            if engine.isRunning { engine.stop() }
+            engine.inputNode.removeTap(onBus: 0)
+        }
+        audioEngine = nil
+    }
+
+    private enum MicrophoneError: Error {
+        case noInput
+        case invalidFormat(sampleRate: Double, channels: AVAudioChannelCount)
     }
 
     /// Español del dispositivo si es compatible (es-CO, es-MX…); si no, español de México.
