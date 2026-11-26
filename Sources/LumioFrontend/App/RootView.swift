@@ -31,6 +31,8 @@ struct RootView: View {
     #if os(iOS)
     /// SCRUM-324: Preferencias > Narración del entorno.
     let narrationConsent: NarrationConsentService?
+    /// SCRUM-38: «Describir entorno» en la ruta activa.
+    let environmentNarration: EnvironmentNarrationService?
     #endif
     /// Pantalla Principal Accesible: estado que se locuta al abrir. nil fuera de iOS.
     let homeStatus: HomeStatusService?
@@ -75,9 +77,11 @@ struct RootView: View {
         voiceCommands: VoiceCommandService? = nil,
         homeStatus: HomeStatusService? = nil,
         preferencesSync: PreferencesSynchronizer? = nil,
-        narrationConsent: NarrationConsentService? = nil
+        narrationConsent: NarrationConsentService? = nil,
+        environmentNarration: EnvironmentNarrationService? = nil
     ) {
         self.narrationConsent = narrationConsent
+        self.environmentNarration = environmentNarration
         self.homeStatus = homeStatus
         self.preferencesSync = preferencesSync
         self.routeCreator = routeCreator
@@ -204,6 +208,7 @@ struct RootView: View {
                     voiceCommands: voiceCommands,
                     emergency: emergency,
                     homeStatus: homeStatus,
+                    environmentNarration: environmentNarration,
                     onOpenSettings: { tab = .settings }
                 )
             }
