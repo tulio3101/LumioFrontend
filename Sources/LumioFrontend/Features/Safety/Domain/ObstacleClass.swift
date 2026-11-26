@@ -21,6 +21,8 @@ enum ObstacleClass: String, CaseIterable, Equatable {
     case bench         = "bench"
     case chair         = "chair"
     case pottedPlant   = "potted plant"
+    // Mesas: terrazas de café y, con malla LiDAR, se fusiona con la clase .table (FASE 1).
+    case diningTable   = "dining table"
     // Animales
     case dog           = "dog"
     // Objetos portátiles que aparecen en la vía

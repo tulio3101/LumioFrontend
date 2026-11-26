@@ -53,6 +53,8 @@ struct RootView: View {
     /// SCRUM-315: permisos accesibles (micrófono, voz, ubicación, cámara) para el destino por
     /// voz y la detección de obstáculos. Se comparte con DestinationView y SettingsView.
     let permissions: PermissionsViewModel
+    /// SCRUM-360: al expirar la sesión (401 no renovable) se vuelve a la bienvenida/login.
+    @ObservedObject private var sessionExpiry: SessionExpiryCoordinator
 
     init(
         sessionService: any SessionRestoring,
@@ -74,6 +76,7 @@ struct RootView: View {
         voicePreferences: any VoicePreferencesManaging,
         hapticPreferences: any HapticPreferencesManaging,
         permissions: PermissionsViewModel,
+        sessionExpiry: SessionExpiryCoordinator,
         safetyMonitor: (any SafetyMonitoring)? = nil,
         obstacleGate: (any CameraAssistanceGating)? = nil,
         voiceCommands: VoiceCommandService? = nil,
@@ -106,6 +109,7 @@ struct RootView: View {
         self.hapticPreferences = hapticPreferences
         self.authenticationService = authenticationService
         self.permissions = permissions
+        _sessionExpiry = ObservedObject(wrappedValue: sessionExpiry)
         self.safetyMonitor = safetyMonitor
         self.obstacleGate = obstacleGate
         self.voiceCommands = voiceCommands
@@ -181,6 +185,13 @@ struct RootView: View {
                     preferencesSync?.forgetAccount()
                 }
             }
+            #if os(iOS)
+            // SCRUM-360: si la sesión expira (401 no renovable), la ruta ya se desmontó; aquí solo
+            // se devuelve la UI a la bienvenida/login.
+            .onChange(of: sessionExpiry.didExpire) { expired in
+                if expired { entry = .welcome }
+            }
+            #endif
     }
 
     @ViewBuilder

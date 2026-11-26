@@ -60,7 +60,14 @@ final class LowLightDetector {
 
     private func emitRecovery() {
         Task { @MainActor [weak self] in
-            self?.feedbackGenerator.notificationOccurred(.success)
+            guard let self else { return }
+            // SCRUM-36: deja de alertar y lo confirma por audio (P3) al volver la luz adecuada.
+            self.audioArbiter.receive(AudioMessage(
+                text: "Luz suficiente de nuevo.",
+                priority: .environmentInformation,
+                deduplicationKey: "low-light-recovered"
+            ))
+            self.feedbackGenerator.notificationOccurred(.success)
         }
     }
 }

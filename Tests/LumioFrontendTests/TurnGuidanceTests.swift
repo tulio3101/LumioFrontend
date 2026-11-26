@@ -99,6 +99,18 @@ private final class TurnHarness {
     #expect(HapticCue.configurable.contains(.turnRight))
 }
 
+@Test func turnsNeverFeelLikeASafetyAlert() {
+    // Con cualquier intensidad, un giro no puede sentirse como un desnivel u otra alerta.
+    for intensity in HapticIntensity.allCases {
+        for turn in [HapticCue.turnLeft, .turnRight] {
+            let pattern = HapticPattern.pattern(for: turn, intensity: intensity)
+            for alert in HapticCue.alwaysOn {
+                #expect(pattern != HapticPattern.pattern(for: alert, intensity: intensity), "\(turn) = \(alert)")
+            }
+        }
+    }
+}
+
 // MARK: - Cuándo anunciar
 
 @Test func announcementDistanceGrowsWithWalkingSpeed() {

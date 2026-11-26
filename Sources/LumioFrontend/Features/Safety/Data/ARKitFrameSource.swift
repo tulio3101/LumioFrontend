@@ -10,6 +10,10 @@ import simd
 /// SCRUM-223: re-runs the session automatically after system interruptions (phone calls, etc.).
 final class ARKitFrameSource: NSObject, FrameSource {
     private let session = ARSession()
+    /// SCRUM-321: el delegado de ARSession corre en una cola PROPIA (no en main), para que la
+    /// lectura de malla, la desproyección y el muestreo no bloqueen el hilo principal ("UI
+    /// unresponsiveness on the main thread").
+    private let delegateQueue = DispatchQueue(label: "com.lumio.arsession", qos: .userInitiated)
     private(set) var isDepthAvailable = false
     private var activeConfig: ARWorldTrackingConfiguration?
 
@@ -30,8 +34,10 @@ final class ARKitFrameSource: NSObject, FrameSource {
     /// Malla + piso recolectados de los anchors (para nombrar obstáculos y descontar el suelo).
     private let meshStore = MeshClassificationStore()
     private struct AnchorState {
+        /// Plano horizontal candidato a piso: centro en mundo y "radio" (media extensión mayor).
+        struct FloorPlane { var center: simd_float3; var radius: Float }
         var meshAnchors: [UUID: ARMeshAnchor] = [:]
-        var floorHeights: [UUID: Float] = [:]
+        var floorPlanes: [UUID: FloorPlane] = [:]
         var meshEnabled = false
     }
     private let anchorState = OSAllocatedUnfairLock(initialState: AnchorState())
@@ -47,6 +53,13 @@ final class ARKitFrameSource: NSObject, FrameSource {
     static let narrationCaptureTimeout: TimeInterval = 1.5
 
     private let logger = Logger(subsystem: "com.lumio.app", category: "ARKitFrameSource")
+    /// El piso es el plano horizontal **bajo los pies**: su extensión contiene la posición xz de la
+    /// cámara y está entre estos metros por debajo de ella (SCRUM-33). Así una mesa (muy cerca) o un
+    /// nivel inferior lejano no se confunden con el suelo.
+    static let floorUnderFeetMin: Float = 0.9
+    static let floorUnderFeetMax: Float = 1.8
+    /// Holgura (m) para el test de "la cámara está sobre el plano" (ignora la rotación del plano).
+    static let floorContainmentSlack: Float = 0.3
     #if DEBUG
     private static var lastFrameLogTime: Double = 0
     #endif
@@ -58,6 +71,7 @@ final class ARKitFrameSource: NSObject, FrameSource {
         )
         super.init()
         session.delegate = self
+        session.delegateQueue = delegateQueue   // SCRUM-321: trabajo pesado fuera del main thread
         NotificationCenter.default.addObserver(
             self, selector: #selector(thermalStateChanged),
             name: ProcessInfo.thermalStateDidChangeNotification, object: nil
@@ -223,8 +237,24 @@ extension ARKitFrameSource: ARSessionDelegate {
         // Read the light estimate as a Float here, before yielding — avoids retaining the ARFrame.
         let ambientIntensity = frame.lightEstimate.map { Float($0.ambientIntensity) }
 
+        // SCRUM-33 (desniveles): el piso es el plano horizontal BAJO LOS PIES (su extensión contiene
+        // la xz de la cámara, 0.9–1.8 m debajo). Se recalcula por frame → se actualiza al moverse.
+        // Si no hay ninguno confiable, `floorHeight = nil` y el pipeline no analiza desniveles.
+        let camPos = simd_make_float3(frame.camera.transform.columns.3)
+        let camXZ = simd_float2(camPos.x, camPos.z)
         // Malla clasificada a baja frecuencia (la propia store limita a ~2.5 Hz).
-        let snapshot = anchorState.withLock { (Array($0.meshAnchors.values), $0.floorHeights.values.min()) }
+        let snapshot = anchorState.withLock { state -> ([ARMeshAnchor], Float?) in
+            let floor = state.floorPlanes.values.filter { fp in
+                let below = camPos.y - fp.center.y
+                guard below >= ARKitFrameSource.floorUnderFeetMin,
+                      below <= ARKitFrameSource.floorUnderFeetMax else { return false }
+                let d = simd_distance(camXZ, simd_float2(fp.center.x, fp.center.z))
+                return d <= fp.radius + ARKitFrameSource.floorContainmentSlack
+            }
+            // El más alto entre los válidos = el suelo inmediato bajo los pies.
+            let floorY = floor.max(by: { $0.center.y < $1.center.y })?.center.y
+            return (Array(state.meshAnchors.values), floorY)
+        }
         meshStore.update(meshAnchors: snapshot.0, camera: frame.camera, now: frame.timestamp)
         let dominant = meshStore.dominantClass
         let meshClassification = dominant == .none ? nil : MeshClassificationSnapshot(dominantClass: dominant)
@@ -248,7 +278,7 @@ extension ARKitFrameSource: ARSessionDelegate {
         anchorState.withLock { state in
             for anchor in anchors {
                 state.meshAnchors.removeValue(forKey: anchor.identifier)
-                state.floorHeights.removeValue(forKey: anchor.identifier)
+                state.floorPlanes.removeValue(forKey: anchor.identifier)
             }
         }
     }
@@ -259,9 +289,13 @@ extension ARKitFrameSource: ARSessionDelegate {
                 if let mesh = anchor as? ARMeshAnchor {
                     state.meshAnchors[mesh.identifier] = mesh
                 } else if let plane = anchor as? ARPlaneAnchor, plane.alignment == .horizontal {
-                    // Altura (world Y) del centro del plano horizontal; el piso es el más bajo.
-                    let center = plane.transform * simd_float4(plane.center, 1)
-                    state.floorHeights[plane.identifier] = center.y
+                    // Centro en mundo + "radio" (media extensión mayor). La selección del piso bajo
+                    // los pies se hace por frame en session(_:didUpdate:).
+                    let worldCenter = simd_make_float3(plane.transform * simd_float4(plane.center, 1))
+                    let radius = max(plane.planeExtent.width, plane.planeExtent.height) / 2
+                    state.floorPlanes[plane.identifier] = AnchorState.FloorPlane(
+                        center: worldCenter, radius: radius
+                    )
                 }
             }
         }

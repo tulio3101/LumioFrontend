@@ -15,6 +15,10 @@ struct ClassConfidencePolicy {
         .truck:       0.50,
         // Benches have a clear silhouette on the street.
         .bench:       0.50,
+        // Dogs matter for mobility and are often partially visible near the edge: lower threshold.
+        .dog:         0.35,
+        // Tables (café terraces): clear silhouette, also confirmed by the LiDAR mesh (.table).
+        .diningTable: 0.45,
         // Small / easily-confused objects (chair, plant, bags, umbrella): raise threshold to
         // cut false positives seen in street tests.
         .chair:       0.55,

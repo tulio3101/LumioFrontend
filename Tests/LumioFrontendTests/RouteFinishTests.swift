@@ -77,6 +77,8 @@ final class SpyPendingHistory: PendingHistorySyncing {
     }
 
     func discardPending() { discards += 1 }
+    private(set) var parks = 0
+    func park() { parks += 1 }
 }
 
 @MainActor
@@ -403,7 +405,7 @@ private struct HistoryHarness {
     #expect(fetchesWhenFlushed == 0)
 }
 
-@Test @MainActor func signingOutSendsWhatItCanAndDiscardsTheRest() async {
+@Test @MainActor func signingOutSendsWhatItCanAndParksTheRest() async {
     let history = SpyPendingHistory()
 
     await SignOutService(
@@ -412,7 +414,9 @@ private struct HistoryHarness {
     ).signOut()
 
     #expect(history.flushes == 1)
-    #expect(history.discards == 1)
+    // SCRUM-360: lo que no se pudo enviar se aparca (por cuenta), no se descarta.
+    #expect(history.parks == 1)
+    #expect(history.discards == 0)
 }
 
 // MARK: - Llegada al destino (SCRUM-127)

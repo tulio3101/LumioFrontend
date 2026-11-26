@@ -51,9 +51,22 @@ private func lowLightAlerts(_ spy: SpyArbiter) -> Int {
     let detector = LowLightDetector(audioArbiter: spy, alertThreshold: 100, hysteresisMargin: 40)
 
     detector.analyze(ambientIntensity: 50)   // alerta (1)
-    detector.analyze(ambientIntensity: 150)  // ≥ 140 → recupera (deja de alertar, sin audio)
+    detector.analyze(ambientIntensity: 150)  // ≥ 140 → recupera
     detector.analyze(ambientIntensity: 50)   // oscuro otra vez → alerta (2)
     await drainMainActor()
     #expect(lowLightAlerts(spy) == 2)
+}
+
+// SCRUM-36 (FASE 2): al recuperarse la luz, se avisa por audio (P3) que hay luz suficiente.
+@Test @MainActor func announcesRecoveryWhenLightReturns() async {
+    let spy = SpyArbiter()
+    let detector = LowLightDetector(audioArbiter: spy, alertThreshold: 100, hysteresisMargin: 40)
+
+    detector.analyze(ambientIntensity: 50)    // alerta
+    detector.analyze(ambientIntensity: 150)   // ≥ 140 → recupera + aviso
+    await drainMainActor()
+    let recovered = spy.received.filter { $0.deduplicationKey == "low-light-recovered" }
+    #expect(recovered.count == 1)
+    #expect(recovered.first?.priority == .environmentInformation)
 }
 #endif

@@ -17,7 +17,7 @@ Para cada giro de la ruta activa, dos anuncios por el AudioArbiter (P2):
 | Antes de llegar | «En 30 metros, llegas a Biblioteca Nacional. El destino está a la derecha.» | — |
 | Al llegar (Finalizar Ruta, SCRUM-10) | «Llegaste a Biblioteca Nacional. La navegación terminó.» | Ruta terminada |
 
-- Izquierda: dos toques lentos (`HapticCue.turnLeft`). Derecha: tres toques rápidos
+- Izquierda: dos toques lentos (`HapticCue.turnLeft`). Derecha: tres toques lentos
   (`HapticCue.turnRight`). Seguir recto o una instrucción sin lado no vibra. Ambos eventos se
   pueden apagar en Preferencias > Vibración y respetan la intensidad elegida.
 - Si la primera lectura ya está cerca del giro, solo suena «Ahora».

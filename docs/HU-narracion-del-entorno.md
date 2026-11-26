@@ -14,7 +14,8 @@ Esta HU construye el canal completo, de la foto al audio, con un disparo a pedid
 - SCRUM-39 (Solicitar Narración): otros mecanismos de solicitud y la gestión de solicitudes
   repetidas más allá de «una sola en vuelo».
 - SCRUM-40 (Actualizar ante cambios): el disparo automático por cambio de escena
-  (`VNFeaturePrint`, mínimo 10 s entre narraciones, canal libre).
+  (`VNFeaturePrint`, mínimo 10 s entre narraciones, canal libre). Ya implementada, ver
+  `docs/HU-actualizar-narracion-ante-cambios-de-entorno.md`.
 - SCRUM-41 (Disponibilidad): reanudar sola al volver la red y la política de solicitudes
   durante una caída.
 
