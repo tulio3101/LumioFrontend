@@ -391,11 +391,14 @@ private struct DetectionTelemetry {
         #if DEBUG
         let fps = Double(processed) / elapsed
         let avgLatency = processed > 0 ? latencySumMs / Double(processed) : 0
+        // Logger evalúa cada valor después (autoclosure): en un método mutating no puede
+        // capturar propiedades de self, así que se copian antes.
+        let droppedCount = dropped
         logger.debug("""
             SCRUM-321 telemetría \(Int(elapsed), privacy: .public)s: \
             fps=\(fps, format: .fixed(precision: 1), privacy: .public)/\(targetFPS, privacy: .public) \
             latencia=\(avgLatency, format: .fixed(precision: 1), privacy: .public)ms \
-            descartados=\(dropped, privacy: .public) \
+            descartados=\(droppedCount, privacy: .public) \
             térmico=\(DetectionPipeline.thermalStateName(), privacy: .public)
             """)
         #endif
