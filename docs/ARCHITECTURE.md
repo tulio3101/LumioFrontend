@@ -412,6 +412,29 @@ adaptador nativo elimina los tokens al detener y usa un único sintetizador. Los
 productores reales todavía no están conectados y no se agrega una pantalla de
 prueba de voz a la navegación del usuario.
 
+## HU: Gestionar Prioridad de Audios (SCRUM-42)
+
+Las prioridades salen del spike SCRUM-309 y las aplica `AudioPolicy` en el árbitro:
+
+| Prioridad | Qué es | Quién la produce |
+| --- | --- | --- |
+| P1 `immediateRisk` | Riesgo inmediato | `SafetyAudio`, `ObstacleAnnouncer`, `LowLightDetector`, emergencia |
+| P2 `routeInformation` | Información para seguir el trayecto | `NavigationInstructionBuilder`, avisos de ruta, voz, preferencias |
+| P3 `environmentInformation` | Entorno sin reacción inmediata | `NarrationAudio` (narración), modo de detección, postura del teléfono |
+
+- P1 interrumpe P2 y P3 al instante. Nada interrumpe a P1.
+- La cola atiende primero la prioridad más alta; dentro de la misma prioridad, FIFO.
+- P2 interrumpido vuelve a sonar desde el inicio si sigue vigente; P3 interrumpido se descarta.
+- P3 nunca interrumpe: solo suena cuando no hay P1 ni P2 sonando ni en cola.
+- La narración entra siempre como P3 con `NarrationAudio.message`, contexto `narration` y
+  vencimiento de 10 s desde la captura; el nivel que devuelva el backend no la sube.
+- Ningún módulo reproduce audio fuera del árbitro. `AudioPriorityTests` lo comprueba: solo
+  `SpeechAudioPlayer` puede usar APIs de reproducción (AVSpeechSynthesizer, AVAudioPlayer,
+  sonidos del sistema…) y solo `AppDependencies` lo crea.
+
+Pruebas en `Tests/LumioFrontendTests/AudioPriorityTests.swift`: clasificación por productor
+y escenarios 2, 3, 6–11 del spike.
+
 ## HU: descartar mensajes duplicados u obsoletos
 
 Implementada en AudioDeduplicationPolicy y AudioArbiterService. No requiere API ni
