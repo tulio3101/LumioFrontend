@@ -8,6 +8,8 @@ struct WelcomeView: View {
     let onAuthenticated: () -> Void
     /// Solo en DEBUG: permite al equipo entrar a la app mientras no exista autenticación.
     let continueWithoutSession: (() -> Void)?
+    /// Recuperar Contraseña desde «Iniciar sesión». nil sin backend configurado.
+    var passwordRecovery: (any PasswordRecovering)? = nil
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hasAppeared = false
@@ -28,7 +30,8 @@ struct WelcomeView: View {
                     access: access,
                     service: authenticationService,
                     onAuthenticated: onAuthenticated,
-                    continueWithoutSession: continueWithoutSession
+                    continueWithoutSession: continueWithoutSession,
+                    passwordRecovery: passwordRecovery
                 )
             }
             #if os(iOS)

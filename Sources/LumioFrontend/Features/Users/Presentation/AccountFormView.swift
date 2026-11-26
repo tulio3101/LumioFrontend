@@ -11,6 +11,9 @@ struct AccountFormView: View {
     @State private var showsPassword = false
     /// Solo en DEBUG: permite al equipo entrar a la app mientras no exista autenticación.
     private let continueWithoutSession: (() -> Void)?
+    /// Recuperar Contraseña: solo al iniciar sesión con correo (Google no usa contraseña de Lumio).
+    private let passwordRecovery: (any PasswordRecovering)?
+    @State private var showsRecovery = false
 
     private static let topID = "top"
 
@@ -18,8 +21,10 @@ struct AccountFormView: View {
         access: AccountAccess,
         service: any Authenticating,
         onAuthenticated: @escaping () -> Void,
-        continueWithoutSession: (() -> Void)?
+        continueWithoutSession: (() -> Void)?,
+        passwordRecovery: (any PasswordRecovering)? = nil
     ) {
+        self.passwordRecovery = passwordRecovery
         _model = StateObject(wrappedValue: AccountFormViewModel(
             access: access,
             service: service,
@@ -45,6 +50,19 @@ struct AccountFormView: View {
                 announceForAccessibility("\(failure.title). \(failure.message)")
             }
         }
+        .sheet(isPresented: $showsRecovery) {
+            if let passwordRecovery {
+                NavigationStack {
+                    PasswordRecoveryView(service: passwordRecovery, email: model.email) { email in
+                        // Vuelve a iniciar sesión con el correo ya escrito y la contraseña nueva.
+                        model.email = email
+                        model.password = ""
+                        showsRecovery = false
+                        focusedField = .password
+                    }
+                }
+            }
+        }
     }
 
     private func form(scroll: ScrollViewProxy) -> some View {
@@ -60,6 +78,16 @@ struct AccountFormView: View {
             VStack(spacing: 20) {
                 emailField
                 passwordField
+                if model.access == .signIn, passwordRecovery != nil {
+                    Button("¿Olvidaste tu contraseña?") {
+                        focusedField = nil
+                        showsRecovery = true
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(LumioColor.actionPrimary)
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .trailing)
+                    .accessibilityHint("Te enviamos un código a tu correo para crear una contraseña nueva.")
+                }
             }
             if let failure = model.failure {
                 FailureBanner(

@@ -47,6 +47,8 @@ struct AppDependencies {
     let preferencesSync: PreferencesSynchronizer
     /// SCRUM-324: consentimiento para enviar fotos a la narración; solo en el teléfono.
     let narrationConsent: NarrationConsentService
+    /// Recuperar Contraseña: POST /users/password-reset y /confirm, sin sesión.
+    let passwordRecovery: PasswordRecoveryService
     /// SCRUM-38: «Describir entorno» en la ruta. Usa la cámara de la seguridad sin frenarla.
     let environmentNarration: EnvironmentNarrationService
     #endif
@@ -79,6 +81,10 @@ struct AppDependencies {
         let session = StoredSessionService(api: authAPI, store: tokens)
         sessionService = session
         authenticationService = RemoteAuthenticationService(api: authAPI, store: tokens)
+        passwordRecovery = PasswordRecoveryService(
+            remote: RemotePasswordRecoveryService(client: http, baseURL: configuration.apiBaseURL),
+            arbiter: arbiter
+        )
         let routeClient: any HTTPClient = authAPI.map {
             AuthorizedHTTPClient(base: http, api: $0, store: tokens)
         } ?? http

@@ -198,6 +198,13 @@ borra la sesión (la ruta queda pendiente en el teléfono). StoredSessionService
 pantalla inicial sin red. SignOutService (Preferencias) revoca la sesión, borra la ruta
 local y detiene el audio.
 
+Recuperar Contraseña, desde «¿Olvidaste tu contraseña?» en Iniciar sesión (PasswordRecoveryView
++ PasswordRecoveryViewModel): PasswordRecoveryService valida en el teléfono y usa
+RemotePasswordRecoveryService sin access token (POST /users/password-reset, siempre el mismo
+aviso exista o no la cuenta; POST /users/password-reset/confirm con código de 6 dígitos y
+`new_password`). Locuta por el árbitro (contexto `password-recovery`). Ver
+docs/HU-recuperar-contrasena.md.
+
 Personalizar Cuenta (SCRUM-6), en Preferencias > Mi cuenta (ProfileView + ProfileViewModel):
   1. ProfileService consulta GET /users/me (RemoteProfileService con AuthorizedHTTPClient):
      correo (solo lectura), nombre y celular. Solo el perfil: las preferencias de voz
