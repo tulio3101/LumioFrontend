@@ -21,6 +21,8 @@ struct SettingsView: View {
     var narrationConsent: NarrationConsentService? = nil
     /// SCRUM-32: narración automática y avisos. nil: no se muestra.
     var accessibilityPreferences: AccessibilityPreferencesService? = nil
+    /// SCRUM-25: compartir la ubicación. nil: no se muestra.
+    var locationSharing: LocationSharingService? = nil
     #endif
 
     @State private var confirmsSignOut = false
@@ -73,6 +75,17 @@ struct SettingsView: View {
                 }
                 .disabled(isSigningOut)
                 .accessibilityHint("Agrega, edita o elimina a quienes recibirán tu alerta de emergencia por correo.")
+                #if os(iOS)
+                if let locationSharing {
+                    NavigationLink {
+                        LocationSharingView(service: locationSharing)
+                    } label: {
+                        Label("Compartir ubicación", systemImage: "location.fill.viewfinder")
+                    }
+                    .disabled(isSigningOut)
+                    .accessibilityHint("Envía a tus contactos de confianza un enlace para ver dónde estás mientras lo compartes.")
+                }
+                #endif
             }
             Section("Cuenta") {
                 NavigationLink {

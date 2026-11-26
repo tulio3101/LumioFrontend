@@ -33,6 +33,8 @@ struct RootView: View {
     let narrationConsent: NarrationConsentService?
     /// SCRUM-32: Preferencias > Preferencias de accesibilidad.
     let accessibilityPreferences: AccessibilityPreferencesService?
+    /// SCRUM-25: compartir ubicación (Preferencias y aviso en Trayecto).
+    let locationSharing: LocationSharingService?
     #endif
     /// SCRUM-38: «Describir entorno» en la ruta activa. nil fuera de iOS.
     let environmentNarration: EnvironmentNarrationService?
@@ -87,9 +89,11 @@ struct RootView: View {
         narrationConsent: NarrationConsentService? = nil,
         passwordRecovery: (any PasswordRecovering)? = nil,
         environmentNarration: EnvironmentNarrationService? = nil,
-        accessibilityPreferences: AccessibilityPreferencesService? = nil
+        accessibilityPreferences: AccessibilityPreferencesService? = nil,
+        locationSharing: LocationSharingService? = nil
     ) {
         self.accessibilityPreferences = accessibilityPreferences
+        self.locationSharing = locationSharing
         self.narrationConsent = narrationConsent
         self.passwordRecovery = passwordRecovery
         self.environmentNarration = environmentNarration
@@ -237,6 +241,9 @@ struct RootView: View {
             }
             // Fijo en la pila de Trayecto: sigue visible al abrir la ruta activa.
             .emergencyControl(emergency, onSessionExpired: { entry = .welcome })
+            #if os(iOS)
+            .locationSharingBanner(locationSharing)
+            #endif
             .tabItem { Label("Trayecto", systemImage: "figure.walk") }
             .tag(HomeTab.route)
 
@@ -247,7 +254,8 @@ struct RootView: View {
                     voicePreferences: voicePreferences, hapticPreferences: hapticPreferences,
                     onSignedOut: { entry = .welcome }, permissions: permissions,
                     narrationConsent: narrationConsent,
-                    accessibilityPreferences: accessibilityPreferences
+                    accessibilityPreferences: accessibilityPreferences,
+                    locationSharing: locationSharing
                 )
                 #else
                 SettingsView(

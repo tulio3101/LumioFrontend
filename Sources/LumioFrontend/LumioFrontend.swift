@@ -47,7 +47,8 @@ struct LumioApp: App {
                 narrationConsent: dependencies.narrationConsent,
                 passwordRecovery: dependencies.passwordRecovery,
                 environmentNarration: dependencies.environmentNarration,
-                accessibilityPreferences: dependencies.accessibilityPreferences
+                accessibilityPreferences: dependencies.accessibilityPreferences,
+                locationSharing: dependencies.locationSharing
             )
             // View.environmentObject() is iOS 13+; Scene.environmentObject() requires iOS 17.
             // Keeping this on the View avoids the availability constraint.

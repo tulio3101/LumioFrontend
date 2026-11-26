@@ -466,6 +466,9 @@ private func makeService() -> ServiceHarness {
     #expect(h.availability.successes == 1)
 
     h.describer.error = HTTPClientError.statusCode(503)
+    // SCRUM-39: pedir otra vez enseguida repite la descripción sin red; se espera a que pase
+    // esa ventana para que la segunda solicitud llegue al backend.
+    h.clock.advance(NarrationRepeatPolicy().replayWindow)
     _ = await h.service.describeEnvironment(trigger: .gesture)
     h.connectivity.isConnected = false
     _ = await h.service.describeEnvironment(trigger: .auto)
