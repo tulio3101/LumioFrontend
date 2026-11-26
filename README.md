@@ -27,6 +27,52 @@ SwiftUI, AVFoundation ni MapKit. La validación de la aplicación se hace con Xc
 La app conserva iOS 16 como mínimo y modo de lenguaje Swift 5 tanto en SwiftPM
 como en XcodeGen. La versión de herramientas y el modo de lenguaje son distintos.
 
+## Modelo de detección (Core ML) con xtool y Xcode
+
+El detector YOLO vive en el repo en **dos formas**, una por cada toolchain, para que la
+detección funcione igual compilando con xtool (SwiftPM) o con Xcode/XcodeGen:
+
+- `Resources/yolo26n_640_int8.mlpackage` — fuente del modelo. **Xcode** lo compila a
+  `.mlmodelc` (fase Compile Sources, `project.yml`) y queda en `Bundle.main`.
+- `Sources/LumioFrontend/MLModels/yolo26n_640_int8.mlmodelc` — el mismo modelo **precompilado**
+  y versionado en git (sin Git LFS). SwiftPM/xtool no ejecuta el paso de Core ML de Xcode, así
+  que se empaqueta tal cual con `.copy(...)` en `Package.swift` y queda en `Bundle.module`.
+
+`YOLORunner`/`DetectionModelResource` buscan el `.mlmodelc` primero en `Bundle.module`
+(SwiftPM/xtool) y luego en `Bundle.main` (Xcode). En Xcode la carpeta `MLModels/` se excluye del
+target (`project.yml`) para no empaquetar dos copias del modelo.
+
+### Compilar con xtool
+
+```sh
+xtool dev          # build + ejecutar en el dispositivo (requiere xtool instalado)
+# o solo construir el .app:
+xtool build
+```
+
+### Verificar que el modelo quedó dentro del .app
+
+Localiza el `.app` generado y comprueba que contiene el `.mlmodelc`:
+
+```sh
+# xtool deja el bundle bajo .build/ (o el directorio que reporte xtool al construir)
+APP=$(find .build -name "*.app" -type d | head -1)
+ls "$APP" | grep yolo26n_640_int8.mlmodelc        # debe aparecer una vez
+```
+
+Si al iniciar una ruta la detección dice "no disponible", revisa el log (subsistema
+`com.lumio.app`, categoría `YOLORunner`): distingue *archivo no encontrado* (el `.mlmodelc`
+no se empaquetó) de un *error de Core ML* al cargarlo. En builds Debug el panel de detección
+muestra además la causa.
+
+### Regenerar el `.mlmodelc` si cambia el `.mlpackage`
+
+```sh
+xcrun coremlcompiler compile Resources/yolo26n_640_int8.mlpackage Sources/LumioFrontend/MLModels/
+```
+
+Luego versiona el `Sources/LumioFrontend/MLModels/yolo26n_640_int8.mlmodelc` actualizado.
+
 ## Estado actual
 
 Hay una app SwiftUI con destino y preferencias, contratos por funcionalidad,
