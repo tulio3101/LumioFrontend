@@ -157,10 +157,50 @@ final class DetectionPipeline: ObstacleDetectionPipeline {
             windowFrames: self.focusConfig.depthWindowFrames,
             cooldown: self.focusConfig.depthCooldownSeconds
         )
+        // SCRUM-33 (desniveles): persistencia más estricta (5 de 7) + cooldown por tipo de peligro.
+        let elevationAnalyzer = ElevationProfileAnalyzer()
+        var elevationGate = PersistenceGate(
+            minAppearances: self.focusConfig.elevationMinAppearances,
+            windowFrames: self.focusConfig.elevationWindowFrames,
+            cooldown: self.focusConfig.depthCooldownSeconds
+        )
+        // SCRUM-321: política térmica. Limita los fps de inferencia según el estado térmico y el
+        // Modo de Bajo Consumo, y pausa la detección en calor crítico. `wasPaused` emite una sola
+        // transición por episodio. `lastProcessedTimestamp` implementa el límite de fps.
+        let thermalPolicy = ThermalPolicy()
+        var wasPaused = false
+        var lastProcessedTimestamp: Double = 0
+        var telemetry = DetectionTelemetry()
         for await frame in frames {
             // Always release the gate when done — even if Task is cancelled or detect() throws.
             defer { self.frameSource.frameProcessingComplete() }
             guard !Task.isCancelled else { return }
+
+            // SCRUM-321: carga térmica de este frame (lecturas thread-safe de ProcessInfo).
+            let load = thermalPolicy.load(
+                for: Self.thermalLevel(),
+                lowPowerMode: ProcessInfo.processInfo.isLowPowerModeEnabled
+            )
+            if load.isPaused {
+                // Calor crítico: se pausa la inferencia. Se avisa una sola vez (transición).
+                if !wasPaused {
+                    wasPaused = true
+                    output.yield(SafetyFrameOutput(thermalPaused: true))
+                }
+                telemetry.recordDropped()
+                continue
+            }
+            if wasPaused {
+                wasPaused = false
+                output.yield(SafetyFrameOutput(thermalPaused: false))   // reanudada al enfriar
+            }
+            // Límite de fps: descarta el frame si llegó antes del intervalo objetivo.
+            let minInterval = 1.0 / Double(load.targetFPS)
+            if frame.timestamp - lastProcessedTimestamp < minInterval {
+                telemetry.recordDropped()
+                continue
+            }
+            lastProcessedTimestamp = frame.timestamp
 
             // Low-light check: plain Float from ARKit, no frame retention.
             if let intensity = frame.ambientIntensity {
@@ -183,11 +223,17 @@ final class DetectionPipeline: ObstacleDetectionPipeline {
 
             // SCRUM-37: un fallo NO se convierte en lista vacía. El frame fallido se descarta
             // (el siguiente usa un frame nuevo) y, agotados los reintentos, termina el ciclo.
+            let inferenceStart = DispatchTime.now()
             guard let raw = await model.process(frame.pixelBuffer) else {
                 if case .unavailable = await model.status { return }
                 continue
             }
             guard !Task.isCancelled else { return }
+            // SCRUM-321: telemetría (solo Debug): fps procesados, latencia de inferencia, frames
+            // descartados, estado térmico. Resumen cada 30 s.
+            let latencyMs = Double(DispatchTime.now().uptimeNanoseconds - inferenceStart.uptimeNanoseconds) / 1_000_000
+            telemetry.recordProcessed(latencyMs: latencyMs)
+            telemetry.logSummaryIfDue(targetFPS: load.targetFPS, logger: self.logger)
             // Drop detections below the per-class confidence threshold, then require
             // temporal persistence before passing anything downstream.
             let confident = raw.filter { $0.confidence >= self.confidencePolicy.threshold(for: $0.obstacleClass) }
@@ -246,11 +292,117 @@ final class DetectionPipeline: ObstacleDetectionPipeline {
                 }
             }
 
-            output.yield(
-                SafetyFrameOutput(tracked: tracked, depthObstacles: depthObstacles)
+            // SCRUM-33: desniveles (escalón/escalera/bordillo/rampa). Solo con LiDAR y con el piso
+            // bajo los pies. Persistencia + cooldown por tipo.
+            var elevationHazards: [ElevationHazardSignal] = []
+            var elevationProfile: ElevationProfile?
+            var rawHazard: ElevationHazard?
+            if self.frameSource.isDepthAvailable, let depth = frame.depthData,
+               let camera = frame.camera, let floorHeight = frame.floorHeight {
+                let rect = corridor.rect(pitchDegrees: pitchDegrees ?? 0)
+                elevationProfile = ElevationProfileSampler.profile(
+                    from: depth, corridor: rect, camera: camera, floorHeight: floorHeight,
+                    nearMeters: self.focusConfig.elevationNearMeters,
+                    farMeters: self.focusConfig.elevationFarMeters,
+                    ceilingMeters: self.focusConfig.elevationCeilingMeters
+                )
+                // El piso viene del plano bajo los pies: una bajada que arranca en el borde (sin
+                // muestras de piso visibles antes) igual se detecta.
+                rawHazard = elevationProfile.map {
+                    elevationAnalyzer.analyze($0, config: self.focusConfig, hasKnownFloor: true)
+                }
+                let announcement = rawHazard.flatMap { ElevationAudio.announcement(for: $0) }
+                let present: Set<String> = announcement.map { [$0.typeKey] } ?? []
+                let fire = elevationGate.update(present: present, now: Date())
+                if let hazard = rawHazard, let announcement, fire.contains(announcement.typeKey) {
+                    elevationHazards.append(
+                        ElevationHazardSignal(hazard: hazard, isDanger: announcement.isDanger)
+                    )
+                }
+            }
+
+            var frameOutput = SafetyFrameOutput(
+                tracked: tracked, depthObstacles: depthObstacles, elevationHazards: elevationHazards
             )
+            #if DEBUG
+            frameOutput.debug = SafetyDebugFrame(
+                timestamp: frame.timestamp,
+                pitchDegrees: pitchDegrees,
+                floorHeight: frame.floorHeight,
+                cameraHeightAboveFloor: frame.camera.flatMap { cam in
+                    frame.floorHeight.map { cam.transform.columns.3.y - $0 }
+                },
+                profileForward: elevationProfile?.samples.map(\.forwardMeters) ?? [],
+                profileHeights: elevationProfile?.samples.map(\.heightAboveFloor) ?? [],
+                rawHazard: rawHazard?.debugLabel ?? (frame.floorHeight == nil ? "sin piso" : "plano"),
+                announcedHazards: elevationHazards.map { $0.hazard.debugLabel },
+                rawDetections: raw.map {
+                    SafetyDebugFrame.RawDetection(cls: $0.obstacleClass.rawValue, confidence: $0.confidence)
+                },
+                trackedCount: tracked.count,
+                depthObstacleCount: depthObstacles.count
+            )
+            #endif
+            output.yield(frameOutput)
             // frame goes out of scope here — CVPixelBuffer/ARDepthData are released.
         }
+    }
+
+    /// SCRUM-321: estado térmico actual (lectura thread-safe) como nivel abstracto para la política.
+    static func thermalLevel() -> ThermalLevel {
+        switch ProcessInfo.processInfo.thermalState {
+        case .nominal: return .nominal
+        case .fair: return .fair
+        case .serious: return .serious
+        case .critical: return .critical
+        @unknown default: return .serious
+        }
+    }
+
+    static func thermalStateName() -> String {
+        switch ProcessInfo.processInfo.thermalState {
+        case .nominal: return "nominal"
+        case .fair: return "fair"
+        case .serious: return "serious"
+        case .critical: return "critical"
+        @unknown default: return "?"
+        }
+    }
+}
+
+/// SCRUM-321: contadores de rendimiento del pipeline. Resumen cada 30 s (solo Debug).
+private struct DetectionTelemetry {
+    private var processed = 0
+    private var dropped = 0
+    private var latencySumMs: Double = 0
+    private var windowStart = DispatchTime.now()
+    private let summaryInterval: Double = 30
+
+    mutating func recordProcessed(latencyMs: Double) {
+        processed += 1
+        latencySumMs += latencyMs
+    }
+
+    mutating func recordDropped() { dropped += 1 }
+
+    mutating func logSummaryIfDue(targetFPS: Int, logger: Logger) {
+        let elapsed = Double(DispatchTime.now().uptimeNanoseconds - windowStart.uptimeNanoseconds) / 1_000_000_000
+        guard elapsed >= summaryInterval else { return }
+        #if DEBUG
+        let fps = Double(processed) / elapsed
+        let avgLatency = processed > 0 ? latencySumMs / Double(processed) : 0
+        logger.debug("""
+            SCRUM-321 telemetría \(Int(elapsed), privacy: .public)s: \
+            fps=\(fps, format: .fixed(precision: 1), privacy: .public)/\(targetFPS, privacy: .public) \
+            latencia=\(avgLatency, format: .fixed(precision: 1), privacy: .public)ms \
+            descartados=\(dropped, privacy: .public) \
+            térmico=\(DetectionPipeline.thermalStateName(), privacy: .public)
+            """)
+        #endif
+        processed = 0
+        dropped = 0
+        latencySumMs = 0
+        windowStart = DispatchTime.now()
     }
 }
 #endif

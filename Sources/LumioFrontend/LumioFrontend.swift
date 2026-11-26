@@ -38,6 +38,7 @@ struct LumioApp: App {
                 voicePreferences: dependencies.voicePreferences,
                 hapticPreferences: dependencies.hapticPreferences,
                 permissions: dependencies.permissions,
+                sessionExpiry: dependencies.sessionExpiry,
                 safetyMonitor: dependencies.safetyService,
                 obstacleGate: dependencies.obstacleGate,
                 voiceCommands: dependencies.voiceCommands,

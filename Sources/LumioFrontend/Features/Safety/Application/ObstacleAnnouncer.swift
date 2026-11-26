@@ -130,6 +130,25 @@ struct ObstacleAnnouncer {
         )
     }
 
+    /// SCRUM-33: anuncio de un desnivel (escalón/escalera/bordillo/rampa). La persistencia y el
+    /// cooldown ya los aplicó el pipeline. nil para `flat`.
+    func elevationOutput(for hazard: ElevationHazard, now: Date) -> Output? {
+        guard let a = ElevationAudio.announcement(for: hazard) else { return nil }
+        let immediate = a.priority == .immediateRisk
+        return Output(
+            event: SafetyEvent(
+                id: UUID(), description: a.text, detectedAt: now, requiresImmediateAction: immediate
+            ),
+            message: AudioMessage(
+                text: a.text,
+                priority: a.priority,
+                expiresAt: now.addingTimeInterval(2),
+                contextID: SafetyAudio.context,
+                deduplicationKey: "elevation-\(a.typeKey)"
+            )
+        )
+    }
+
     private func audioText(for det: Detection, tier: DistanceTier) -> String {
         let cls = Self.spanishName(for: det.obstacleClass)
         switch tier {
@@ -161,6 +180,7 @@ struct ObstacleAnnouncer {
         case .chair:         return "silla"
         case .dog:           return "perro"
         case .pottedPlant:   return "planta"
+        case .diningTable:   return "mesa"
         case .suitcase:      return "maleta"
         case .backpack:      return "mochila"
         case .umbrella:      return "sombrilla"

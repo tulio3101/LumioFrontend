@@ -52,8 +52,9 @@ extension HapticCue {
     var isConfigurable: Bool {
         switch self {
         case .routeReady, .routeFailed, .routeFinished: true
-        // «Detección lista» acompaña a la seguridad: vibra siempre, como las alertas.
-        case .emergencyActivated, .emergencySent, .emergencyFailed, .criticalAlert, .safetyReady: false
+        // «Detección lista» y los desniveles/obstáculos acompañan a la seguridad: vibran siempre.
+        case .emergencyActivated, .emergencySent, .emergencyFailed, .criticalAlert, .safetyReady,
+             .danger, .warning: false
         }
     }
 
@@ -67,6 +68,8 @@ extension HapticCue {
         case .emergencyFailed: "No se pudo enviar la emergencia"
         case .criticalAlert: "Alerta de seguridad"
         case .safetyReady: "Detección de obstáculos lista"
+        case .danger: "Desnivel hacia abajo"
+        case .warning: "Desnivel hacia arriba u obstáculo cercano"
         }
     }
 
@@ -81,6 +84,8 @@ extension HapticCue {
         case .emergencyFailed: "Dos pares de toques fuertes."
         case .criticalAlert: "Cuatro toques fuertes y rápidos."
         case .safetyReady: "Un toque suave y uno fuerte."
+        case .danger: "Tres toques fuertes seguidos."
+        case .warning: "Dos toques medios."
         }
     }
 }
@@ -123,6 +128,14 @@ struct HapticPattern: Equatable {
             return .full([0, 0.1, 0.2, 0.3])
         case .safetyReady:
             return HapticPattern(pulses: [HapticPulse(delay: 0, strength: 0.4), HapticPulse(delay: 0.2, strength: 1)])
+        case .danger:
+            // SCRUM-33: bajada = 3 toques fuertes seguidos (no se escala con la intensidad).
+            return .full([0, 0.12, 0.24])
+        case .warning:
+            // SCRUM-33: subida u obstáculo cercano = 2 toques medios.
+            return HapticPattern(pulses: [
+                HapticPulse(delay: 0, strength: 0.75), HapticPulse(delay: 0.12, strength: 0.75),
+            ])
         }
         return HapticPattern(pulses: base.map {
             HapticPulse(delay: $0.delay, strength: min(1, $0.strength * intensity.scale))

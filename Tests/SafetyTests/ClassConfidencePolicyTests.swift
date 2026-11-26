@@ -30,10 +30,15 @@ import Testing
 
 @Test func unllistedClassGetsFallback() {
     let policy = ClassConfidencePolicy.default
-    // trafficLight, fireHydrant, stopSign, parkingMeter, dog are not in overrides
-    for cls: ObstacleClass in [.trafficLight, .fireHydrant, .stopSign, .parkingMeter, .dog] {
+    // trafficLight, fireHydrant, stopSign, parkingMeter are not in overrides
+    for cls: ObstacleClass in [.trafficLight, .fireHydrant, .stopSign, .parkingMeter] {
         #expect(policy.threshold(for: cls) == policy.fallback, "expected fallback for \(cls)")
     }
+}
+
+// SCRUM-33 corrección 6: perro con umbral bajo (parcialmente visible cerca del borde).
+@Test func dogHasLowThreshold() {
+    #expect(ClassConfidencePolicy.default.threshold(for: .dog) == 0.35)
 }
 
 @Test func personThresholdHigherThanVehicle() {

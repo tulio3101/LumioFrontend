@@ -75,8 +75,11 @@ protocol PendingHistorySyncing: AnyObject {
     /// true si no queda nada pendiente.
     @discardableResult
     func flush() async -> Bool
-    /// Al cerrar sesión: lo que no se pudo enviar no debe subirse con otra cuenta.
+    /// Al cerrar sesión: descarta lo pendiente (pruebas / plataformas sin cuenta).
     func discardPending()
+    /// SCRUM-360: al salir la cuenta, en vez de descartar, "aparca" lo pendiente asociado a ella
+    /// para reenviarlo cuando vuelva ese mismo usuario; otro usuario no lo sube con su cuenta.
+    func park()
 }
 
 /// Backend de Finalizar Ruta.
@@ -223,6 +226,10 @@ enum HapticCue: String, Codable, CaseIterable, Equatable {
     case routeFailed
     /// La navegación terminó (Finalizar Ruta).
     case routeFinished
+    /// SCRUM-33: peligro grave (desnivel hacia abajo). 3 impactos fuertes.
+    case danger
+    /// SCRUM-33: aviso (subida o un obstáculo a menos de 1 m). 2 impactos medios.
+    case warning
     /// Botón de Emergencia: se activó y empieza el margen para cancelar.
     case emergencyActivated
     /// Botón de Emergencia: la alerta llegó a algún contacto.

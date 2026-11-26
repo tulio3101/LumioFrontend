@@ -43,6 +43,15 @@ private let boxB = CGRect(x: 0.60, y: 0.60, width: 0.08, height: 0.10)  // no so
     #expect(tracker.update([det(.person, side)]).isEmpty)
 }
 
+// SCRUM-33 corrección 6: un objeto grande (caja alta = cerca/parcialmente visible) al borde del
+// corredor NO se descarta.
+@Test func largeEdgeBoxIsKeptEvenOutsideCorridor() {
+    var tracker = ObstacleTracker()
+    let edgeLarge = CGRect(x: 0.0, y: 0.3, width: 0.12, height: 0.6)   // fuera del centro, pero alta
+    for _ in 0..<2 { _ = tracker.update([det(.dog, edgeLarge)]) }
+    #expect(tracker.update([det(.dog, edgeLarge)]).count == 1)
+}
+
 @Test func forgetsObjectAfterMissedFrames() {
     var tracker = ObstacleTracker()   // maxMissedFrames 5 por defecto
     for _ in 0..<2 { _ = tracker.update([det(.chair, boxA)]) }
