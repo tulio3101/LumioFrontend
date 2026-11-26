@@ -21,6 +21,7 @@ final class AccountDeletionService: AccountDeleting {
     private let pendingHistory: (any PendingHistorySyncing)?
     private let voicePreferences: (any VoicePreferencesResetting)?
     private let hapticPreferences: (any HapticPreferencesResetting)?
+    private let accessibilityPreferences: (any AccessibilityPreferencesResetting)?
     private let arbiter: (any AudioArbitrating)?
     private let now: () -> Date
     private(set) var isDeleting = false
@@ -33,6 +34,7 @@ final class AccountDeletionService: AccountDeleting {
         pendingHistory: (any PendingHistorySyncing)? = nil,
         voicePreferences: (any VoicePreferencesResetting)? = nil,
         hapticPreferences: (any HapticPreferencesResetting)? = nil,
+        accessibilityPreferences: (any AccessibilityPreferencesResetting)? = nil,
         arbiter: (any AudioArbitrating)?,
         now: @escaping () -> Date = Date.init
     ) {
@@ -43,6 +45,7 @@ final class AccountDeletionService: AccountDeleting {
         self.pendingHistory = pendingHistory
         self.voicePreferences = voicePreferences
         self.hapticPreferences = hapticPreferences
+        self.accessibilityPreferences = accessibilityPreferences
         self.arbiter = arbiter
         self.now = now
     }
@@ -87,6 +90,7 @@ final class AccountDeletionService: AccountDeleting {
         tokens.clear()
         voicePreferences?.resetToStandard()
         hapticPreferences?.resetToStandard()
+        accessibilityPreferences?.resetToStandard()
         // Instrucciones de la ruta y cualquier otro mensaje de la cuenta borrada.
         arbiter?.resetSession()
     }

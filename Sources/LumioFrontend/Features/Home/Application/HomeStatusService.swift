@@ -13,6 +13,8 @@ final class HomeStatusService {
     private let safetyModel: any SafetyModelChecking
     private let routes: any ActiveRouteStoring
     private let arbiter: (any AudioArbitrating)?
+    /// SCRUM-32: decir el estado al abrir y cuánto detalle. nil: predeterminadas.
+    private let preferences: (any AccessibilityPreferencesReading)?
     private let now: () -> Date
     private(set) var hasAnnounced = false
 
@@ -22,8 +24,10 @@ final class HomeStatusService {
         safetyModel: any SafetyModelChecking,
         routes: any ActiveRouteStoring,
         arbiter: (any AudioArbitrating)?,
+        preferences: (any AccessibilityPreferencesReading)? = nil,
         now: @escaping () -> Date = Date.init
     ) {
+        self.preferences = preferences
         self.session = session
         self.permissions = permissions
         self.safetyModel = safetyModel
@@ -56,13 +60,16 @@ final class HomeStatusService {
     func announceOnLaunch() async -> String? {
         guard !hasAnnounced else { return nil }
         hasAnnounced = true
+        // SCRUM-32: el usuario puede pedir que no hable al abrir; «Estado de Lumio» sigue.
+        guard preferences?.preferences.announceStatusOnLaunch ?? true else { return nil }
         return await announce()
     }
 
     /// «Estado de Lumio»: repite el estado actual a pedido.
     @discardableResult
     func announce() async -> String {
-        let text = HomeAnnouncements.welcome(await snapshot())
+        let detail = preferences?.preferences.announcementDetail ?? .detailed
+        let text = HomeAnnouncements.welcome(await snapshot(), detail: detail)
         if let arbiter {
             arbiter.cancel(contextIDs: [Self.contextID])
             arbiter.receive(AudioMessage(

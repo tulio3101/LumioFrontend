@@ -5,7 +5,8 @@ import Foundation
 /// Mientras hay una ruta activa, cada `pollInterval` revisa si conviene volver a narrar. Las
 /// comprobaciones van de la más barata a la más cara, y solo la última llega a la red:
 ///
-/// 1. Consentimiento vigente, conexión, ninguna otra descripción en vuelo y tope de la ruta.
+/// 1. Consentimiento vigente, conexión, narración disponible (SCRUM-41), ninguna otra
+///    descripción en vuelo y tope de la ruta.
 /// 2. Pausa tras una falla y mínimo de 10 s desde la última narración (botón o automática).
 /// 3. Canal de audio libre: una narración nueva nunca espera detrás de una alerta o una
 ///    indicación, ni se acumula.
@@ -18,8 +19,12 @@ import Foundation
 @MainActor
 final class AutoNarrationScheduler {
     enum SkipReason: Equatable {
+        /// SCRUM-32: el usuario apagó la narración automática.
+        case disabledByUser
         case consentRequired
         case offline
+        /// SCRUM-41: la narración está caída; no se toma foto hasta que vuelva.
+        case narrationUnavailable
         case describing
         case routeBudgetExhausted
         case backingOff
@@ -46,6 +51,8 @@ final class AutoNarrationScheduler {
     private let channel: (any AudioChannelObserving)?
     private let configuration: AutoNarrationConfiguration
     private let isLowPowerMode: () -> Bool
+    /// SCRUM-32: preferencia «Narración automática» (en memoria).
+    private let isEnabled: () -> Bool
     private let sleep: (TimeInterval) async throws -> Void
     private let now: () -> Date
 
@@ -66,6 +73,7 @@ final class AutoNarrationScheduler {
         channel: (any AudioChannelObserving)?,
         configuration: AutoNarrationConfiguration = AutoNarrationConfiguration(),
         isLowPowerMode: @escaping () -> Bool = { ProcessInfo.processInfo.isLowPowerModeEnabled },
+        isEnabled: @escaping () -> Bool = { true },
         sleep: @escaping (TimeInterval) async throws -> Void = {
             try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000))
         },
@@ -79,6 +87,7 @@ final class AutoNarrationScheduler {
         self.channel = channel
         self.configuration = configuration
         self.isLowPowerMode = isLowPowerMode
+        self.isEnabled = isEnabled
         self.sleep = sleep
         self.now = now
     }
@@ -117,6 +126,13 @@ final class AutoNarrationScheduler {
         service?.onDescribed = nil
     }
 
+    /// SCRUM-41: la narración volvió. Se olvida la pausa por fallas para que la siguiente vuelta
+    /// pueda narrar enseguida; la escena de referencia y el tope de la ruta se conservan.
+    func resume() {
+        consecutiveFailures = 0
+        backoffUntil = nil
+    }
+
     // MARK: Una vuelta del loop
 
     /// Una revisión. Pública para probar cada decisión sin esperar el reloj.
@@ -125,8 +141,12 @@ final class AutoNarrationScheduler {
         guard isRunning, let service else { return .notRunning }
 
         // 1. Condiciones locales y baratas.
+        guard isEnabled() else { return .skipped(.disabledByUser) }
         guard consent.consentVersionForUpload != nil else { return .skipped(.consentRequired) }
         guard connectivity.isConnected else { return .skipped(.offline) }
+        guard !service.narrationAvailability.isUnavailable else {
+            return .skipped(.narrationUnavailable)
+        }
         guard !service.isDescribing else { return .skipped(.describing) }
         guard requestsThisRoute < configuration.maxRequestsPerRoute else {
             return .skipped(.routeBudgetExhausted)
@@ -194,7 +214,7 @@ final class AutoNarrationScheduler {
             backoffUntil = now().addingTimeInterval(
                 configuration.backoff(afterFailures: consecutiveFailures)
             )
-        case .consentRequired, .alreadyDescribing, .cancelled:
+        case .consentRequired, .alreadyDescribing, .cancelled, .repeated:
             break
         }
     }

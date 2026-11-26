@@ -19,6 +19,8 @@ struct SettingsView: View {
     let permissions: PermissionsViewModel
     /// SCRUM-324: consentimiento para enviar fotos a la narración. nil: no se muestra.
     var narrationConsent: NarrationConsentService? = nil
+    /// SCRUM-32: narración automática y avisos. nil: no se muestra.
+    var accessibilityPreferences: AccessibilityPreferencesService? = nil
     /// SCRUM-25: compartir la ubicación. nil: no se muestra.
     var locationSharing: LocationSharingService? = nil
     #endif
@@ -54,6 +56,15 @@ struct SettingsView: View {
                 }
                 .disabled(isSigningOut)
                 .accessibilityHint("Decide si Lumio puede enviar fotos de la cámara para describir lo que tienes delante.")
+            }
+            if let accessibilityPreferences {
+                NavigationLink {
+                    AccessibilityPreferencesView(service: accessibilityPreferences)
+                } label: {
+                    Label("Preferencias de accesibilidad", systemImage: "accessibility")
+                }
+                .disabled(isSigningOut)
+                .accessibilityHint("Activa o desactiva la narración automática y elige cuánto explican los avisos.")
             }
             #endif
             Section("Emergencia") {
@@ -97,6 +108,8 @@ struct SettingsView: View {
                     }
                 }
                 .disabled(isSigningOut)
+                // SCRUM-29: el indicador de progreso no se anuncia solo.
+                .accessibilityLabel(isSigningOut ? "Cerrando sesión" : "Cerrar sesión")
                 .accessibilityHint("Pide confirmación antes de cerrar la sesión.")
 
                 NavigationLink {

@@ -51,7 +51,8 @@ extension HapticCue {
 
     var isConfigurable: Bool {
         switch self {
-        case .routeReady, .routeFailed, .routeFinished, .turnLeft, .turnRight: true
+        case .routeReady, .routeFailed, .routeFinished, .turnLeft, .turnRight,
+             .narrationUnavailable, .narrationAvailable: true
         // «Detección lista» y los desniveles/obstáculos acompañan a la seguridad: vibran siempre.
         case .emergencyActivated, .emergencySent, .emergencyFailed, .criticalAlert, .safetyReady,
              .danger, .warning: false
@@ -65,6 +66,8 @@ extension HapticCue {
         case .routeFinished: "Ruta terminada"
         case .turnLeft: "Giro a la izquierda"
         case .turnRight: "Giro a la derecha"
+        case .narrationUnavailable: "Narración no disponible"
+        case .narrationAvailable: "Narración disponible de nuevo"
         case .emergencyActivated: "Emergencia activada"
         case .emergencySent: "Alerta de emergencia enviada"
         case .emergencyFailed: "No se pudo enviar la emergencia"
@@ -83,6 +86,8 @@ extension HapticCue {
         case .routeFinished: "Tres toques que van subiendo."
         case .turnLeft: "Dos toques lentos."
         case .turnRight: "Tres toques lentos."
+        case .narrationUnavailable: "Un toque medio y uno suave."
+        case .narrationAvailable: "Un toque suave y uno medio."
         case .emergencyActivated: "Tres toques fuertes y espaciados."
         case .emergencySent: "Dos toques rápidos, una pausa y un toque."
         case .emergencyFailed: "Dos pares de toques fuertes."
@@ -122,6 +127,11 @@ struct HapticPattern: Equatable {
                 HapticPulse(delay: 0.15, strength: 0.75),
                 HapticPulse(delay: 0.3, strength: 1),
             ]
+        case .narrationUnavailable:
+            // SCRUM-41: baja (medio → suave) al caer y sube (suave → medio) al volver.
+            base = [HapticPulse(delay: 0, strength: 0.75), HapticPulse(delay: 0.3, strength: 0.4)]
+        case .narrationAvailable:
+            base = [HapticPulse(delay: 0, strength: 0.4), HapticPulse(delay: 0.3, strength: 0.75)]
         case .turnLeft:
             // Izquierda y derecha: mismo ritmo lento, se distinguen por el número de toques. Lento
             // a propósito para no confundirse con los toques seguidos de un desnivel (danger).

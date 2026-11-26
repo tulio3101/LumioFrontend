@@ -30,6 +30,15 @@ protocol NarrationConsentGating: NarrationConsentChecking {
 
 extension NarrationConsentService: NarrationConsentGating {}
 
+/// SCRUM-39: pedir una descripción a pedido (botón, comando de voz o acción de VoiceOver).
+/// El resultado llega por audio.
+@MainActor
+protocol NarrationRequesting: AnyObject {
+    func requestDescription()
+}
+
+extension EnvironmentNarrationService: NarrationRequesting {}
+
 /// Cuándo se pidió la narración (ADR-308 §6). Solo para métricas del backend.
 enum NarrationTrigger: String {
     case gesture
@@ -47,6 +56,9 @@ protocol EnvironmentDescribing {
 enum EnvironmentNarrationOutcome: Equatable {
     /// La descripción entró al árbitro como P3.
     case described(String)
+    /// SCRUM-39: se pidió otra vez enseguida o la escena no cambió: se repitió la última
+    /// descripción sin enviar otra foto.
+    case repeated(String)
     /// Sin consentimiento: lo explica el servicio de consentimiento (SCRUM-324).
     case consentRequired
     /// Ya había una solicitud en curso: no se envía otra.
@@ -70,8 +82,40 @@ enum EnvironmentNarrationUnavailable: Equatable {
     case stale
 }
 
+/// SCRUM-39: cuándo una solicitud repetida no merece otra foto ni otra llamada al backend.
+struct NarrationRepeatPolicy: Equatable {
+    /// Pedir otra vez dentro de este tiempo repite la última descripción sin tomar foto
+    /// (el backend admite una solicitud cada 3 s, ADR-308).
+    var replayWindow: TimeInterval = 3
+    /// Dentro de este tiempo se toma la foto, pero si la escena no cambió se repite la
+    /// última descripción en lugar de enviarla.
+    var sameSceneWindow: TimeInterval = 10
+    /// Distancia mínima entre huellas para considerar que la escena cambió (la misma que
+    /// usa la narración automática, SCRUM-40).
+    var changeThreshold: Float = AutoNarrationConfiguration().changeThreshold
+
+    func replaysWithoutPhoto(lastCapturedAt: Date, now: Date) -> Bool {
+        now.timeIntervalSince(lastCapturedAt) < replayWindow
+    }
+
+    func replaysSameScene(
+        last: SceneSignature?, lastCapturedAt: Date, current: SceneSignature?, now: Date
+    ) -> Bool {
+        guard now.timeIntervalSince(lastCapturedAt) < sameSceneWindow,
+              let last, let current, let distance = last.distance(to: current) else { return false }
+        return distance < changeThreshold
+    }
+}
+
 enum EnvironmentNarrationMessages {
     static let describing = "Describiendo el entorno…"
+    /// SCRUM-39: una solicitud mientras otra está en curso.
+    static let alreadyDescribing = "Ya estoy describiendo el entorno."
+
+    /// SCRUM-39: la última descripción, repetida porque no hay nada nuevo que describir.
+    static func repeated(_ text: String) -> String {
+        "Sigue igual que hace un momento. \(text)"
+    }
 
     static func message(for reason: EnvironmentNarrationUnavailable) -> String {
         switch reason {
@@ -91,6 +135,31 @@ enum EnvironmentNarrationMessages {
             return "La narración del entorno no está disponible ahora. La detección de obstáculos sigue activa."
         case .timedOut, .stale:
             return "La descripción tardó demasiado y ya no corresponde a lo que tienes delante. Vuelve a intentarlo."
+        }
+    }
+
+    // MARK: SCRUM-41: disponibilidad
+
+    /// La narración se cayó durante la ruta (una vez por caída).
+    static func outage(_ outage: NarrationOutage) -> String {
+        switch outage {
+        case .offline:
+            return "Narración no disponible: no hay conexión. La detección de obstáculos sigue activa."
+        case .serviceDown:
+            return "Narración no disponible por ahora. La detección de obstáculos sigue activa."
+        }
+    }
+
+    /// Volvió el servicio: el botón y las descripciones automáticas funcionan otra vez.
+    static let available = "Narración disponible de nuevo."
+
+    /// El usuario pulsó «Describir entorno» durante una caída: no se envía la foto.
+    static func stillUnavailable(_ outage: NarrationOutage) -> String {
+        switch outage {
+        case .offline:
+            return "La narración sigue sin conexión. Te aviso cuando vuelva. La detección de obstáculos sigue activa."
+        case .serviceDown:
+            return "La narración sigue sin estar disponible. Te aviso cuando vuelva. La detección de obstáculos sigue activa."
         }
     }
 }

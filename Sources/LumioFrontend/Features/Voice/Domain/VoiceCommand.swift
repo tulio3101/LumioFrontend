@@ -15,6 +15,8 @@ enum VoiceCommand: Equatable {
     case finishRoute(arrived: Bool)
     /// Cerrar la escucha sin hacer nada.
     case stopListening
+    /// SCRUM-39: Solicitar Narración del Entorno (EnvironmentNarrationService).
+    case describeEnvironment
 
     /// Identidad sin datos asociados: sirve para comparar candidatos de una ambigüedad.
     var kind: Kind {
@@ -25,11 +27,13 @@ enum VoiceCommand: Equatable {
         case .navigate: return .navigate
         case .finishRoute(let arrived): return arrived ? .arrived : .finishRoute
         case .stopListening: return .stopListening
+        case .describeEnvironment: return .describeEnvironment
         }
     }
 
     enum Kind: Hashable {
         case help, repeatInstruction, routeStatus, navigate, arrived, finishRoute, stopListening
+        case describeEnvironment
     }
 
     /// Acciones que no se pueden deshacer: se confirman por voz antes de ejecutarse para que
@@ -56,6 +60,7 @@ enum VoiceCommand: Equatable {
         case .navigate: return "ir a un nuevo destino"
         case .finishRoute(let arrived): return arrived ? "marcar que llegaste" : "terminar la ruta"
         case .stopListening: return "dejar de escuchar"
+        case .describeEnvironment: return "describir lo que tienes delante"
         }
     }
 }

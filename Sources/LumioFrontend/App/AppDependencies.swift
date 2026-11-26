@@ -50,6 +50,8 @@ struct AppDependencies {
     let preferencesSync: PreferencesSynchronizer
     /// SCRUM-324: consentimiento para enviar fotos a la narración; solo en el teléfono.
     let narrationConsent: NarrationConsentService
+    /// SCRUM-32: narración automática y avisos; solo en el teléfono, se leen en memoria.
+    let accessibilityPreferences: AccessibilityPreferencesService
     /// SCRUM-25: compartir la ubicación con los contactos de confianza.
     let locationSharing: LocationSharingService
     /// Recuperar Contraseña: POST /users/password-reset y /confirm, sin sesión.
@@ -78,6 +80,12 @@ struct AppDependencies {
             arbiter: arbiter
         )
         hapticPreferences = hapticSettings
+        // SCRUM-32: preferencias de accesibilidad, solo en el teléfono y en memoria.
+        let accessibility = AccessibilityPreferencesService(
+            store: FileAccessibilityPreferencesStore(fileURL: FileAccessibilityPreferencesStore.defaultFileURL()),
+            arbiter: arbiter
+        )
+        accessibilityPreferences = accessibility
 
         // Sesión: tokens en Keychain; las rutas se envían con el access token.
         let http = URLSessionHTTPClient()
@@ -193,7 +201,8 @@ struct AppDependencies {
         accountDeleter = AccountDeletionService(
             remote: RemoteAccountService(client: routeClient, baseURL: configuration.apiBaseURL),
             tokens: tokens, routes: store, recentRoutes: recentStore, pendingHistory: history,
-            voicePreferences: voiceSettings, hapticPreferences: hapticSettings, arbiter: arbiter
+            voicePreferences: voiceSettings, hapticPreferences: hapticSettings,
+            accessibilityPreferences: accessibility, arbiter: arbiter
         )
         // Preferencias de voz y vibración: se aplican del teléfono y se respaldan en
         // GET/PUT /users/me/preferences en segundo plano; nunca retrasan el audio.
@@ -326,7 +335,9 @@ struct AppDependencies {
             consent: consent,
             connectivity: monitor,
             arbiter: audioArbiter,
-            tokens: tokens
+            tokens: tokens,
+            // SCRUM-39: una escena igual a la recién descrita se repite sin enviar otra foto.
+            signatures: VisionSceneSignatureProvider()
         )
         // SCRUM-40: con la ruta activa, la escena que cambia pide sola otra descripción (huella
         // VNFeaturePrint en el teléfono, mínimo 10 s entre narraciones y solo con el canal libre).
@@ -336,7 +347,18 @@ struct AppDependencies {
             signatures: VisionSceneSignatureProvider(),
             consent: consent,
             connectivity: monitor,
-            channel: audioArbiter
+            channel: audioArbiter,
+            // SCRUM-32: el usuario puede apagar la narración automática.
+            isEnabled: { [weak accessibility] in accessibility?.preferences.autoNarration ?? true }
+        )
+        // SCRUM-41: durante la ruta vigila la red y GET /vision/status (sin sesión ni foto).
+        // Avisa por el árbitro (P2) y con vibración al caer y al volver; mientras está caída no
+        // salen fotos automáticas y al volver se reanudan. La detección no depende de esto.
+        narration.availability = NarrationAvailabilityMonitor(
+            connectivity: monitor,
+            status: RemoteNarrationStatusService(client: http, baseURL: configuration.apiBaseURL),
+            audio: audioArbiter,
+            haptics: hapticSettings
         )
         // Retirar el consentimiento corta la solicitud en vuelo y las actualizaciones.
         consent.onRevoked = { [weak narration] in narration?.cancel() }
@@ -361,7 +383,8 @@ struct AppDependencies {
             permissions: permissionService,
             safetyModel: BundleSafetyModelChecker(),
             routes: store,
-            arbiter: audioArbiter
+            arbiter: audioArbiter,
+            preferences: accessibility
         )
         // SCRUM-360: punto único de desmonte, reutilizado por el cierre de sesión (SignOutService)
         // y por la expiración/401 (SessionExpiryCoordinator, vía .lumioSessionExpired).

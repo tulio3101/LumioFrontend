@@ -36,6 +36,12 @@ extension DestinationViewModel: VoiceActionPerforming {
         case .help:
             return VoiceCommandInterpreter.helpPrompt
 
+        case .describeEnvironment:
+            // SCRUM-39: la narración locuta el resultado, las fallas y «ya estoy describiendo».
+            guard let narration else { return EnvironmentNarrationMessages.message(for: .notConfigured) }
+            narration.requestDescription()
+            return nil
+
         case .navigate(nil), .stopListening:
             // Los resuelve VoiceCommandService antes de llegar aquí.
             return nil

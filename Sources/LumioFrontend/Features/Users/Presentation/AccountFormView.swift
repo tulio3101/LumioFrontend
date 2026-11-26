@@ -340,7 +340,8 @@ struct AccountFormView: View {
 
 // MARK: Componentes
 
-/// Etiqueta visible encima del campo y, debajo, el error o una ayuda.
+/// Etiqueta visible encima del campo y, debajo, el error o una ayuda (también en la pista de
+/// VoiceOver del campo).
 private struct LabeledInput<Field: View>: View {
     let label: String
     let error: String?
@@ -362,6 +363,8 @@ private struct LabeledInput<Field: View>: View {
                 .frame(minHeight: 52)
                 .background(LumioColor.surface, in: shape)
                 .overlay(shape.strokeBorder(borderColor, lineWidth: isFocused || error != nil ? 2 : 1))
+                // SCRUM-29: el error se oye en el propio campo, como en Mi cuenta y Contactos.
+                .accessibilityHint(error.map { "Error: \($0)" } ?? hint ?? "")
             if let error {
                 Label(error, systemImage: "exclamationmark.circle.fill")
                     .font(.footnote)

@@ -89,7 +89,9 @@ struct ActiveRouteView: View {
                         focus: $instructionHasFocus,
                         onQueryStatus: model.startRouteStatusQuery,
                         onReroute: recalculate,
-                        onFinish: { confirmsFinish = true }
+                        onFinish: { confirmsFinish = true },
+                        // SCRUM-39: también desde el menú de acciones de VoiceOver.
+                        onDescribe: narration.map { service in { service.requestDescription() } }
                     ) {
                         model.repeatCurrentInstruction()
                     }
@@ -131,7 +133,8 @@ struct ActiveRouteView: View {
                 }
                 .buttonStyle(LumioSecondaryButtonStyle())
                 .disabled(model.isRerouting || model.isFinishing)
-                .accessibilityLabel("Recalcular ruta")
+                // SCRUM-29: mientras recalcula, VoiceOver lo dice en lugar de solo atenuarlo.
+                .accessibilityLabel(model.isRerouting ? "Recalculando la ruta" : "Recalcular ruta")
                 .accessibilityHint("Calcula de nuevo la ruta al mismo destino desde donde estás. Necesita conexión.")
                 Button {
                     confirmsFinish = true
@@ -145,7 +148,7 @@ struct ActiveRouteView: View {
                 }
                 .buttonStyle(LumioSecondaryButtonStyle())
                 .disabled(model.isFinishing)
-                .accessibilityLabel("Finalizar ruta")
+                .accessibilityLabel(model.isFinishing ? "Finalizando la ruta" : "Finalizar ruta")
                 .accessibilityHint("Detiene las indicaciones y guarda la ruta en tu historial. Pide confirmación.")
                 stepsSection(route)
             }
@@ -208,6 +211,18 @@ struct ActiveRouteView: View {
 
 // MARK: Componentes de ruta
 
+private extension View {
+    /// SCRUM-39: la acción solo aparece si hay narración.
+    @ViewBuilder
+    func describeEnvironmentAction(_ action: (() -> Void)?) -> some View {
+        if let action {
+            accessibilityAction(named: "Describir entorno", action)
+        } else {
+            self
+        }
+    }
+}
+
 /// La indicación que se sigue ahora, en grande, con la acción para volver a oírla.
 private struct CurrentInstructionCard: View {
     let step: RouteStep
@@ -217,6 +232,8 @@ private struct CurrentInstructionCard: View {
     let onQueryStatus: () -> Void
     let onReroute: () -> Void
     let onFinish: () -> Void
+    /// SCRUM-39: «Describir entorno» en el menú de acciones. nil sin narración.
+    var onDescribe: (() -> Void)? = nil
     let onRepeat: () -> Void
 
     var body: some View {
@@ -254,6 +271,7 @@ private struct CurrentInstructionCard: View {
             .accessibilityAction(named: "Consultar ruta", onQueryStatus)
             .accessibilityAction(named: "Recalcular ruta", onReroute)
             .accessibilityAction(named: "Finalizar ruta", onFinish)
+            .describeEnvironmentAction(onDescribe)
 
             Button(action: onRepeat) {
                 Label("Repetir indicación", systemImage: "speaker.wave.2.fill")
@@ -599,8 +617,14 @@ extension DestinationViewModel {
 }
 /// SCRUM-38: pide una descripción del entorno. El resultado llega por audio (P3): no
 /// interrumpe alertas ni indicaciones. Mientras se describe, el botón no envía otra foto.
+///
+/// SCRUM-41: con la narración caída el botón lo muestra y VoiceOver lo lee en el valor. Sigue
+/// activo: al pulsarlo, el servicio dice por audio que sigue sin estar disponible y comprueba
+/// de nuevo. La vista no locuta nada.
 private struct DescribeEnvironmentButton: View {
     @ObservedObject var service: EnvironmentNarrationService
+
+    private var isUnavailable: Bool { service.narrationAvailability.isUnavailable }
 
     var body: some View {
         Button {
@@ -608,6 +632,8 @@ private struct DescribeEnvironmentButton: View {
         } label: {
             if service.isDescribing {
                 Label("Describiendo el entorno…", systemImage: "ellipsis")
+            } else if isUnavailable {
+                Label("Narración no disponible", systemImage: "eye.slash")
             } else {
                 Label("Describir entorno", systemImage: "eye")
             }
@@ -615,7 +641,12 @@ private struct DescribeEnvironmentButton: View {
         .buttonStyle(LumioSecondaryButtonStyle())
         .disabled(service.isDescribing)
         .accessibilityLabel(service.isDescribing ? "Describiendo el entorno" : "Describir entorno")
-        .accessibilityHint("Toma una foto con la cámara y describe por audio lo que tienes delante. Necesita conexión.")
+        .accessibilityValue(isUnavailable ? "No disponible" : "")
+        .accessibilityHint(
+            isUnavailable
+                ? "La narración no está disponible ahora. La detección de obstáculos sigue activa. Toca para volver a comprobar."
+                : "Toma una foto con la cámara y describe por audio lo que tienes delante. Necesita conexión."
+        )
     }
 }
 #endif
