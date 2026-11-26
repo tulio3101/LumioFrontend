@@ -85,7 +85,6 @@ struct AppDependencies {
         sessionService = session
         // SCRUM-360: identidad de la cuenta para el historial pendiente por usuario.
         let account = UserDefaultsCurrentAccount()
-        authenticationService = RemoteAuthenticationService(api: authAPI, store: tokens)
         passwordRecovery = PasswordRecoveryService(
             remote: RemotePasswordRecoveryService(client: http, baseURL: configuration.apiBaseURL),
             arbiter: arbiter
