@@ -13,7 +13,16 @@ let package = Package(
         ),
     ],
     targets: [
-        .target(name: "LumioFrontend", resources: [.process("Resources")]),
+        .target(
+            name: "LumioFrontend",
+            resources: [
+                .process("Resources"),
+                // Modelo YOLO precompilado (.mlmodelc) para builds SwiftPM/xtool, que no
+                // ejecutan el paso de Core ML de Xcode. `.copy` lo empaqueta tal cual en
+                // Bundle.module. Xcode usa el .mlpackage de Resources/ (ver project.yml).
+                .copy("MLModels/yolo26n_640_int8.mlmodelc"),
+            ]
+        ),
         .testTarget(name: "LumioFrontendTests", dependencies: ["LumioFrontend"]),
         .testTarget(name: "SafetyTests", dependencies: ["LumioFrontend"]),
     ],

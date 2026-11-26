@@ -1,7 +1,8 @@
-// El punto de entrada @main solo se compila para la app (target ejecutable de Xcode/xcodegen).
-// En SwiftPM (el paso "Portable tests": `swift test`) se excluye: una librería con @main choca
-// con el `_main` que genera el runner de XCTest ("duplicate symbol _main").
-#if !SWIFT_PACKAGE
+// El punto de entrada @main se compila para la app: Xcode/xcodegen (sin SWIFT_PACKAGE) y xtool,
+// que compila con SwiftPM pero para iOS y enlaza esta librería en un ejecutable sin `main` propio.
+// En `swift test` (macOS o Linux) se excluye: una librería con @main choca con el `_main` que
+// genera el runner de XCTest ("duplicate symbol _main").
+#if !SWIFT_PACKAGE || os(iOS)
 #if canImport(SwiftUI)
 import SwiftUI
 
