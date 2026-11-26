@@ -276,7 +276,7 @@ struct AppDependencies {
             audioArbiter: audioArbiter,
             announcer: ObstacleAnnouncer(
                 announcementInterval: focusConfig.perTrackCooldownSeconds,
-                dangerDistanceMeters: focusConfig.dangerDistanceMeters
+                proximity: focusConfig.proximity
             ),
             haptics: haptics
         )

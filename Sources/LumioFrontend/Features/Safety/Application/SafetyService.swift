@@ -258,10 +258,14 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
             debugFPSWindowStart = now
         }
         #endif
-        for out in announcer.announcements(for: output.tracked, now: now) {
+        // SCRUM-34: el modo de profundidad decide los umbrales (LiDAR o reducido sin LiDAR) y si
+        // el aviso dice metros.
+        let mode: DepthMode = pipeline.isDepthAvailable ? .lidar : .reduced
+        for out in announcer.announcements(for: output.tracked, now: now, mode: mode) {
             onEvent?(out.event)
             audioArbiter.receive(out.message)
-            // SCRUM-33: un obstáculo a menos de 1 m (riesgo inmediato) también vibra.
+            // SCRUM-34: un obstáculo en zona de riesgo (P1) suena y también vibra. La vibración
+            // `criticalAlert` la dispara el árbitro cuando la P1 empieza a sonar.
             if out.event.requiresImmediateAction { haptics?.play(.warning) }
         }
         // SCRUM-33: obstáculos por profundidad (ya filtrados/persistidos en el pipeline).
