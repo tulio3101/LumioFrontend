@@ -286,10 +286,10 @@ su anuncio en RouteAnnouncements, y la pantalla muestra el mismo texto. Nunca se
 locuta desde la vista ni desde el ViewModel.
 
 Contratos para las HUs siguientes:
-- Indicar Destino por Voz (SCRUM-313) entrega `DestinationRequest.query` (texto
-  confirmado) o `.place` (ya geocodificado) a `DestinationViewModel.createRoute(to:)`
-  o, con una ruta activa, a `DestinationViewModel.changeDestination(to:)` (Modificar
-  Ruta exige pedir el cambio por voz con confirmación por audio).
+- Indicar Destino por Voz (SCRUM-313, implementada) entrega `.place` (ya geocodificado
+  y confirmado por audio) o, sin red ni ubicación, `.query` (texto confirmado) a
+  `DestinationViewModel.navigate(to:)`, que llama a `createRoute(to:)` o, con ruta activa,
+  a `changeDestination(to:)`. Ver docs/HU-indicar-destino-por-voz.md.
 - Guiar Giros (SCRUM-312) lee la copia local (`ActiveRouteStoring`), usa
   `RouteStep.maneuverCoordinate` para anunciar a tiempo y
   `NavigationInstructionBuilder.message(for:in:now:)` para crear el mensaje P2. Usa

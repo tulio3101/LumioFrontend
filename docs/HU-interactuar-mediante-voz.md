@@ -59,8 +59,9 @@ El destino conserva lo dicho («la Biblioteca Luis Ángel Arango»).
 
 «Estado de detección» y «Reintentar detección» dependen de SCRUM-37 (estado y reintento de
 SafetyService). Se agregan al catálogo cuando SCRUM-37 esté en develop.
-El dictado de destino con confirmación completa y geocodificación es SCRUM-313; esta HU
-solo pasa el texto dicho a Crear/Modificar Ruta, que ya informa los errores.
+El dictado de destino con confirmación completa y geocodificación es SCRUM-313
+(docs/HU-indicar-destino-por-voz.md): los comandos «llévame a …» y «nueva ruta» ahora leen el
+lugar encontrado y piden «sí» antes de calcular.
 
 ## Pruebas automatizadas
 
