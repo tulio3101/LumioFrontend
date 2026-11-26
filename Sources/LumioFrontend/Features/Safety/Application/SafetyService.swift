@@ -14,6 +14,8 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
 
     private let pipeline: any ObstacleDetectionPipeline
     private let audioArbiter: any AudioArbitrating
+    /// SCRUM-314: vibra al quedar lista la detección. nil en pruebas que no la usan.
+    private let haptics: (any HapticFeedbackPlaying)?
     private var announcer: ObstacleAnnouncer
     /// Configuración inyectada (intervalos y distancia de peligro) para reiniciar el estado.
     private let initialAnnouncer: ObstacleAnnouncer
@@ -50,10 +52,12 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
     init(
         pipeline: any ObstacleDetectionPipeline,
         audioArbiter: any AudioArbitrating,
-        announcer: ObstacleAnnouncer = ObstacleAnnouncer()
+        announcer: ObstacleAnnouncer = ObstacleAnnouncer(),
+        haptics: (any HapticFeedbackPlaying)? = nil
     ) {
         self.pipeline = pipeline
         self.audioArbiter = audioArbiter
+        self.haptics = haptics
         self.announcer = announcer
         self.initialAnnouncer = announcer
     }
@@ -160,11 +164,14 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
 
     // MARK: - SCRUM-320/349: mode announcement
 
+    /// SCRUM-314: «cámara lista» por audio y vibración, nunca solo en pantalla. Solo con la
+    /// primera inferencia válida: el modelo cargó, la cámara entrega frames y la seguridad ya
+    /// funciona. Incluye el modo completo (LiDAR) o reducido (sin LiDAR).
     private func announceMode() {
-        // El usuario sabe por audio si opera en modo completo (LiDAR) o reducido (sin LiDAR).
         audioArbiter.receive(
             pipeline.isDepthAvailable ? SafetyAudio.fullMode() : SafetyAudio.reducedMode()
         )
+        haptics?.play(.safetyReady)
     }
 
     // MARK: - Detection consumption

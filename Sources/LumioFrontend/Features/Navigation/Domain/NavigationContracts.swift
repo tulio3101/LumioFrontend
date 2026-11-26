@@ -231,6 +231,8 @@ enum HapticCue: String, Codable, CaseIterable, Equatable {
     case emergencyFailed
     /// Una alerta de seguridad P1 empezó a sonar.
     case criticalAlert
+    /// La cámara y la detección de obstáculos están listas (SCRUM-314).
+    case safetyReady
 }
 
 /// Acompaña los anuncios de Crear Ruta. Los patrones de giro pertenecen a Guiar Giros.
