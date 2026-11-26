@@ -49,7 +49,11 @@ detecta con el GPS que te saliste del trayecto (3 lecturas precisas a más de 30
 avisa por audio, calcula una ruta nueva al mismo destino y la anuncia; sin red sigue con
 la copia local, lo avisa y recalcula al volver la conexión. También hay «Recalcular ruta»
 a mano en «Tu ruta». El destino se escribe (con sugerencias) mientras no exista el dictado
-(SCRUM-313); la guía de giros durante el trayecto es SCRUM-312.
+(SCRUM-313). Guiar Giros durante el Trayecto (SCRUM-312) sigue el GPS durante la ruta activa
+con la copia local (sin backend) y anuncia cada giro por audio (P2 del AudioArbiter) dos veces,
+«En 40 metros, gira a la izquierda…» y «Ahora, gira…», con una vibración distinta para
+izquierda y derecha; avisa antes de llegar y si se pierde la red o se degrada el GPS
+(ver docs/HU-guiar-giros.md).
 Configurar Contactos de Confianza (SCRUM-319) permite agregar, editar y eliminar los contactos
 (nombre y correo, hasta 5) que recibirán por correo la alerta de emergencia, en Preferencias.
 Se validan en el teléfono y en el backend, se guardan en `/contacts` y cada resultado se anuncia

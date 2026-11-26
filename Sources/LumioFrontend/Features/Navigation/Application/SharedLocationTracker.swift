@@ -1,12 +1,27 @@
 import Foundation
 
+/// Escucha la fuente de GPS compartida sin encenderla: recibe las lecturas mientras algún
+/// cliente la mantiene encendida (durante la ruta activa). Lo usa Guiar Giros (SCRUM-312).
+@MainActor
+protocol RouteTrackingObserving: AnyObject {
+    /// La fuente se encendió: empieza la ruta (o se restauró).
+    func trackingDidStart()
+    /// La fuente se apagó: la ruta terminó.
+    func trackingDidStop()
+    func receive(_ fix: LocationFix)
+}
+
 /// Una sola fuente de GPS para varios consumidores durante la ruta: la detección de llegada
 /// (SCRUM-127) y la de desviación (SCRUM-26). Cada uno recibe su propio `LocationTracking`;
-/// la fuente sigue mientras al menos uno lo tenga encendido.
+/// la fuente sigue mientras al menos uno lo tenga encendido. Los observadores (Guiar Giros,
+/// SCRUM-312) reciben las mismas lecturas mientras la fuente esté encendida.
 @MainActor
 final class SharedLocationTracker {
     private let base: any LocationTracking
     private var clients: [Client] = []
+    /// Fuertes a propósito: la fuente es quien mantiene vivo al observador.
+    private var observers: [any RouteTrackingObserving] = []
+    private var isRunning = false
 
     init(base: any LocationTracking) {
         self.base = base
@@ -19,18 +34,31 @@ final class SharedLocationTracker {
         return client
     }
 
+    func addObserver(_ observer: any RouteTrackingObserving) {
+        observers.append(observer)
+        if isRunning { observer.trackingDidStart() }
+    }
+
     fileprivate func clientDidStart() {
-        if clients.filter(\.isRunning).count == 1 { base.start() }
+        guard !isRunning, clients.contains(where: \.isRunning) else { return }
+        isRunning = true
+        base.start()
+        for observer in observers { observer.trackingDidStart() }
     }
 
     fileprivate func clientDidStop() {
-        if !clients.contains(where: \.isRunning) { base.stop() }
+        guard isRunning, !clients.contains(where: \.isRunning) else { return }
+        isRunning = false
+        base.stop()
+        for observer in observers { observer.trackingDidStop() }
     }
 
     private func broadcast(_ fix: LocationFix) {
         for client in clients where client.isRunning {
             client.onFix?(fix)
         }
+        guard isRunning else { return }
+        for observer in observers { observer.receive(fix) }
     }
 
     @MainActor
