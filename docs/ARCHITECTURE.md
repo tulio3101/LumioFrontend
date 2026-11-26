@@ -485,6 +485,33 @@ La velocidad típica y los 13 caracteres por segundo son valores iniciales a val
 
 Pruebas en `Tests/LumioFrontendTests/NarrationInterruptionTests.swift`.
 
+## HU: Consentir el Envío de Imágenes para la Narración (SCRUM-324)
+
+Preferencias > Narración del entorno (`NarrationConsentView` + `NarrationConsentService`):
+
+1. El aviso (`NarrationConsentPolicy.explanation`, ADR-308) dice que se envían fotos a un
+   servicio en la nube de AWS, que Lumio no las guarda, que no se describe a las personas,
+   que AWS puede conservarlas un tiempo para prevenir abusos y que sin consentimiento la
+   detección y la navegación funcionan igual. Sin VoiceOver lo lee el árbitro al entrar (P2,
+   contexto `narration-consent`); con VoiceOver el foco va al texto. «Escuchar explicación»
+   lo repite.
+2. Consentimiento explícito: «Acepto el envío de fotos» / «No acepto». Con consentimiento,
+   «Retirar consentimiento» pide confirmación. Cada resultado se locuta.
+3. Se guarda solo en el teléfono como `{granted, version, decidedAt}`
+   (`FileNarrationConsentStore`, Application Support). Un archivo ilegible cuenta como no
+   preguntado. Si cambia el aviso, se sube `currentVersion` y el estado pasa a `.outdated`.
+4. Revocar corta la narración que suene o espere (`NarrationAudio.contextID`) y llama a
+   `onRevoked` para que la narración cancele la solicitud en vuelo y apague la automática.
+
+Contrato para Narración del Entorno (SCRUM-38) y Solicitar Narración (SCRUM-39):
+- Antes de narrar: `requireConsentBeforeNarration()` (true si se puede; si no, explica el
+  aviso o recuerda dónde activarlo).
+- Antes de cada envío: `NarrationConsentChecking.consentVersionForUpload`; nil = no llamar a
+  `POST /vision/analyze`. Con valor, va en `consent_version`; el backend responde 403
+  `consent_required` sin él.
+
+Pruebas en `Tests/LumioFrontendTests/NarrationConsentTests.swift`.
+
 ## HU: descartar mensajes duplicados u obsoletos
 
 Implementada en AudioDeduplicationPolicy y AudioArbiterService. No requiere API ni

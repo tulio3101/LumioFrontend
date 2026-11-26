@@ -28,6 +28,10 @@ struct RootView: View {
     let obstacleGate: (any CameraAssistanceGating)?
     /// HU Interactuar mediante voz: botón «Comando de voz» en Trayecto. nil fuera de iOS.
     let voiceCommands: VoiceCommandService?
+    #if os(iOS)
+    /// SCRUM-324: Preferencias > Narración del entorno.
+    let narrationConsent: NarrationConsentService?
+    #endif
     /// Pantalla Principal Accesible: estado que se locuta al abrir. nil fuera de iOS.
     let homeStatus: HomeStatusService?
     /// Respaldo de preferencias: se sincroniza al entrar y se olvida la cuenta al salir.
@@ -70,8 +74,10 @@ struct RootView: View {
         obstacleGate: (any CameraAssistanceGating)? = nil,
         voiceCommands: VoiceCommandService? = nil,
         homeStatus: HomeStatusService? = nil,
-        preferencesSync: PreferencesSynchronizer? = nil
+        preferencesSync: PreferencesSynchronizer? = nil,
+        narrationConsent: NarrationConsentService? = nil
     ) {
+        self.narrationConsent = narrationConsent
         self.homeStatus = homeStatus
         self.preferencesSync = preferencesSync
         self.routeCreator = routeCreator
@@ -211,7 +217,8 @@ struct RootView: View {
                 SettingsView(
                     signOut: signOut, profile: profile, contacts: contacts, accountDeleter: accountDeleter,
                     voicePreferences: voicePreferences, hapticPreferences: hapticPreferences,
-                    onSignedOut: { entry = .welcome }, permissions: permissions
+                    onSignedOut: { entry = .welcome }, permissions: permissions,
+                    narrationConsent: narrationConsent
                 )
                 #else
                 SettingsView(
