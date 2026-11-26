@@ -19,12 +19,15 @@ struct AudioMessage: Identifiable {
     let contextID: String?
     let deduplicationKey: String?
     let captureSequence: UInt64?
+    /// SCRUM-44: solo indicaciones de giro (P2). Decide si pueden interrumpir una narración.
+    let turnDeadline: TurnDeadline?
     var status: AudioMessageStatus = .pending
 
     init(
         id: UUID = UUID(), text: String, priority: AudioPriority,
         createdAt: Date = Date(), expiresAt: Date? = nil, contextID: String? = nil,
-        deduplicationKey: String? = nil, captureSequence: UInt64? = nil
+        deduplicationKey: String? = nil, captureSequence: UInt64? = nil,
+        turnDeadline: TurnDeadline? = nil
     ) {
         self.id = id
         self.text = text
@@ -34,6 +37,7 @@ struct AudioMessage: Identifiable {
         self.contextID = contextID
         self.deduplicationKey = deduplicationKey
         self.captureSequence = captureSequence
+        self.turnDeadline = turnDeadline
     }
 
     func isExpired(at now: Date = Date()) -> Bool {

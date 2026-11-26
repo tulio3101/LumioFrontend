@@ -7,11 +7,27 @@ struct PlaybackToken: Hashable {
     init() { rawValue = UUID() }
 }
 
+/// SCRUM-44: cómo empieza una locución. Tras cortar una narración para dar una indicación,
+/// el reproductor deja una pausa breve para que el cambio se note y no suene como una sola
+/// frase. Una alerta P1 nunca espera: empieza siempre `.immediate`.
+enum AudioTransition: Equatable {
+    case immediate
+    case afterInterruption
+}
+
 @MainActor
 protocol AudioPlaying: AnyObject {
     var onFinished: ((PlaybackToken) -> Void)? { get set }
     func play(_ message: AudioMessage, token: PlaybackToken) throws
+    func play(_ message: AudioMessage, token: PlaybackToken, transition: AudioTransition) throws
     func stop()
+}
+
+extension AudioPlaying {
+    /// Los reproductores que no distinguen la transición (pruebas) empiezan igual.
+    func play(_ message: AudioMessage, token: PlaybackToken, transition: AudioTransition) throws {
+        try play(message, token: token)
+    }
 }
 
 @MainActor
@@ -34,8 +50,10 @@ struct AudioDecisionContext {
 }
 
 protocol AudioPolicyEvaluating {
+    /// `startedAt`: cuándo empezó a sonar `current`, para estimar cuánto le falta.
     func shouldInterrupt(
-        current: AudioMessage, incoming: AudioMessage, context: AudioDecisionContext
+        current: AudioMessage, startedAt: Date, incoming: AudioMessage,
+        context: AudioDecisionContext, now: Date
     ) -> Bool
     func isRelevant(_ message: AudioMessage, context: AudioDecisionContext, now: Date) -> Bool
 }
