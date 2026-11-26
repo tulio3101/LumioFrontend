@@ -333,12 +333,12 @@ con el reproductor nativo en plataformas Apple.
 
 Reglas conocidas:
 - P1 interrumpe P2/P3. Misma prioridad conserva FIFO por recepción, no createdAt.
-- P2 solo interrumpe P3 si el contexto del giro lo exige.
+- P2 solo interrumpe P3 si el giro no puede esperar (SCRUM-44, ver abajo).
 - P3 interrumpido se descarta.
-- P2 interrumpido se reevalúa; definir reinicio desde el comienzo como en el prototipo.
+- P2 interrumpido se reevalúa y vuelve a sonar desde el comienzo.
 - Relevancia combina vencimiento y validez del contexto. No confundirla con estado.
 
-Los umbrales del spike siguen pendientes de resolver; no se codifican números aquí.
+Los umbrales de giro del spike están en `TurnGeometry` (SCRUM-44).
 AudioDecisionContext expresa datos de decisión sin inventar cómo se calculan:
 urgentNavigationMessageIDs contiene los mensajes de giro urgentes e
 invalidatedContextIDs identifica giros/rutas/escenas que ya no son válidos.
@@ -434,6 +434,33 @@ Las prioridades salen del spike SCRUM-309 y las aplica `AudioPolicy` en el árbi
 
 Pruebas en `Tests/LumioFrontendTests/AudioPriorityTests.swift`: clasificación por productor
 y escenarios 2, 3, 6–11 del spike.
+
+## HU: Interrumpir Narración ante Eventos Prioritarios (SCRUM-44)
+
+Reglas del spike SCRUM-309, en `AudioPolicy.shouldInterrupt`:
+
+- Una alerta P1 interrumpe siempre la narración y empieza sin pausa.
+- Una indicación P2 de giro lleva `turnDeadline` (`TurnDeadline`: cuándo llega el usuario
+  al punto de giro y si es `.sharp`, 1,5 s, o `.wide`, 2,5 s). Espera a que termine la
+  narración si después quedaría más que ese margen; si no, la interrumpe. Lo que le falta a
+  la narración lo estima `SpeechDurationEstimator` (13 caracteres por segundo, a propósito
+  lento para interrumpir antes y no tarde). El margen es inclusivo: quedar justo en 1,5 s
+  ya interrumpe.
+- Si la narración dura más de lo estimado, el árbitro programa una revisión para
+  `latestStart` (giro − margen) y entonces interrumpe. Si ya terminó, la revisión no hace nada.
+- Sin `turnDeadline` sigue valiendo la marca del productor en
+  `AudioDecisionContext.urgentNavigationMessageIDs`.
+- La narración interrumpida se descarta y no se reanuda; P2 no interrumpe a otra P2 ni a P1.
+- Transición: una indicación que corta una narración se reproduce con
+  `AudioTransition.afterInterruption`; `SpeechAudioPlayer` la empieza tras 0,3 s de pausa
+  (`preUtteranceDelay`) para que el cambio se note.
+
+Contrato para Guiar Giros (SCRUM-312): crear el mensaje del giro con
+`turnDeadline: TurnDeadline(distanceMeters:speedMetersPerSecond:geometry:now:)` (sin
+velocidad útil usa 1 m/s) y volver a enviarlo, con la misma clave, si cambia la estimación.
+La velocidad típica y los 13 caracteres por segundo son valores iniciales a validar en campo.
+
+Pruebas en `Tests/LumioFrontendTests/NarrationInterruptionTests.swift`.
 
 ## HU: descartar mensajes duplicados u obsoletos
 
