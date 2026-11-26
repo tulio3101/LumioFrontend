@@ -94,9 +94,9 @@ private struct VoiceListeningBanner: View {
         .foregroundStyle(LumioColor.textPrimary)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(LumioColor.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(LumioColor.surface, in: RoundedRectangle(cornerRadius: LumioRadius.control, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: LumioRadius.control, style: .continuous)
                 .strokeBorder(LumioColor.controlBorder, lineWidth: 1)
         )
         .accessibilityElement(children: .combine)

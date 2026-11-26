@@ -166,7 +166,7 @@ private struct ContactRow: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(LumioColor.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(LumioColor.surface, in: RoundedRectangle(cornerRadius: LumioRadius.control, style: .continuous))
     }
 }
 

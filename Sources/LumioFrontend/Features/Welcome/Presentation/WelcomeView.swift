@@ -77,6 +77,16 @@ struct WelcomeView: View {
             .accessibilityElement(children: .combine)
             .accessibilityAddTraits(.isHeader)
             .entrance(hasAppeared, delay: 0.12, reduceMotion: reduceMotion)
+
+            // Explica en una frase qué hace la app: una bienvenida más cálida y clara para quien
+            // la abre por primera vez (lectores de pantalla la leen tras el encabezado).
+            Text("Te guío a pie con indicaciones por voz, paso a paso.")
+                .font(.body)
+                .foregroundStyle(LumioColor.textSecondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 12)
+                .entrance(hasAppeared, delay: 0.18, reduceMotion: reduceMotion)
         }
     }
 
@@ -137,7 +147,7 @@ struct WelcomeView: View {
     }
 
     private var panelShape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: 28, style: .continuous)
+        RoundedRectangle(cornerRadius: LumioRadius.card, style: .continuous)
     }
 
     private func startAnimations() {

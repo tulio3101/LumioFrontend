@@ -267,7 +267,7 @@ struct DestinationView: View {
             .accessibilityHint("Abre la búsqueda de destino.")
         }
         .frame(maxWidth: .infinity)
-        .lumioCard(padding: 24, cornerRadius: 28)
+        .lumioCard(padding: 24)
     }
 
     /// Con ruta: lo que quedó en curso va primero y se retoma con una sola acción.
@@ -349,7 +349,7 @@ struct DestinationView: View {
                     .accessibilityHidden(true)
             }
             .fixedSize(horizontal: false, vertical: true)
-            .lumioCard(padding: 16, cornerRadius: 18)
+            .lumioCard(padding: 16)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

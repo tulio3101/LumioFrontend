@@ -4,7 +4,7 @@ import SwiftUI
 /// Panel de superficie de la bienvenida: agrupa contenido relacionado (región común).
 struct LumioCardModifier: ViewModifier {
     var padding: CGFloat = 20
-    var cornerRadius: CGFloat = 24
+    var cornerRadius: CGFloat = LumioRadius.card
 
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
@@ -21,7 +21,7 @@ struct LumioCardModifier: ViewModifier {
 }
 
 extension View {
-    func lumioCard(padding: CGFloat = 20, cornerRadius: CGFloat = 24) -> some View {
+    func lumioCard(padding: CGFloat = 20, cornerRadius: CGFloat = LumioRadius.card) -> some View {
         modifier(LumioCardModifier(padding: padding, cornerRadius: cornerRadius))
     }
 
@@ -93,7 +93,7 @@ struct LumioStatusBanner: View {
         .foregroundStyle(status.foreground)
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(status.background, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(status.background, in: RoundedRectangle(cornerRadius: LumioRadius.control, style: .continuous))
         .fixedSize(horizontal: false, vertical: true)
         .accessibilityElement(children: .combine)
     }

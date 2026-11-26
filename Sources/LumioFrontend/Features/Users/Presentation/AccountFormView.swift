@@ -386,7 +386,7 @@ private struct LabeledInput<Field: View>: View {
     }
 
     private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
+        RoundedRectangle(cornerRadius: LumioRadius.field, style: .continuous)
     }
 }
 
@@ -416,7 +416,7 @@ private struct FailureBanner: View {
         .foregroundStyle(LumioColor.errorText)
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(LumioColor.errorBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(LumioColor.errorBackground, in: RoundedRectangle(cornerRadius: LumioRadius.control, style: .continuous))
         .fixedSize(horizontal: false, vertical: true)
     }
 }
@@ -460,7 +460,7 @@ private struct GoogleButtonStyle: ButtonStyle {
     }
 
     private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: 14, style: .continuous)
+        RoundedRectangle(cornerRadius: LumioRadius.control, style: .continuous)
     }
 }
 

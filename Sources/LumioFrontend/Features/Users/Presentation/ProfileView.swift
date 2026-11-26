@@ -286,7 +286,7 @@ struct ProfileInput<Field: View>: View {
     }
 
     private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
+        RoundedRectangle(cornerRadius: LumioRadius.field, style: .continuous)
     }
 }
 
