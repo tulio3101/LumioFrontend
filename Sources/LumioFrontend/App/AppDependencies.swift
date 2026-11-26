@@ -45,6 +45,8 @@ struct AppDependencies {
     let homeStatus: HomeStatusService
     /// Copia de respaldo de las preferencias de voz y vibración en el backend.
     let preferencesSync: PreferencesSynchronizer
+    /// Recuperar Contraseña: POST /users/password-reset y /confirm, sin sesión.
+    let passwordRecovery: PasswordRecoveryService
     #endif
 
     init(configuration: AppConfiguration = .main) {
@@ -75,6 +77,10 @@ struct AppDependencies {
         let session = StoredSessionService(api: authAPI, store: tokens)
         sessionService = session
         authenticationService = RemoteAuthenticationService(api: authAPI, store: tokens)
+        passwordRecovery = PasswordRecoveryService(
+            remote: RemotePasswordRecoveryService(client: http, baseURL: configuration.apiBaseURL),
+            arbiter: arbiter
+        )
         let routeClient: any HTTPClient = authAPI.map {
             AuthorizedHTTPClient(base: http, api: $0, store: tokens)
         } ?? http

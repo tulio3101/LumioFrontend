@@ -60,6 +60,8 @@ contactos de confianza. Sin permiso de ubicación sale sin ella; sin contactos o
 informa por audio. No sustituye a los servicios de emergencia y así se lo dice al usuario.
 El registro y el inicio de sesión con correo están conectados a /users: los tokens se
 guardan en Keychain y se renuevan solos; Google sigue pendiente.
+En Iniciar sesión, «¿Olvidaste tu contraseña?» envía un código de 6 dígitos al correo y permite
+crear una contraseña nueva sin revelar si la cuenta existe (ver docs/HU-recuperar-contrasena.md).
 Audio ya incluye cola, política, árbitro y adaptador AVSpeechSynthesizer.
 En Preferencias > Preferencias de voz se eligen el idioma (variante de español), la voz y la
 velocidad de todo lo que dice Lumio; se guardan en el teléfono y se aplican desde la primera
