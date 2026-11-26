@@ -75,8 +75,11 @@ protocol PendingHistorySyncing: AnyObject {
     /// true si no queda nada pendiente.
     @discardableResult
     func flush() async -> Bool
-    /// Al cerrar sesión: lo que no se pudo enviar no debe subirse con otra cuenta.
+    /// Al cerrar sesión: descarta lo pendiente (pruebas / plataformas sin cuenta).
     func discardPending()
+    /// SCRUM-360: al salir la cuenta, en vez de descartar, "aparca" lo pendiente asociado a ella
+    /// para reenviarlo cuando vuelva ese mismo usuario; otro usuario no lo sube con su cuenta.
+    func park()
 }
 
 /// Backend de Finalizar Ruta.

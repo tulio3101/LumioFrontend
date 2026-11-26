@@ -5,6 +5,9 @@ import Foundation
 struct RemoteAuthenticationService: Authenticating {
     let api: AuthAPI?
     let store: any TokenStoring
+    /// SCRUM-360: identidad de la cuenta para reenviar las rutas pendientes del mismo usuario.
+    var account: (any CurrentAccountStoring)? = nil
+    var pendingHistory: (any PendingHistorySyncing)? = nil
 
     func register(_ credentials: AccountCredentials) async throws {
         guard let api else { throw FeatureUnavailable.authentication }
@@ -19,6 +22,10 @@ struct RemoteAuthenticationService: Authenticating {
         } catch {
             throw AuthenticationError.tokenStorageFailed
         }
+        // SCRUM-360: esta cuenta pasa a ser la actual. Si había rutas finalizadas aparcadas a su
+        // nombre (de una sesión anterior en este teléfono), ahora se reenvían.
+        account?.currentAccountID = CredentialsPolicy.normalizedEmail(credentials.email)
+        await pendingHistory?.flush()
     }
 
     func signInWithGoogle() async throws {

@@ -42,6 +42,9 @@ actor AuthorizedHTTPClient: HTTPClient {
             return renewed
         } catch AuthenticationError.sessionExpired {
             store.clear()
+            // SCRUM-360: avisar para desmontar la ruta activa (detección, monitores, audio) igual
+            // que en un cierre de sesión, y devolver la UI al login.
+            NotificationCenter.default.post(name: .lumioSessionExpired, object: nil)
             throw AuthenticationError.sessionExpired
         }
     }

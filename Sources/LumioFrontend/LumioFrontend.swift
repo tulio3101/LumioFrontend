@@ -37,6 +37,7 @@ struct LumioApp: App {
                 accountDeleter: dependencies.accountDeleter,
                 voicePreferences: dependencies.voicePreferences,
                 permissions: dependencies.permissions,
+                sessionExpiry: dependencies.sessionExpiry,
                 safetyMonitor: dependencies.safetyService,
                 obstacleGate: dependencies.obstacleGate,
                 voiceCommands: dependencies.voiceCommands
