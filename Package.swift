@@ -1,0 +1,21 @@
+// swift-tools-version: 6.0
+import PackageDescription
+
+let package = Package(
+    name: "LumioFrontend",
+    platforms: [.iOS(.v16), .macOS(.v13)],
+    products: [
+        // An xtool project should contain exactly one library product,
+        // representing the main app.
+        .library(
+            name: "LumioFrontend",
+            targets: ["LumioFrontend"]
+        ),
+    ],
+    targets: [
+        .target(name: "LumioFrontend", resources: [.process("Resources")]),
+        .testTarget(name: "LumioFrontendTests", dependencies: ["LumioFrontend"]),
+        .testTarget(name: "SafetyTests", dependencies: ["LumioFrontend"]),
+    ],
+    swiftLanguageModes: [.v5]
+)
