@@ -80,13 +80,11 @@ struct RootView: View {
         homeStatus: HomeStatusService? = nil,
         preferencesSync: PreferencesSynchronizer? = nil,
         narrationConsent: NarrationConsentService? = nil,
-        passwordRecovery: (any PasswordRecovering)? = nil
-    ) {
-        self.narrationConsent = narrationConsent
-        self.passwordRecovery = passwordRecovery
+        passwordRecovery: (any PasswordRecovering)? = nil,
         environmentNarration: EnvironmentNarrationService? = nil
     ) {
         self.narrationConsent = narrationConsent
+        self.passwordRecovery = passwordRecovery
         self.environmentNarration = environmentNarration
         self.homeStatus = homeStatus
         self.preferencesSync = preferencesSync
