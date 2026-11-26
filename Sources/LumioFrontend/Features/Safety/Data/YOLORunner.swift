@@ -10,6 +10,17 @@ protocol ObstacleDetecting: AnyObject {
     func detect(pixelBuffer: CVPixelBuffer) throws -> [Detection]
 }
 
+#if DEBUG
+/// Solo para el log de diagnóstico de abajo: el bundle de recursos del módulo según el
+/// toolchain (`Bundle.module` con SwiftPM/xtool, `Bundle.main` con Xcode). La resolución real
+/// del modelo la hace `DetectionModelResource`.
+#if SWIFT_PACKAGE
+private let modelResourceBundle = Bundle.module
+#else
+private let modelResourceBundle = Bundle.main
+#endif
+#endif
+
 /// Runs yolo26n_640_int8 via Vision/Core ML.
 /// NMS is baked into the model pipeline — Vision returns VNRecognizedObjectObservation directly.
 /// Vision handles resize to 640×640; no manual preprocessing needed.
@@ -23,29 +34,30 @@ final class YOLORunner: ObstacleDetecting {
     #endif
 
     init(confidenceThreshold: Float = 0.45) throws {
-        // Xcode compiles .mlpackage → .mlmodelc (Compile Sources build phase).
-        // The compiled artifact is what ends up in the app bundle.
+        // El `.mlmodelc` puede venir de dos sitios según el toolchain:
+        //  - SwiftPM/xtool: `.copy` del `.mlmodelc` precompilado → Bundle.module.
+        //  - Xcode/XcodeGen: compila el `.mlpackage` (Compile Sources) → Bundle.main.
+        // Se busca primero en el bundle de recursos del módulo y luego en Bundle.main.
         let logger = Self.logger
         #if DEBUG
-        // Log what the bundle actually contains so we can diagnose missing-model issues.
-        let compiled = Bundle.main.url(forResource: "yolo26n_640_int8", withExtension: "mlmodelc")
-        let raw      = Bundle.main.url(forResource: "yolo26n_640_int8", withExtension: "mlpackage")
-        logger.debug("Bundle .mlmodelc → \(compiled?.path ?? "nil")")
-        logger.debug("Bundle .mlpackage → \(raw?.path ?? "nil")")
-        if compiled == nil, raw == nil {
-            logger.warning("Ni .mlmodelc ni .mlpackage encontrados — ¿está en Compile Sources y el proyecto regenerado?")
-        }
+        let moduleURL = modelResourceBundle.url(forResource: "yolo26n_640_int8", withExtension: "mlmodelc")
+        let mainURL = Bundle.main.url(forResource: "yolo26n_640_int8", withExtension: "mlmodelc")
+        let rawPackage = Bundle.main.url(forResource: "yolo26n_640_int8", withExtension: "mlpackage")
+        logger.debug("modelResourceBundle(.mlmodelc) → \(moduleURL?.path ?? "nil")")
+        logger.debug("Bundle.main(.mlmodelc) → \(mainURL?.path ?? "nil")")
+        logger.debug("Bundle.main(.mlpackage) → \(rawPackage?.path ?? "nil")")
         #endif
 
-        guard let modelURL = Bundle.main.url(
-            forResource: "yolo26n_640_int8",
-            withExtension: "mlmodelc"
-        ) else {
-            logger.error("modelNotFound — .mlmodelc ausente del bundle")
+        guard let modelURL = DetectionModelResource.url else {
+            // Causa real nº1: el archivo no está en el bundle (recurso no empaquetado).
+            let reason = "modelNotFound — 'yolo26n_640_int8.mlmodelc' ausente en Bundle.module y Bundle.main. "
+                + "SwiftPM/xtool: ¿está en MLModels/ y declarado como .copy en Package.swift? "
+                + "Xcode: ¿el .mlpackage está en Compile Sources y se regeneró el proyecto?"
+            logger.error("\(reason)")
             throw YOLORunnerError.modelNotFound
         }
 
-        logger.info("Cargando modelo desde \(modelURL.lastPathComponent)")
+        logger.info("Cargando modelo desde \(modelURL.path)")
         let config = MLModelConfiguration()
         config.computeUnits = .all
         let vnModel: VNCoreMLModel
@@ -53,7 +65,12 @@ final class YOLORunner: ObstacleDetecting {
             let model = try MLModel(contentsOf: modelURL, configuration: config)
             vnModel = try VNCoreMLModel(for: model)
         } catch {
-            logger.error("No se pudo cargar el modelo: \(error)")
+            // Causa real nº2: el archivo existe pero Core ML no lo cargó. Se registra el error
+            // tal cual (dominio/código/descripción) para distinguir un fallo de Core ML de un
+            // problema de hardware/cómputo del dispositivo. (La incompatibilidad de ARKit se
+            // detecta aparte en ARKitFrameSource con ARWorldTrackingConfiguration.isSupported.)
+            let nsError = error as NSError
+            logger.error("modelLoadingFailed — Core ML no cargó el modelo: domain=\(nsError.domain) code=\(nsError.code) \(nsError.localizedDescription)")
             throw DetectionModelError.modelLoadingFailed
         }
         let req = VNCoreMLRequest(model: vnModel)

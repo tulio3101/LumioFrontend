@@ -111,6 +111,15 @@ struct DebugSafetySection: View {
             .foregroundColor(service.debugState.isActive ? .green : .red)
             .font(.subheadline.bold())
 
+            // Causa real cuando la detección no está activa (modelo ausente, fallo de Core ML,
+            // cámara interrumpida…). El detalle técnico va además al log (YOLORunner).
+            if !service.debugState.isActive {
+                Text(service.status.message)
+                    .font(.caption)
+                    .foregroundColor(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             Text("Modo: \(service.debugState.isFullMode ? "completo (LiDAR)" : "reducido (sin LiDAR)")")
                 .font(.caption)
                 .foregroundColor(.secondary)

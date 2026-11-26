@@ -13,6 +13,11 @@ targets:
 
     sources:
       - path: Sources/LumioFrontend
+        # MLModels/ contiene el .mlmodelc precompilado SOLO para SwiftPM/xtool (Bundle.module).
+        # Se excluye del target de Xcode para no empaquetar dos copias del modelo: Xcode compila
+        # el .mlpackage de abajo a su propio .mlmodelc.
+        excludes:
+          - "MLModels"
       - path: Resources/Assets.xcassets
       # Xcode compiles .mlpackage → .mlmodelc via coremlc (Compile Sources build phase).
       # Loaded at runtime with Bundle.main.url(forResource:withExtension:"mlmodelc").

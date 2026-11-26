@@ -91,10 +91,11 @@ struct NoSafetyModel: SafetyModelChecking {
 }
 
 #if os(iOS)
-/// El modelo YOLO compilado viene en el bundle de la app (el mismo que carga YOLORunner).
+/// El modelo YOLO compilado viene en el bundle de la app (el mismo que carga YOLORunner):
+/// Bundle.module con SwiftPM/xtool, Bundle.main con Xcode.
 struct BundleSafetyModelChecker: SafetyModelChecking {
     func isModelAvailable() -> Bool {
-        Bundle.main.url(forResource: "yolo26n_640_int8", withExtension: "mlmodelc") != nil
+        DetectionModelResource.isBundled
     }
 }
 #endif
