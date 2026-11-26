@@ -52,7 +52,8 @@ extension HapticCue {
     var isConfigurable: Bool {
         switch self {
         case .routeReady, .routeFailed, .routeFinished: true
-        case .emergencyActivated, .emergencySent, .emergencyFailed, .criticalAlert: false
+        // «Detección lista» acompaña a la seguridad: vibra siempre, como las alertas.
+        case .emergencyActivated, .emergencySent, .emergencyFailed, .criticalAlert, .safetyReady: false
         }
     }
 
@@ -65,6 +66,7 @@ extension HapticCue {
         case .emergencySent: "Alerta de emergencia enviada"
         case .emergencyFailed: "No se pudo enviar la emergencia"
         case .criticalAlert: "Alerta de seguridad"
+        case .safetyReady: "Detección de obstáculos lista"
         }
     }
 
@@ -78,6 +80,7 @@ extension HapticCue {
         case .emergencySent: "Dos toques rápidos, una pausa y un toque."
         case .emergencyFailed: "Dos pares de toques fuertes."
         case .criticalAlert: "Cuatro toques fuertes y rápidos."
+        case .safetyReady: "Un toque suave y uno fuerte."
         }
     }
 }
@@ -118,6 +121,8 @@ struct HapticPattern: Equatable {
             return .full([0, 0.1, 0.5, 0.6])
         case .criticalAlert:
             return .full([0, 0.1, 0.2, 0.3])
+        case .safetyReady:
+            return HapticPattern(pulses: [HapticPulse(delay: 0, strength: 0.4), HapticPulse(delay: 0.2, strength: 1)])
         }
         return HapticPattern(pulses: base.map {
             HapticPulse(delay: $0.delay, strength: min(1, $0.strength * intensity.scale))

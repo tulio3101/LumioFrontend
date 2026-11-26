@@ -8,6 +8,8 @@ actor RecoveringModel<Input, Output> {
     private let policy: ModelRecoveryPolicy
     private let sleep: (UInt64) async throws -> Void
     private let report: (SafetyStatus) async -> Void
+    /// SCRUM-314: olvida un modelo compartido antes de reconstruirlo (ReusableModelLoader).
+    private let discard: () -> Void
     private var operation: Operation?
     private var attempts = 0
     private(set) var status = SafetyStatus.stopped
@@ -16,12 +18,14 @@ actor RecoveringModel<Input, Output> {
         factory: @escaping () throws -> Operation,
         policy: ModelRecoveryPolicy = ModelRecoveryPolicy(),
         sleep: @escaping (UInt64) async throws -> Void = { try await Task.sleep(nanoseconds: $0) },
-        report: @escaping (SafetyStatus) async -> Void
+        report: @escaping (SafetyStatus) async -> Void,
+        discard: @escaping () -> Void = {}
     ) {
         self.factory = factory
         self.policy = policy
         self.sleep = sleep
         self.report = report
+        self.discard = discard
     }
 
     func prepare() async -> Bool {
@@ -63,6 +67,8 @@ actor RecoveringModel<Input, Output> {
 
     private func recover(after initial: DetectionModelError) async -> Bool {
         operation = nil
+        // El modelo que falló no se reutiliza: la reconstrucción carga uno nuevo.
+        discard()
         var failure = initial
         while !Task.isCancelled {
             guard failure.canRetry, attempts < policy.delays.count else {

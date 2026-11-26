@@ -40,21 +40,31 @@ enum SafetyAudio {
         )
     }
 
+    /// SCRUM-314: «cámara lista». Se dice una vez por ruta, con la primera inferencia válida
+    /// (la capa de seguridad ya funciona), junto con el modo (SCRUM-320/349) y con vibración
+    /// (`HapticCue.safetyReady`). P2: el usuario tiene que oírlo antes de confiar en la
+    /// detección, pero una alerta P1 lo interrumpe. Vence a los 15 s: tarde ya no sirve.
+    static let readyPrefix = "Cámara lista. La detección de obstáculos está activa."
+
     /// SCRUM-349: modo reducido (sin LiDAR), avisos de distancia aproximados.
-    static func reducedMode() -> AudioMessage {
+    static func reducedMode(now: Date = Date()) -> AudioMessage {
         AudioMessage(
-            text: "Modo reducido. Los avisos de distancia son aproximados y de corto alcance.",
-            priority: .environmentInformation,
+            text: readyPrefix + " Modo reducido: los avisos de distancia son aproximados y de corto alcance.",
+            priority: .routeInformation,
+            createdAt: now,
+            expiresAt: now.addingTimeInterval(15),
             contextID: context,
             deduplicationKey: "safety-mode-reduced"
         )
     }
 
     /// SCRUM-320: modo completo (con LiDAR), distancias exactas. Se anuncia una vez al iniciar.
-    static func fullMode() -> AudioMessage {
+    static func fullMode(now: Date = Date()) -> AudioMessage {
         AudioMessage(
-            text: "Modo completo. Las distancias a los obstáculos son exactas.",
-            priority: .environmentInformation,
+            text: readyPrefix + " Modo completo: las distancias a los obstáculos son exactas.",
+            priority: .routeInformation,
+            createdAt: now,
+            expiresAt: now.addingTimeInterval(15),
             contextID: context,
             deduplicationKey: "safety-mode-full"
         )

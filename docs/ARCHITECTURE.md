@@ -365,6 +365,29 @@ consentimiento y manejar rechazo, falta de hardware y modo reducido. No anunciar
 feedback háptico y pruebas accesibles en dispositivo; etiquetas de controles no
 sustituyen ese trabajo.
 
+## HU: Preparar la Cámara y la Seguridad al Iniciar el Trayecto (SCRUM-314)
+
+1. Modelo una sola vez: `ReusableModelLoader` guarda el `YOLORunner` cargado y cada ruta
+   reutiliza el mismo. `AppDependencies` lo precarga con `warmUp()` en una tarea
+   desacoplada de prioridad `utility` al abrir la app; si la ruta empieza antes, `load()`
+   espera esa misma carga (no abre otra). Nunca corre en el hilo principal. Si la carga
+   falla no se guarda nada y la ruta lo intenta otra vez con los reintentos de SCRUM-37;
+   cuando `RecoveringModel` reconstruye tras un fallo de inferencia, llama antes a
+   `discard()` para no reutilizar el modelo que falló.
+2. Cámara: al iniciar la ruta, `DestinationViewModel` comprueba el permiso con
+   `CameraAssistanceGating` (SCRUM-315) y `DetectionPipeline` abre la captura solo con el
+   modelo listo.
+3. «Cámara lista» solo con la primera inferencia válida de la sesión (la seguridad ya
+   funciona): `SafetyAudio.fullMode()`/`reducedMode()` dicen «Cámara lista. La detección de
+   obstáculos está activa.» y el modo, como P2 que vence a los 15 s, y `SafetyService`
+   vibra `HapticCue.safetyReady` (siempre activo, como las alertas). Nunca solo en pantalla.
+4. Si el modelo o la cámara no arrancan, el aviso P1 de SCRUM-37 dice que la detección no
+   está disponible y que la navegación sigue; no se dice «cámara lista» ni vibra.
+5. Nada de esto llama al backend: la precarga, el permiso y la detección son locales y los
+   servicios remotos (perfil, preferencias, historial) arrancan aparte sin bloquearlo.
+
+Pruebas: `SafetyStartupTests` (portables) y, en iOS, `SafetyServiceStopTests`.
+
 ## Contratos de backend
 
 DTOs Codable pertenecen a Data; convertirlos a modelos locales en el adaptador.
