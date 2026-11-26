@@ -40,4 +40,17 @@ protocol VoiceActionPerforming: AnyObject {
     /// Ejecuta el comando. Devuelve lo que hay que decir, o nil si el caso de uso ya lo
     /// anuncia por audio (Crear/Modificar/Consultar/Finalizar Ruta locutan su resultado).
     func perform(_ command: VoiceCommand) async -> String?
+    /// SCRUM-313: crea la ruta (o cambia el destino, con ruta activa) al destino confirmado
+    /// por voz. `.place` ya viene geocodificado; `.query` es el texto dictado cuando no se
+    /// pudo comprobar el lugar. Devuelve lo que hay que decir, o nil si ya se anunció.
+    func navigate(to destination: DestinationRequest) async -> String?
+}
+
+extension VoiceActionPerforming {
+    func navigate(to destination: DestinationRequest) async -> String? {
+        switch destination {
+        case .query(let text): return await perform(.navigate(destination: text))
+        case .place(let place): return await perform(.navigate(destination: place.name))
+        }
+    }
 }

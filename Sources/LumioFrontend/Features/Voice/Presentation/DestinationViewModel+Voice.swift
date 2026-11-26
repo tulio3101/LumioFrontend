@@ -23,14 +23,7 @@ extension DestinationViewModel: VoiceActionPerforming {
             return nil
 
         case .navigate(let destination?):
-            guard !isLoading else { return "Ya estoy calculando una ruta. Espera a que termine." }
-            // Crear o Modificar Ruta anuncian por audio si la ruta quedó lista o por qué no.
-            if route != nil {
-                _ = await changeDestination(to: .query(destination))
-            } else {
-                _ = await createRoute(to: .query(destination))
-            }
-            return nil
+            return await navigate(to: .query(destination))
 
         case .finishRoute(let arrived):
             guard route != nil else { return "No hay una ruta activa." }
@@ -47,6 +40,18 @@ extension DestinationViewModel: VoiceActionPerforming {
             // Los resuelve VoiceCommandService antes de llegar aquí.
             return nil
         }
+    }
+
+    /// SCRUM-313: el destino dictado y confirmado (ya geocodificado si se pudo) va a Crear
+    /// Ruta o, con ruta activa, a Modificar Ruta. Ambos anuncian el resultado por audio.
+    func navigate(to destination: DestinationRequest) async -> String? {
+        guard !isLoading else { return "Ya estoy calculando una ruta. Espera a que termine." }
+        if route != nil {
+            _ = await changeDestination(to: destination)
+        } else {
+            _ = await createRoute(to: destination)
+        }
+        return nil
     }
 }
 #endif

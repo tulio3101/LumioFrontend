@@ -273,7 +273,9 @@ struct AppDependencies {
         let voice = VoiceCommandService(
             listener: DeviceSpeechListener(),
             permissions: PermissionsVoiceGate(permissions: permissionsViewModel),
-            audio: ArbiterVoiceAudio(arbiter: audioArbiter)
+            audio: ArbiterVoiceAudio(arbiter: audioArbiter),
+            // SCRUM-313: el destino dictado se busca y se confirma antes de calcular la ruta.
+            lookup: MapKitDestinationLookup(location: location)
         )
         // Una alerta crítica que empieza a sonar corta la escucha (no compite con ella) y
         // vibra siempre, aunque la vibración esté desactivada.

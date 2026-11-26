@@ -17,6 +17,9 @@ final class VoiceCommandService: ObservableObject {
     private let permissions: any VoicePermissionGating
     private let audio: any VoiceAudioOutput
     private let interpreter: VoiceCommandInterpreter
+    /// SCRUM-313: busca el destino dictado para confirmarlo antes de calcular la ruta. Sin
+    /// él, el texto dictado va directo a Crear Ruta (comportamiento anterior).
+    private let lookup: (any DestinationLookingUp)?
     private var session: Task<Void, Never>?
     /// Distingue la sesión actual de una cancelada que todavía está terminando.
     private var sessionID = UUID()
@@ -26,12 +29,14 @@ final class VoiceCommandService: ObservableObject {
         listener: any SpeechListening,
         permissions: any VoicePermissionGating,
         audio: any VoiceAudioOutput,
-        interpreter: VoiceCommandInterpreter = VoiceCommandInterpreter()
+        interpreter: VoiceCommandInterpreter = VoiceCommandInterpreter(),
+        lookup: (any DestinationLookingUp)? = nil
     ) {
         self.listener = listener
         self.permissions = permissions
         self.audio = audio
         self.interpreter = interpreter
+        self.lookup = lookup
     }
 
     var isActive: Bool { phase != .idle }
@@ -140,19 +145,10 @@ final class VoiceCommandService: ObservableObject {
         case .stopListening:
             await speak("De acuerdo.")
         case .navigate(nil):
-            await speak("¿A dónde quieres ir?")
-            guard let answer = await hear() else { return }
-            let destination = answer.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !destination.isEmpty else {
-                await speak("No escuché un destino. Vuelve a intentarlo.")
-                return
-            }
-            // La respuesta puede venir como «llévame a …»: se queda solo con el destino.
-            if case .matched(.navigate(let parsed?)) = interpreter.interpret(destination, hasActiveRoute: false) {
-                await execute(.navigate(destination: parsed))
-            } else {
-                await execute(.navigate(destination: destination))
-            }
+            guard let destination = await askDestination("¿A dónde quieres ir?") else { return }
+            await dictate(destination)
+        case .navigate(let destination?):
+            await dictate(destination)
         case .finishRoute(let arrived):
             guard actions?.hasActiveRoute == true else {
                 await speak("No hay una ruta activa.")
@@ -188,6 +184,121 @@ final class VoiceCommandService: ObservableObject {
             return
         }
         if let reply = await actions.perform(command), !Task.isCancelled {
+            await speak(reply)
+        }
+    }
+
+    // MARK: - Indicar destino por voz (SCRUM-313)
+
+    /// Pregunta el destino y devuelve solo el lugar dicho («llévame a X» → «X»). nil si no
+    /// se oyó nada o se canceló (ya informado por audio).
+    private func askDestination(_ prompt: String) async -> String? {
+        await speak(prompt)
+        guard let answer = await hear() else { return nil }
+        let destination = answer.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !destination.isEmpty else {
+            await speak("No escuché un destino. Vuelve a intentarlo.")
+            return nil
+        }
+        if case .matched(.navigate(let parsed?)) = interpreter.interpret(destination, hasActiveRoute: false) {
+            return parsed
+        }
+        return destination
+    }
+
+    private enum DictationStep { case done, askAgain }
+
+    /// Lee lo entendido y pide confirmación antes de calcular. Si no encuentra el lugar, hay
+    /// varios o el usuario dice que no, pide el destino de nuevo (una vez más).
+    private func dictate(_ first: String) async {
+        guard let lookup else {
+            await execute(.navigate(destination: first))
+            return
+        }
+        var query = first
+        for attempt in 1...DestinationDictationPolicy.attempts {
+            let canRetry = attempt < DestinationDictationPolicy.attempts
+            guard await resolve(query, using: lookup, canRetry: canRetry) == .askAgain,
+                  let next = await askDestination(DestinationDictationPolicy.askAgain) else { return }
+            query = next
+        }
+    }
+
+    private func resolve(
+        _ query: String, using lookup: any DestinationLookingUp, canRetry: Bool
+    ) async -> DictationStep {
+        guard !Task.isCancelled else { return .done }
+        phase = .processing
+        let result = await lookup.lookUp(query)
+        guard !Task.isCancelled else { return .done }
+        switch result {
+        case .unavailable:
+            // Sin red o sin ubicación no se puede comprobar: se confirma el texto y Crear Ruta
+            // informa por audio si tampoco puede calcular.
+            await speak(DestinationDictationPolicy.unverifiedPrompt(for: query))
+            return await afterConfirmation(go: .query(query), named: query, canRetry: canRetry)
+        case .notFound:
+            await speak(DestinationDictationPolicy.notFound(query))
+            return await retryOrGiveUp(canRetry)
+        case .found(let found):
+            let places = DestinationDictationPolicy.options(found)
+            guard let first = places.first else {
+                await speak(DestinationDictationPolicy.notFound(query))
+                return await retryOrGiveUp(canRetry)
+            }
+            guard places.count > 1 else {
+                await speak(DestinationDictationPolicy.confirmationPrompt(for: first))
+                return await afterConfirmation(go: .place(first.place), named: first.place.name, canRetry: canRetry)
+            }
+            await speak(DestinationDictationPolicy.optionsPrompt(for: places, query: query))
+            guard let answer = await hear() else { return .done }
+            switch interpreter.destinationChoice(in: answer, options: places.map(\.place.name)) {
+            case .option(let index):
+                // Elegir entre las opciones leídas ya es la confirmación.
+                await go(to: .place(places[index].place), named: places[index].place.name)
+                return .done
+            case .none:
+                return await retryOrGiveUp(canRetry)
+            case .unclear:
+                await speak("No entendí cuál.")
+                return await retryOrGiveUp(canRetry)
+            }
+        }
+    }
+
+    private func afterConfirmation(
+        go destination: DestinationRequest, named name: String, canRetry: Bool
+    ) async -> DictationStep {
+        guard let answer = await hear() else { return .done }
+        switch interpreter.confirmation(in: answer) {
+        case .yes:
+            await go(to: destination, named: name)
+            return .done
+        case .no:
+            return await retryOrGiveUp(canRetry)
+        case .unclear:
+            await speak("No entendí la respuesta.")
+            return await retryOrGiveUp(canRetry)
+        }
+    }
+
+    /// Pide el destino otra vez si quedan intentos; si no, lo dice y termina.
+    private func retryOrGiveUp(_ canRetry: Bool) async -> DictationStep {
+        guard !canRetry else { return .askAgain }
+        await speak(DestinationDictationPolicy.giveUp)
+        return .done
+    }
+
+    private func go(to destination: DestinationRequest, named name: String) async {
+        guard !Task.isCancelled else { return }
+        phase = .processing
+        let verb = actions?.hasActiveRoute == true ? "Cambiando el destino a" : "Buscando una ruta a"
+        await speak("\(verb) \(name).")
+        guard let actions else {
+            await speak("No puedo hacer eso desde esta pantalla.")
+            return
+        }
+        if let reply = await actions.navigate(to: destination), !Task.isCancelled {
             await speak(reply)
         }
     }
