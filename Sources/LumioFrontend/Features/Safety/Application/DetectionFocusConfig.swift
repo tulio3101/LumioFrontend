@@ -30,11 +30,12 @@ struct DetectionFocusConfig: Equatable {
     /// Segundos entre recordatorios de "levanta/baja el teléfono".
     var pitchReminderCooldown: TimeInterval = 6.0
 
-    // MARK: Acercamiento y peligro
+    // MARK: Acercamiento y proximidad
     /// Cuánto debe bajar la distancia (m) entre frames para contar como "se acerca".
     var approachingDeltaMeters: Float = 0.15
-    /// Por debajo de esta distancia (m) el objeto es peligro: reanuncia aunque esté quieto.
-    var dangerDistanceMeters: Float = 1.0
+    /// SCRUM-34: umbrales de proximidad del spike SCRUM-309 / ADR-307 (zona de riesgo P1, "cerca"
+    /// y modo reducido sin LiDAR). Reemplaza al antiguo umbral único de 1 m.
+    var proximity = ProximityPolicy()
 
     // MARK: Anuncio por objeto
     /// Tiempo mínimo entre anuncios del mismo objeto rastreado (cuando se sigue acercando).

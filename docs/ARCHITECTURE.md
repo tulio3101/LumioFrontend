@@ -317,7 +317,7 @@ local esté disponible.
 | Área | Siguiente implementación | Integración |
 | --- | --- | --- |
 | Audio | Conectar productores y validar en dispositivo | Cola/árbitro implementados; AVSpeechSynthesizer mediante AudioPlaying |
-| Safety | Cámara, inferencia y distancia confiable | AVFoundation, Vision/Core ML, ARKit |
+| Safety | Cámara, inferencia y distancia confiable; fuente de profundidad dual para el modo reducido (SCRUM-349) | AVFoundation, Vision/Core ML, ARKit. Proximidad por `ProximityPolicy` según el spike SCRUM-309 (docs/HU-alertar-proximidad-de-objetos.md) |
 | Navigation | Seguimiento y eventos de giro (SCRUM-312) | Crear Ruta implementada con MapKit y CoreLocation |
 | Narration | Afinar `changeThreshold` del cambio de escena en el iPhone (SCRUM-40) | Narración a pedido y automática por cambio de escena: foto del ARSession de la seguridad, POST /vision/analyze (multipart) y P3 en el árbitro (docs/HU-narracion-del-entorno.md, docs/HU-actualizar-narracion-ante-cambios-de-entorno.md) |
 | Users | Inicio de sesión con Google | Correo, Keychain, Bearer y refresh implementados |
