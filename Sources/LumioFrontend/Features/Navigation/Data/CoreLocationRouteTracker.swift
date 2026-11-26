@@ -53,7 +53,9 @@ final class CoreLocationRouteTracker: NSObject, LocationTracking, CLLocationMana
         let fixes = locations.map {
             LocationFix(
                 coordinate: GeoCoordinate(latitude: $0.coordinate.latitude, longitude: $0.coordinate.longitude),
-                horizontalAccuracy: $0.horizontalAccuracy
+                horizontalAccuracy: $0.horizontalAccuracy,
+                // Negativa si CoreLocation no la conoce.
+                speedMetersPerSecond: $0.speed >= 0 ? $0.speed : nil
             )
         }
         Task { @MainActor in

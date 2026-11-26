@@ -125,6 +125,11 @@ struct AppDependencies {
         deviationMonitor = RouteDeviationMonitor(
             tracker: tracking.makeClient(), store: store, rerouter: rerouter, connectivity: monitor
         )
+        // Guiar Giros (SCRUM-312): escucha la misma fuente de GPS mientras la siguen la llegada y
+        // la desviación (es decir, mientras hay ruta activa). Solo copia local, sin backend.
+        tracking.addObserver(TurnGuidanceMonitor(
+            store: store, arbiter: arbiter, haptics: haptics, connectivity: monitor
+        ))
         instructionRepeater = RouteInstructionRepeater(arbiter: arbiter)
         // Consultar Ruta: solo copia local y GPS, sin backend.
         routeStatus = RouteStatusService(store: store, location: location, arbiter: arbiter)
