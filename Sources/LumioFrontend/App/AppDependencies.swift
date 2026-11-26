@@ -45,6 +45,8 @@ struct AppDependencies {
     let homeStatus: HomeStatusService
     /// Copia de respaldo de las preferencias de voz y vibración en el backend.
     let preferencesSync: PreferencesSynchronizer
+    /// SCRUM-324: consentimiento para enviar fotos a la narración; solo en el teléfono.
+    let narrationConsent: NarrationConsentService
     #endif
 
     init(configuration: AppConfiguration = .main) {
@@ -264,6 +266,10 @@ struct AppDependencies {
             permissions: permissionsViewModel, audio: audioArbiter
         )
         // Comandos de voz: reutilizan el flujo accesible de permisos y hablan por el árbitro.
+        narrationConsent = NarrationConsentService(
+            store: FileNarrationConsentStore(fileURL: FileNarrationConsentStore.defaultFileURL()),
+            arbiter: audioArbiter
+        )
         let voice = VoiceCommandService(
             listener: DeviceSpeechListener(),
             permissions: PermissionsVoiceGate(permissions: permissionsViewModel),
