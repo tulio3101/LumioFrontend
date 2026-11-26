@@ -14,6 +14,8 @@ final class AccountFormViewModel: ObservableObject {
         let title: String
         let message: String
         let isServiceUnavailable: Bool
+        /// Ya lo locutó el AudioArbiter (flujo de Google): la vista no lo repite con VoiceOver.
+        var isAnnouncedByAudio = false
     }
 
     @Published private(set) var access: AccountAccess
@@ -86,6 +88,8 @@ final class AccountFormViewModel: ObservableObject {
         }
     }
 
+    /// SCRUM-62: el servicio abre Google, inicia sesión en Lumio y locuta los errores
+    /// (cancelación, sin red…) por el AudioArbiter; aquí solo se muestran.
     func signInWithGoogle() async {
         guard !isBusy else { return }
         operation = .google
@@ -95,10 +99,12 @@ final class AccountFormViewModel: ObservableObject {
             try await service.signInWithGoogle()
             onAuthenticated()
         } catch {
-            failure = describe(
-                error,
-                title: "No se pudo continuar con Google",
-                feature: "El inicio de sesión con Google"
+            let google = GoogleSignInFailure.from(error)
+            failure = Failure(
+                title: GoogleSignInAnnouncements.title(for: google, linking: false),
+                message: GoogleSignInAnnouncements.message(for: google),
+                isServiceUnavailable: google == .unavailable || google == .offline,
+                isAnnouncedByAudio: error is GoogleSignInFailure
             )
         }
     }

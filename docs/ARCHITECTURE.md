@@ -198,6 +198,15 @@ borra la sesión (la ruta queda pendiente en el teléfono). StoredSessionService
 pantalla inicial sin red. SignOutService (Preferencias) revoca la sesión, borra la ruta
 local y detiene el audio.
 
+Iniciar sesión con Google (SCRUM-62): WebGoogleIDTokenProvider abre Google con
+ASWebAuthenticationSession (OAuth con PKCE, sin SDK; `GoogleClientID` en el Info.plist) y
+devuelve el ID token; RemoteAuthenticationService lo envía a POST /users/login/google y guarda
+los tokens como con correo. AnnouncedAuthenticationService no abre Google sin red y locuta la
+cancelación y los errores por el árbitro (contexto `google-sign-in`); AccountFormView no los
+repite con VoiceOver. Asociar Google a una cuenta con contraseña: ProfileService.linkGoogle
+(POST /users/me/google, contexto `account-profile`), desde Mi cuenta. Ver
+docs/HU-iniciar-sesion-con-google.md.
+
 Recuperar Contraseña, desde «¿Olvidaste tu contraseña?» en Iniciar sesión (PasswordRecoveryView
 + PasswordRecoveryViewModel): PasswordRecoveryService valida en el teléfono y usa
 RemotePasswordRecoveryService sin access token (POST /users/password-reset, siempre el mismo
@@ -320,7 +329,7 @@ local esté disponible.
 | Safety | Cámara, inferencia y distancia confiable; fuente de profundidad dual para el modo reducido (SCRUM-349) | AVFoundation, Vision/Core ML, ARKit. Proximidad por `ProximityPolicy` según el spike SCRUM-309 (docs/HU-alertar-proximidad-de-objetos.md) |
 | Navigation | Seguimiento y eventos de giro (SCRUM-312) | Crear Ruta implementada con MapKit y CoreLocation |
 | Narration | Afinar `changeThreshold` del cambio de escena en el iPhone (SCRUM-40) | Narración a pedido y automática por cambio de escena: foto del ARSession de la seguridad, POST /vision/analyze (multipart) y P3 en el árbitro (docs/HU-narracion-del-entorno.md, docs/HU-actualizar-narracion-ante-cambios-de-entorno.md) |
-| Users | Inicio de sesión con Google | Correo, Keychain, Bearer y refresh implementados |
+| Users | Validar Google en dispositivo con el client ID real | Correo, Google (OAuth con PKCE y asociar a la cuenta; docs/HU-iniciar-sesion-con-google.md), Keychain, Bearer y refresh implementados |
 | Places | Confirmar contrato de favoritos con backend | El backend actual expone rutas, no asumir CRUD de favoritos |
 | Settings | Validar en dispositivo voz, vibración y respaldo | Voz en SpeechAudioPlayer, vibración en HapticPreferencesService, respaldo en PreferencesSynchronizer (GET/PUT /users/me/preferences; docs/HU-preferencias-hapticas.md) |
 

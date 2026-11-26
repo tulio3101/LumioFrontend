@@ -5,6 +5,7 @@ protocol Authenticating {
     func register(_ credentials: AccountCredentials) async throws
     /// POST /users/login.
     func signIn(_ credentials: AccountCredentials) async throws
-    /// Obtiene el ID token con el SDK de Google y lo envía a POST /users/login/google.
+    /// Obtiene el ID token de Google (GoogleIDTokenProviding) y lo envía a POST
+    /// /users/login/google. Los errores del flujo son GoogleSignInFailure.
     func signInWithGoogle() async throws
 }

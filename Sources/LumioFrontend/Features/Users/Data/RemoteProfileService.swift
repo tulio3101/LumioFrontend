@@ -26,6 +26,23 @@ struct RemoteProfileService: ProfileRemoting {
         _ = try await client.send(request("users/me/password", method: "PUT", body: body))
     }
 
+    /// 403: Lumio no aceptó el token de Google. 409: esa cuenta de Google ya es de otra
+    /// cuenta de Lumio (o esta ya tiene otra). 503: Google no disponible en el servidor.
+    func linkGoogle(idToken: String) async throws -> UserProfile {
+        do {
+            let data = try await client.send(
+                request("users/me/google", method: "POST", body: GoogleTokenDTO(idToken: idToken))
+            )
+            return try JSONDecoder().decode(UserReadDTO.self, from: data).profile
+        } catch HTTPClientError.statusCode(403) {
+            throw GoogleSignInFailure.rejected
+        } catch HTTPClientError.statusCode(409) {
+            throw GoogleSignInFailure.accountInUse
+        } catch HTTPClientError.statusCode(503) {
+            throw GoogleSignInFailure.unavailable
+        }
+    }
+
     private func request(_ path: String, method: String) throws -> URLRequest {
         guard let baseURL else { throw FeatureUnavailable.authentication }
         var request = URLRequest(url: baseURL.appendingPathComponent(path), timeoutInterval: timeout)
@@ -49,14 +66,20 @@ struct UserReadDTO: Decodable, Equatable {
     let email: String
     let displayName: String?
     let phone: String?
+    /// Opcional: un backend anterior a SCRUM-62 no lo envía.
+    let googleLinked: Bool?
 
     enum CodingKeys: String, CodingKey {
         case id, email, phone
         case displayName = "display_name"
+        case googleLinked = "google_linked"
     }
 
     var profile: UserProfile {
-        UserProfile(id: id, email: email, displayName: displayName, phone: phone)
+        UserProfile(
+            id: id, email: email, displayName: displayName, phone: phone,
+            googleLinked: googleLinked ?? false
+        )
     }
 }
 

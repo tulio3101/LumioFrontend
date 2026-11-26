@@ -24,6 +24,10 @@
 	<true/>
 	<key>LumioAPIBaseURL</key>
 	<string>http://localhost:8000</string>
+	<!-- SCRUM-62: client ID de Google de tipo iOS (xxx.apps.googleusercontent.com). No es
+	     secreto. Vacío: «Continuar con Google» avisa que no está disponible. -->
+	<key>GoogleClientID</key>
+	<string></string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
