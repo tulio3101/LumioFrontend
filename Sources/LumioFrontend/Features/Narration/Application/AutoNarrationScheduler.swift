@@ -18,6 +18,8 @@ import Foundation
 @MainActor
 final class AutoNarrationScheduler {
     enum SkipReason: Equatable {
+        /// SCRUM-32: el usuario apagó la narración automática.
+        case disabledByUser
         case consentRequired
         case offline
         case describing
@@ -46,6 +48,8 @@ final class AutoNarrationScheduler {
     private let channel: (any AudioChannelObserving)?
     private let configuration: AutoNarrationConfiguration
     private let isLowPowerMode: () -> Bool
+    /// SCRUM-32: preferencia «Narración automática» (en memoria).
+    private let isEnabled: () -> Bool
     private let sleep: (TimeInterval) async throws -> Void
     private let now: () -> Date
 
@@ -66,6 +70,7 @@ final class AutoNarrationScheduler {
         channel: (any AudioChannelObserving)?,
         configuration: AutoNarrationConfiguration = AutoNarrationConfiguration(),
         isLowPowerMode: @escaping () -> Bool = { ProcessInfo.processInfo.isLowPowerModeEnabled },
+        isEnabled: @escaping () -> Bool = { true },
         sleep: @escaping (TimeInterval) async throws -> Void = {
             try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000))
         },
@@ -79,6 +84,7 @@ final class AutoNarrationScheduler {
         self.channel = channel
         self.configuration = configuration
         self.isLowPowerMode = isLowPowerMode
+        self.isEnabled = isEnabled
         self.sleep = sleep
         self.now = now
     }
@@ -125,6 +131,7 @@ final class AutoNarrationScheduler {
         guard isRunning, let service else { return .notRunning }
 
         // 1. Condiciones locales y baratas.
+        guard isEnabled() else { return .skipped(.disabledByUser) }
         guard consent.consentVersionForUpload != nil else { return .skipped(.consentRequired) }
         guard connectivity.isConnected else { return .skipped(.offline) }
         guard !service.isDescribing else { return .skipped(.describing) }

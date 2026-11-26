@@ -31,6 +31,8 @@ struct RootView: View {
     #if os(iOS)
     /// SCRUM-324: Preferencias > Narración del entorno.
     let narrationConsent: NarrationConsentService?
+    /// SCRUM-32: Preferencias > Preferencias de accesibilidad.
+    let accessibilityPreferences: AccessibilityPreferencesService?
     #endif
     /// SCRUM-38: «Describir entorno» en la ruta activa. nil fuera de iOS.
     let environmentNarration: EnvironmentNarrationService?
@@ -84,8 +86,10 @@ struct RootView: View {
         preferencesSync: PreferencesSynchronizer? = nil,
         narrationConsent: NarrationConsentService? = nil,
         passwordRecovery: (any PasswordRecovering)? = nil,
-        environmentNarration: EnvironmentNarrationService? = nil
+        environmentNarration: EnvironmentNarrationService? = nil,
+        accessibilityPreferences: AccessibilityPreferencesService? = nil
     ) {
+        self.accessibilityPreferences = accessibilityPreferences
         self.narrationConsent = narrationConsent
         self.passwordRecovery = passwordRecovery
         self.environmentNarration = environmentNarration
@@ -242,7 +246,8 @@ struct RootView: View {
                     signOut: signOut, profile: profile, contacts: contacts, accountDeleter: accountDeleter,
                     voicePreferences: voicePreferences, hapticPreferences: hapticPreferences,
                     onSignedOut: { entry = .welcome }, permissions: permissions,
-                    narrationConsent: narrationConsent
+                    narrationConsent: narrationConsent,
+                    accessibilityPreferences: accessibilityPreferences
                 )
                 #else
                 SettingsView(

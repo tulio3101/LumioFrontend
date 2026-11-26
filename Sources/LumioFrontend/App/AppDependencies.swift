@@ -50,6 +50,8 @@ struct AppDependencies {
     let preferencesSync: PreferencesSynchronizer
     /// SCRUM-324: consentimiento para enviar fotos a la narración; solo en el teléfono.
     let narrationConsent: NarrationConsentService
+    /// SCRUM-32: narración automática y avisos; solo en el teléfono, se leen en memoria.
+    let accessibilityPreferences: AccessibilityPreferencesService
     /// Recuperar Contraseña: POST /users/password-reset y /confirm, sin sesión.
     let passwordRecovery: PasswordRecoveryService
     /// SCRUM-38: «Describir entorno» en la ruta. Usa la cámara de la seguridad sin frenarla.
@@ -76,6 +78,12 @@ struct AppDependencies {
             arbiter: arbiter
         )
         hapticPreferences = hapticSettings
+        // SCRUM-32: preferencias de accesibilidad, solo en el teléfono y en memoria.
+        let accessibility = AccessibilityPreferencesService(
+            store: FileAccessibilityPreferencesStore(fileURL: FileAccessibilityPreferencesStore.defaultFileURL()),
+            arbiter: arbiter
+        )
+        accessibilityPreferences = accessibility
 
         // Sesión: tokens en Keychain; las rutas se envían con el access token.
         let http = URLSessionHTTPClient()
@@ -182,7 +190,8 @@ struct AppDependencies {
         accountDeleter = AccountDeletionService(
             remote: RemoteAccountService(client: routeClient, baseURL: configuration.apiBaseURL),
             tokens: tokens, routes: store, recentRoutes: recentStore, pendingHistory: history,
-            voicePreferences: voiceSettings, hapticPreferences: hapticSettings, arbiter: arbiter
+            voicePreferences: voiceSettings, hapticPreferences: hapticSettings,
+            accessibilityPreferences: accessibility, arbiter: arbiter
         )
         // Preferencias de voz y vibración: se aplican del teléfono y se respaldan en
         // GET/PUT /users/me/preferences en segundo plano; nunca retrasan el audio.
@@ -325,7 +334,9 @@ struct AppDependencies {
             signatures: VisionSceneSignatureProvider(),
             consent: consent,
             connectivity: monitor,
-            channel: audioArbiter
+            channel: audioArbiter,
+            // SCRUM-32: el usuario puede apagar la narración automática.
+            isEnabled: { [weak accessibility] in accessibility?.preferences.autoNarration ?? true }
         )
         // Retirar el consentimiento corta la solicitud en vuelo y las actualizaciones.
         consent.onRevoked = { [weak narration] in narration?.cancel() }
@@ -350,7 +361,8 @@ struct AppDependencies {
             permissions: permissionService,
             safetyModel: BundleSafetyModelChecker(),
             routes: store,
-            arbiter: audioArbiter
+            arbiter: audioArbiter,
+            preferences: accessibility
         )
         // SCRUM-360: punto único de desmonte, reutilizado por el cierre de sesión (SignOutService)
         // y por la expiración/401 (SessionExpiryCoordinator, vía .lumioSessionExpired).
