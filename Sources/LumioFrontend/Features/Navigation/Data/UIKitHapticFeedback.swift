@@ -1,51 +1,30 @@
 #if os(iOS)
+import CoreHaptics
 import UIKit
-import OSLog
 
-/// Háptica de resultado: éxito al tener la ruta lista o al terminar la navegación, error si
-/// no se pudo crear. SCRUM-33: peligro (bajada, 3 impactos fuertes) y aviso (subida u obstáculo
-/// cercano, 2 impactos medios).
+/// Motor de vibración: reproduce los pulsos de un HapticPattern con UIImpactFeedbackGenerator.
+/// Qué evento vibra y con qué intensidad lo decide HapticPreferencesService.
 @MainActor
-final class UIKitHapticFeedback: HapticFeedbackPlaying {
-    private let generator = UINotificationFeedbackGenerator()
-    private let heavy = UIImpactFeedbackGenerator(style: .heavy)
-    private let medium = UIImpactFeedbackGenerator(style: .medium)
-    #if DEBUG
-    private let logger = Logger(subsystem: "com.lumio.app", category: "Haptics")
-    #endif
+final class UIKitHapticFeedback: HapticPatternPlaying {
+    private let generator = UIImpactFeedbackGenerator(style: .heavy)
 
-    func play(_ cue: HapticCue) {
-        #if DEBUG
-        logger.debug("haptic \(String(describing: cue))")
-        #endif
-        switch cue {
-        case .routeReady:
-            generator.notificationOccurred(.success)
-        case .routeFailed:
-            generator.notificationOccurred(.error)
-        case .routeFinished:
-            generator.notificationOccurred(.success)
-        case .danger:
-            // SCRUM-33: patrón distinguible = 3 impactos fuertes seguidos.
-            pulse(heavy, remaining: 3)
-        case .warning:
-            // SCRUM-33: 2 impactos medios (subida u obstáculo cercano).
-            pulse(medium, remaining: 2)
-        case .emergencyActivated:
-            // Distinto de éxito y de error: avisa que empezó el margen para cancelar.
-            generator.notificationOccurred(.warning)
-        case .emergencySent:
-            generator.notificationOccurred(.success)
-        case .emergencyFailed:
-            generator.notificationOccurred(.error)
-        }
+    var supportsHaptics: Bool {
+        CHHapticEngine.capabilitiesForHardware().supportsHaptics
     }
 
-    private func pulse(_ generator: UIImpactFeedbackGenerator, remaining: Int) {
-        guard remaining > 0 else { return }
-        generator.impactOccurred()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
-            self?.pulse(generator, remaining: remaining - 1)
+    func play(_ pattern: HapticPattern) {
+        generator.prepare()
+        for pulse in pattern.pulses {
+            let intensity = CGFloat(min(max(pulse.strength, 0), 1))
+            if pulse.delay <= 0 {
+                generator.impactOccurred(intensity: intensity)
+            } else {
+                let nanoseconds = UInt64(pulse.delay * 1_000_000_000)
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(nanoseconds: nanoseconds)
+                    self?.generator.impactOccurred(intensity: intensity)
+                }
+            }
         }
     }
 }

@@ -92,4 +92,61 @@ private extension MKPolyline {
         return CLLocationCoordinate2DIsValid(coordinate) ? coordinate : nil
     }
 }
+/// SCRUM-313: lugares para el destino dictado, cerca del usuario y con su dirección para
+/// leerlos en voz alta. Sin ubicación o sin red devuelve `.unavailable`: el dictado sigue con
+/// el texto y Crear Ruta informa el fallo.
+@MainActor
+final class MapKitDestinationLookup: DestinationLookingUp {
+    private let location: any CurrentLocationProviding
+    var searchRadiusMeters: CLLocationDistance = 20_000
+
+    init(location: any CurrentLocationProviding) {
+        self.location = location
+    }
+
+    func lookUp(_ query: String) async -> DestinationLookup {
+        let origin: GeoCoordinate
+        do {
+            origin = try await location.currentLocation()
+        } catch {
+            return .unavailable
+        }
+        let request = MKLocalSearch.Request()
+        request.naturalLanguageQuery = query
+        request.resultTypes = [.address, .pointOfInterest]
+        request.region = MKCoordinateRegion(
+            center: origin.clCoordinate,
+            latitudinalMeters: searchRadiusMeters,
+            longitudinalMeters: searchRadiusMeters
+        )
+        let response: MKLocalSearch.Response
+        do {
+            response = try await MKLocalSearch(request: request).start()
+        } catch let error as MKError where error.code == .placemarkNotFound {
+            return .notFound
+        } catch {
+            return .unavailable
+        }
+        let places = response.mapItems.compactMap { item -> SpokenPlace? in
+            guard CLLocationCoordinate2DIsValid(item.placemark.coordinate) else { return nil }
+            let name = item.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let placemark = item.placemark
+            let street = [placemark.thoroughfare, placemark.subThoroughfare]
+                .compactMap { $0 }.joined(separator: " ")
+            let detail = [street.isEmpty ? nil : street, placemark.locality]
+                .compactMap { $0 }
+                .filter { $0 != name }
+                .joined(separator: ", ")
+            return SpokenPlace(
+                place: RoutePlace(
+                    name: (name?.isEmpty == false ? name : nil) ?? query,
+                    coordinate: GeoCoordinate(placemark.coordinate)
+                ),
+                detail: detail.isEmpty ? nil : detail
+            )
+        }
+        let options = DestinationDictationPolicy.options(places)
+        return options.isEmpty ? .notFound : .found(options)
+    }
+}
 #endif

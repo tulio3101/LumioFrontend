@@ -11,6 +11,8 @@ struct SettingsView: View {
     let accountDeleter: any AccountDeleting
     /// Configurar Preferencias de Voz Descriptiva.
     let voicePreferences: any VoicePreferencesManaging
+    /// Configurar Retroalimentación Háptica.
+    let hapticPreferences: any HapticPreferencesManaging
     /// Se llama después de cerrar la sesión o eliminar la cuenta para volver a la bienvenida.
     let onSignedOut: () -> Void
     #if os(iOS)
@@ -32,6 +34,13 @@ struct SettingsView: View {
             }
             .disabled(isSigningOut)
             .accessibilityHint("Consulta y cambia el idioma, la voz y la velocidad con que habla Lumio.")
+            NavigationLink {
+                HapticPreferencesView(service: hapticPreferences)
+            } label: {
+                Label("Vibración", systemImage: "iphone.radiowaves.left.and.right")
+            }
+            .disabled(isSigningOut)
+            .accessibilityHint("Activa o desactiva la vibración, elige qué eventos vibran y con qué intensidad.")
             Section("Emergencia") {
                 NavigationLink {
                     TrustedContactsView(service: contacts, onSessionExpired: onSignedOut)

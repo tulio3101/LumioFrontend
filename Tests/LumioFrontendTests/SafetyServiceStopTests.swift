@@ -158,4 +158,40 @@ private func eventually(_ condition: () -> Bool) async {
     #expect(pipeline.stops == 1)
     service.stop()
 }
+// SCRUM-314: «cámara lista» por audio y vibración, una vez por ruta, solo con la seguridad
+// funcionando.
+
+@Test @MainActor func cameraReadyIsSpokenAndVibratedOnceWhenSafetyRuns() async throws {
+    let arbiter = SpyArbiter()
+    let haptics = SpyHaptics()
+    let service = SafetyService(
+        pipeline: FakeObstaclePipeline(isDepthAvailable: true), audioArbiter: arbiter, haptics: haptics
+    )
+
+    try await service.start()
+    await eventually { service.status == .running }
+
+    let ready = arbiter.received.filter { $0.text.hasPrefix(SafetyAudio.readyPrefix) }
+    #expect(ready.count == 1)
+    #expect(ready.first?.priority == .routeInformation)
+    #expect(haptics.cues == [.safetyReady])
+    service.stop()
+}
+
+@Test @MainActor func cameraReadyIsNotAnnouncedWhenDetectionCannotStart() async throws {
+    let arbiter = SpyArbiter()
+    let haptics = SpyHaptics()
+    let pipeline = FakeObstaclePipeline()
+    pipeline.statesOnStart = [.starting, .unavailable(.camera)]
+    let service = SafetyService(pipeline: pipeline, audioArbiter: arbiter, haptics: haptics)
+
+    try await service.start()
+    await eventually { service.status == .unavailable(.camera) }
+
+    #expect(!arbiter.received.contains { $0.text.hasPrefix(SafetyAudio.readyPrefix) })
+    #expect(haptics.cues.isEmpty)
+    // Se informa por audio que la detección no está disponible.
+    #expect(arbiter.received.contains { $0.deduplicationKey == "safety-unavailable" })
+    service.stop()
+}
 #endif

@@ -14,8 +14,9 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
 
     private let pipeline: any ObstacleDetectionPipeline
     private let audioArbiter: any AudioArbitrating
-    /// SCRUM-33: háptica de peligro para los desniveles hacia abajo. NoHapticFeedback fuera de iOS/tests.
-    private let haptics: any HapticFeedbackPlaying
+    /// SCRUM-33/314: háptica de seguridad — "cámara lista" (safetyReady), peligro (desnivel hacia
+    /// abajo = danger) y aviso (subida u obstáculo cercano = warning). nil en pruebas que no la usan.
+    private let haptics: (any HapticFeedbackPlaying)?
     private var announcer: ObstacleAnnouncer
     /// Configuración inyectada (intervalos y distancia de peligro) para reiniciar el estado.
     private let initialAnnouncer: ObstacleAnnouncer
@@ -91,7 +92,7 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
     ) {
         self.pipeline = pipeline
         self.audioArbiter = audioArbiter
-        self.haptics = haptics ?? NoHapticFeedback()
+        self.haptics = haptics
         self.announcer = announcer
         self.initialAnnouncer = announcer
     }
@@ -198,8 +199,10 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
 
     // MARK: - SCRUM-320/349: mode announcement
 
+    /// SCRUM-314: «cámara lista» por audio y vibración, nunca solo en pantalla. Solo con la
+    /// primera inferencia válida: el modelo cargó, la cámara entrega frames y la seguridad ya
+    /// funciona. Incluye el modo completo (LiDAR) o reducido (sin LiDAR).
     private func announceMode() {
-        // El usuario sabe por audio si opera en modo completo (LiDAR) o reducido (sin LiDAR).
         audioArbiter.receive(
             pipeline.isDepthAvailable ? SafetyAudio.fullMode() : SafetyAudio.reducedMode()
         )
@@ -207,6 +210,7 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
         if !pipeline.isDepthAvailable {
             audioArbiter.receive(SafetyAudio.elevationUnavailable())
         }
+        haptics?.play(.safetyReady)
     }
 
     // MARK: - Detection consumption
@@ -232,7 +236,7 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
             onEvent?(out.event)
             audioArbiter.receive(out.message)
             // SCRUM-33: un obstáculo a menos de 1 m (riesgo inmediato) también vibra.
-            if out.event.requiresImmediateAction { haptics.play(.warning) }
+            if out.event.requiresImmediateAction { haptics?.play(.warning) }
         }
         // SCRUM-33: obstáculos por profundidad (ya filtrados/persistidos en el pipeline).
         for obstacle in output.depthObstacles {
@@ -241,7 +245,7 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
             )
             onEvent?(out.event)
             audioArbiter.receive(out.message)
-            if out.event.requiresImmediateAction { haptics.play(.warning) }
+            if out.event.requiresImmediateAction { haptics?.play(.warning) }
         }
         // SCRUM-33: desniveles. Todo desnivel immediateRisk vibra: bajada = peligro (3 fuertes),
         // subida = aviso (2 medios).
@@ -249,8 +253,8 @@ final class SafetyService: ObservableObject, SafetyMonitoring {
             guard let out = announcer.elevationOutput(for: signal.hazard, now: now) else { continue }
             onEvent?(out.event)
             audioArbiter.receive(out.message)
-            if signal.isDanger { haptics.play(.danger) }
-            else if out.event.requiresImmediateAction { haptics.play(.warning) }
+            if signal.isDanger { haptics?.play(.danger) }
+            else if out.event.requiresImmediateAction { haptics?.play(.warning) }
         }
     }
 }

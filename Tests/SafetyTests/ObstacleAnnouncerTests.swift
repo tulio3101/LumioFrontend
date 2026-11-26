@@ -84,7 +84,7 @@ private let t0 = Date(timeIntervalSince1970: 1_000)
 }
 
 @Test func depthObstacleAnnouncementTextAndPriority() {
-    var announcer = ObstacleAnnouncer()
+    let announcer = ObstacleAnnouncer()
     // Pared cercana (<1 m) → peligro inmediato.
     let near = announcer.depthObstacleOutput(kind: .wall, distanceMeters: 0.8, now: t0)
     #expect(near.message.text == "pared al frente, a 0,8 metros")

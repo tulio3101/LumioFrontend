@@ -219,7 +219,9 @@ protocol RouteDeviationMonitoring: AnyObject {
     func rerouteNow() async -> RerouteOutcome?
 }
 
-enum HapticCue: Equatable {
+/// Eventos que vibran. Los de ruta se pueden apagar en Preferencias > Vibración; la alerta
+/// crítica (P1 del AudioArbiter) vibra siempre. Patrones en HapticPattern.
+enum HapticCue: String, Codable, CaseIterable, Equatable {
     case routeReady
     case routeFailed
     /// La navegación terminó (Finalizar Ruta).
@@ -234,9 +236,14 @@ enum HapticCue: Equatable {
     case emergencySent
     /// Botón de Emergencia: la alerta no se pudo enviar.
     case emergencyFailed
+    /// Una alerta de seguridad P1 empezó a sonar.
+    case criticalAlert
+    /// La cámara y la detección de obstáculos están listas (SCRUM-314).
+    case safetyReady
 }
 
 /// Acompaña los anuncios de Crear Ruta. Los patrones de giro pertenecen a Guiar Giros.
+/// En la app lo implementa HapticPreferencesService, que aplica las preferencias hápticas.
 @MainActor
 protocol HapticFeedbackPlaying {
     func play(_ cue: HapticCue)

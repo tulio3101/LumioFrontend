@@ -11,6 +11,8 @@ import OSLog
 final class DetectionPipeline: ObstacleDetectionPipeline {
     let frameSource: FrameSource
     private let runnerFactory: () throws -> any ObstacleDetecting
+    /// SCRUM-314: con un modelo compartido, lo olvida antes de reconstruirlo tras un fallo.
+    private let discardRunner: () -> Void
     private let recoveryPolicy: ModelRecoveryPolicy
     private let confidencePolicy: ClassConfidencePolicy
     private let lowLightDetector: LowLightDetector?
@@ -39,6 +41,7 @@ final class DetectionPipeline: ObstacleDetectionPipeline {
     init(
         frameSource: FrameSource,
         runnerFactory: @escaping () throws -> any ObstacleDetecting = { try YOLORunner() },
+        discardRunner: @escaping () -> Void = {},
         recoveryPolicy: ModelRecoveryPolicy = ModelRecoveryPolicy(),
         confidencePolicy: ClassConfidencePolicy = .default,
         lowLightDetector: LowLightDetector? = nil,
@@ -47,6 +50,7 @@ final class DetectionPipeline: ObstacleDetectionPipeline {
     ) {
         self.frameSource = frameSource
         self.runnerFactory = runnerFactory
+        self.discardRunner = discardRunner
         self.recoveryPolicy = recoveryPolicy
         self.confidencePolicy = confidencePolicy
         self.lowLightDetector = lowLightDetector
@@ -78,13 +82,14 @@ final class DetectionPipeline: ObstacleDetectionPipeline {
         statusUpdates = state.stream
         statusContinuation = state.continuation
         let factory = runnerFactory
+        let discard = discardRunner
         let policy = recoveryPolicy
         let source = frameSource
         processingTask = Task.detached(priority: .userInitiated) { [weak self] in
             let model = RecoveringModel<CVPixelBuffer, [Detection]>(factory: {
                 let runner = try factory()
                 return { try runner.detect(pixelBuffer: $0) }
-            }, policy: policy, report: { state.continuation.yield($0) })
+            }, policy: policy, report: { state.continuation.yield($0) }, discard: discard)
             defer {
                 output.continuation.finish()
                 state.continuation.finish()

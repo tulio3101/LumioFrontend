@@ -24,6 +24,9 @@ struct AppDependencies {
     /// Configurar Preferencias de Voz Descriptiva: se leen del teléfono y se aplican al
     /// reproductor del árbitro al abrir la app, antes de la primera locución.
     let voicePreferences: VoicePreferencesService
+    /// Configurar Retroalimentación Háptica: todos los eventos que vibran pasan por aquí; se
+    /// leen del teléfono al abrir la app. Las alertas críticas vibran siempre.
+    let hapticPreferences: HapticPreferencesService
     #if canImport(AVFoundation)
     let audioArbiter: AudioArbiterService
     #endif
@@ -41,6 +44,10 @@ struct AppDependencies {
     let obstacleGate: (any CameraAssistanceGating)?
     /// HU Interactuar mediante voz: escucha local, intérprete y respuestas por el árbitro.
     let voiceCommands: VoiceCommandService
+    /// Pantalla Principal Accesible: sesión, permisos, seguridad y ruta, locutados al abrir.
+    let homeStatus: HomeStatusService
+    /// Copia de respaldo de las preferencias de voz y vibración en el backend.
+    let preferencesSync: PreferencesSynchronizer
     #endif
 
     init(configuration: AppConfiguration = .main) {
@@ -56,6 +63,13 @@ struct AppDependencies {
             arbiter: arbiter
         )
         voicePreferences = voiceSettings
+        // Preferencias hápticas: solo copia local; filtran los eventos antes de vibrar.
+        let hapticSettings = HapticPreferencesService(
+            store: FileHapticPreferencesStore(fileURL: FileHapticPreferencesStore.defaultFileURL()),
+            player: UIKitHapticFeedback(),
+            arbiter: arbiter
+        )
+        hapticPreferences = hapticSettings
 
         // Sesión: tokens en Keychain; las rutas se envían con el access token.
         let http = URLSessionHTTPClient()
@@ -86,7 +100,7 @@ struct AppDependencies {
         let location = CoreLocationCurrentLocationProvider()
         let geocoder = MapKitDestinationGeocoder()
         let calculator = MapKitWalkingRouteCalculator()
-        let haptics = UIKitHapticFeedback()
+        let haptics = hapticSettings
         routeCreator = RouteCreationService(
             location: location, geocoder: geocoder, calculator: calculator,
             store: store, sync: sync, arbiter: arbiter, haptics: haptics, history: history
@@ -146,8 +160,24 @@ struct AppDependencies {
         accountDeleter = AccountDeletionService(
             remote: RemoteAccountService(client: routeClient, baseURL: configuration.apiBaseURL),
             tokens: tokens, routes: store, recentRoutes: recentStore, pendingHistory: history,
-            voicePreferences: voiceSettings, arbiter: arbiter
+            voicePreferences: voiceSettings, hapticPreferences: hapticSettings, arbiter: arbiter
         )
+        // Preferencias de voz y vibración: se aplican del teléfono y se respaldan en
+        // GET/PUT /users/me/preferences en segundo plano; nunca retrasan el audio.
+        let preferencesSynchronizer = PreferencesSynchronizer(
+            remote: RemotePreferencesService(client: routeClient, baseURL: configuration.apiBaseURL),
+            stateStore: FilePreferencesSyncStateStore(fileURL: FilePreferencesSyncStateStore.defaultFileURL()),
+            voice: voiceSettings,
+            haptics: hapticSettings
+        )
+        voiceSettings.onPreferencesChanged = { [weak preferencesSynchronizer] in
+            preferencesSynchronizer?.localPreferencesChanged()
+        }
+        hapticSettings.onPreferencesChanged = { [weak preferencesSynchronizer] in
+            preferencesSynchronizer?.localPreferencesChanged()
+        }
+        preferencesSync = preferencesSynchronizer
+        monitor.start { Task { await preferencesSynchronizer.synchronize() } }
         // El historial pendiente se envía al abrir la app y cada vez que vuelve la conexión.
         monitor.start { Task { await history.flush() } }
         connectivity = monitor
@@ -171,6 +201,11 @@ struct AppDependencies {
             arbiter: nil
         )
         #endif
+        hapticPreferences = HapticPreferencesService(
+            store: FileHapticPreferencesStore(fileURL: FileHapticPreferencesStore.defaultFileURL()),
+            player: nil,
+            arbiter: nil
+        )
         let navigation = UnavailableNavigationService()
         routeCreator = navigation
         routeModifier = navigation
@@ -205,14 +240,19 @@ struct AppDependencies {
         #endif
         #if os(iOS)
         // SCRUM-37: SafetyService existe siempre, aunque el modelo falle. La carga de Core ML
-        // ya no ocurre aquí (hilo principal): el pipeline la hace en RecoveringModel al iniciar
-        // la detección (al iniciar la ruta), con reintentos 1/2/4 s para fallos recuperables.
-        // Un modelo ausente o que no se recupera se publica en SafetyService.status y se avisa
-        // por audio una sola vez; la navegación sigue y se ofrece «Reintentar detección».
+        // nunca ocurre en el hilo principal. Un modelo ausente o que no se recupera se publica
+        // en SafetyService.status y se avisa por audio una sola vez; la navegación sigue y se
+        // ofrece «Reintentar detección».
+        // SCRUM-314: el modelo se carga una sola vez (ReusableModelLoader) y se precarga en
+        // segundo plano al abrir la app; cada ruta reutiliza el mismo. La precarga no espera
+        // a la red ni retrasa la pantalla principal.
+        let detectorLoader = ReusableModelLoader<any ObstacleDetecting> { try YOLORunner() }
+        detectorLoader.warmUp()
         let focusConfig = DetectionFocusConfig()
         let pipeline = DetectionPipeline(
             frameSource: ARKitFrameSource(),
-            runnerFactory: { try YOLORunner() },
+            runnerFactory: { try detectorLoader.load() },
+            discardRunner: { detectorLoader.discard() },
             lowLightDetector: LowLightDetector(audioArbiter: audioArbiter),
             focusConfig: focusConfig,
             pitchReminder: PhonePitchReminder(
@@ -230,9 +270,8 @@ struct AppDependencies {
         )
         // La compuerta reutiliza el PermissionsViewModel de la pantalla de permisos para el flujo
         // accesible de solicitud de cámara.
-        let permissionsViewModel = PermissionsViewModel(
-            service: PermissionService(provider: IOSPermissionProvider()), audio: audioArbiter
-        )
+        let permissionService = PermissionService(provider: IOSPermissionProvider())
+        let permissionsViewModel = PermissionsViewModel(service: permissionService, audio: audioArbiter)
         self.permissions = permissionsViewModel
         self.obstacleGate = ObstacleAssistanceGate(
             permissions: permissionsViewModel, audio: audioArbiter
@@ -241,13 +280,25 @@ struct AppDependencies {
         let voice = VoiceCommandService(
             listener: DeviceSpeechListener(),
             permissions: PermissionsVoiceGate(permissions: permissionsViewModel),
-            audio: ArbiterVoiceAudio(arbiter: audioArbiter)
+            audio: ArbiterVoiceAudio(arbiter: audioArbiter),
+            // SCRUM-313: el destino dictado se busca y se confirma antes de calcular la ruta.
+            lookup: MapKitDestinationLookup(location: location)
         )
-        // Una alerta crítica que empieza a sonar corta la escucha (no compite con ella).
-        audioArbiter.onMessageChanged = { [weak voice] message in
+        // Una alerta crítica que empieza a sonar corta la escucha (no compite con ella) y
+        // vibra siempre, aunque la vibración esté desactivada.
+        audioArbiter.onMessageChanged = { [weak voice, weak hapticSettings] message in
             voice?.audioMessageChanged(message)
+            hapticSettings?.audioMessageChanged(message)
         }
         self.voiceCommands = voice
+        // Pantalla principal: solo lee estados locales (no pide permisos ni usa la red).
+        self.homeStatus = HomeStatusService(
+            session: session,
+            permissions: permissionService,
+            safetyModel: BundleSafetyModelChecker(),
+            routes: store,
+            arbiter: audioArbiter
+        )
         // SCRUM-360: punto único de desmonte, reutilizado por el cierre de sesión (SignOutService)
         // y por la expiración/401 (SessionExpiryCoordinator, vía .lumioSessionExpired).
         let teardown = SessionTeardown(

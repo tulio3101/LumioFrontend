@@ -36,11 +36,14 @@ struct LumioApp: App {
                 emergency: dependencies.emergency,
                 accountDeleter: dependencies.accountDeleter,
                 voicePreferences: dependencies.voicePreferences,
+                hapticPreferences: dependencies.hapticPreferences,
                 permissions: dependencies.permissions,
                 sessionExpiry: dependencies.sessionExpiry,
                 safetyMonitor: dependencies.safetyService,
                 obstacleGate: dependencies.obstacleGate,
-                voiceCommands: dependencies.voiceCommands
+                voiceCommands: dependencies.voiceCommands,
+                homeStatus: dependencies.homeStatus,
+                preferencesSync: dependencies.preferencesSync
             )
             // View.environmentObject() is iOS 13+; Scene.environmentObject() requires iOS 17.
             // Keeping this on the View avoids the availability constraint.
@@ -65,7 +68,8 @@ struct LumioApp: App {
                 contacts: dependencies.contacts,
                 emergency: dependencies.emergency,
                 accountDeleter: dependencies.accountDeleter,
-                voicePreferences: dependencies.voicePreferences
+                voicePreferences: dependencies.voicePreferences,
+                hapticPreferences: dependencies.hapticPreferences
             )
             #endif
         }

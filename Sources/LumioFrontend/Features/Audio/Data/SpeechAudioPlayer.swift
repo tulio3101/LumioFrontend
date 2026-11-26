@@ -20,7 +20,15 @@ final class SpeechAudioPlayer: NSObject, AudioPlaying, VoiceOutputConfiguring, A
         voice = Self.systemVoice(for: preferences)
     }
 
+    /// SCRUM-44: pausa antes de una indicación que acaba de cortar una narración, para que
+    /// el usuario note el cambio. Corta: el giro no puede llegar tarde.
+    static let interruptionPause: TimeInterval = 0.3
+
     func play(_ message: AudioMessage, token: PlaybackToken) throws {
+        try play(message, token: token, transition: .immediate)
+    }
+
+    func play(_ message: AudioMessage, token: PlaybackToken, transition: AudioTransition) throws {
         #if os(iOS)
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(.playback, mode: .voicePrompt, options: [.duckOthers])
@@ -34,6 +42,9 @@ final class SpeechAudioPlayer: NSObject, AudioPlaying, VoiceOutputConfiguring, A
             minimum: AVSpeechUtteranceMinimumSpeechRate,
             maximum: AVSpeechUtteranceMaximumSpeechRate
         )
+        if transition == .afterInterruption {
+            utterance.preUtteranceDelay = Self.interruptionPause
+        }
         attempts[ObjectIdentifier(utterance)] = token
         synthesizer.speak(utterance)
     }
