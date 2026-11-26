@@ -69,13 +69,6 @@ struct AccountFormView: View {
         VStack(alignment: .leading, spacing: 28) {
             header.id(Self.topID)
             VStack(spacing: 20) {
-                GoogleSignInButton(isLoading: model.operation == .google) {
-                    focusedField = nil
-                    Task { await model.signInWithGoogle() }
-                }
-                emailDivider
-            }
-            VStack(spacing: 20) {
                 emailField
                 passwordField
                 if model.access == .signIn, passwordRecovery != nil {
@@ -151,24 +144,6 @@ struct AccountFormView: View {
 
     private var modeAnimation: Animation {
         reduceMotion ? .easeInOut(duration: 0.2) : .spring(response: 0.42, dampingFraction: 0.88)
-    }
-
-    private var emailDivider: some View {
-        HStack(spacing: 12) {
-            dividerLine
-            Text("o con tu correo")
-                .font(.subheadline)
-                .foregroundStyle(LumioColor.textSecondary)
-                .layoutPriority(1)
-            dividerLine
-        }
-    }
-
-    private var dividerLine: some View {
-        Rectangle()
-            .fill(LumioColor.controlBorder.opacity(0.4))
-            .frame(height: 1)
-            .accessibilityHidden(true)
     }
 
     private var emailField: some View {
@@ -419,57 +394,6 @@ private struct FailureBanner: View {
         .background(LumioColor.errorBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .fixedSize(horizontal: false, vertical: true)
     }
-}
-
-/// Botón con los colores y el logo oficiales de Google (developers.google.com/identity/branding-guidelines).
-private struct GoogleSignInButton: View {
-    let isLoading: Bool
-    let action: () -> Void
-    @Environment(\.colorScheme) private var colorScheme
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                if isLoading {
-                    ProgressView().tint(GoogleColor.text)
-                } else if let logo = Image(bundled: colorScheme == .dark ? "GoogleG-Dark" : "GoogleG-Light") {
-                    logo
-                        .resizable()
-                        .frame(width: 20, height: 20)
-                        .accessibilityHidden(true)
-                }
-                Text(isLoading ? "Conectando con Google…" : "Continuar con Google")
-            }
-        }
-        .buttonStyle(GoogleButtonStyle())
-    }
-}
-
-private struct GoogleButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.headline)
-            .multilineTextAlignment(.center)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 14)
-            .frame(maxWidth: .infinity, minHeight: 54)
-            .foregroundStyle(GoogleColor.text)
-            .background(configuration.isPressed ? GoogleColor.pressed : GoogleColor.fill, in: shape)
-            .overlay(shape.strokeBorder(GoogleColor.border, lineWidth: 1))
-            .contentShape(shape)
-    }
-
-    private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: 14, style: .continuous)
-    }
-}
-
-/// El fondo debe coincidir con el de los PNG del logo de Google en cada tema.
-private enum GoogleColor {
-    static let fill = Color(light: 0xFFFFFF, dark: 0x131314)
-    static let pressed = Color(light: 0xF2F2F2, dark: 0x1E1F20)
-    static let border = Color(light: 0x747775, dark: 0x8E918F)
-    static let text = Color(light: 0x1F1F1F, dark: 0xE3E3E3)
 }
 
 private extension View {
