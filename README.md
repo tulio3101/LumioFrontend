@@ -89,10 +89,12 @@ El audio nativo está pendiente de validación en Xcode/dispositivo. No hay mode
 
 ## Configuración del backend (desarrollo)
 
-`Resources/Info.plist` define `LumioAPIBaseURL` (por defecto `http://localhost:8000`;
-en un iPhone físico usa la IP del equipo que corre el backend) y `GoogleClientID` (client ID
-de Google de tipo iOS, el mismo que `GOOGLE_CLIENT_IDS` del backend; vacío deja Google sin
-activar). Crea una cuenta desde la
+`Resources/Info.plist` (Xcode) y `Resources/Info-xtool.plist` (xtool) definen `LumioAPIBaseURL`
+(por defecto el backend dev en AWS, `https://32.195.93.230.sslip.io`; para un backend local
+usa `http://<IP del equipo>:8000`, nunca `localhost`, que en el iPhone es el propio teléfono) y
+`GoogleClientID` (client ID de Google de tipo iOS, el mismo que `GOOGLE_CLIENT_IDS` del backend;
+vacío deja Google sin activar). Los dos plist deben coincidir salvo el bundle ID, el ejecutable y
+el nombre (lo vigila `XtoolInfoPlistTests`). Crea una cuenta desde la
 app: las rutas se guardan con el access token de esa sesión. Sin sesión (solo DEBUG,
 «Entrar sin sesión») o sin conexión, la ruta funciona igual pero queda pendiente de
 guardarse en el servidor. «Mi cuenta», «Cerrar sesión» y «Eliminar cuenta» están en Preferencias.
