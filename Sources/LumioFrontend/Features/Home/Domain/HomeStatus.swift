@@ -49,7 +49,8 @@ enum HomeAnnouncements {
         }
     }
 
-    static func welcome(_ status: HomeStatusSnapshot) -> String {
+    /// SCRUM-32: con avisos breves se omiten las pistas de uso.
+    static func welcome(_ status: HomeStatusSnapshot, detail: AnnouncementDetail = .detailed) -> String {
         var parts = ["Lumio listo."]
         parts.append(status.isSignedIn
             ? "Sesión iniciada."
@@ -75,7 +76,9 @@ enum HomeAnnouncements {
         if let destination = status.activeRouteDestination {
             parts.append("Tienes una ruta activa a \(destination).")
         }
-        parts.append(quickActions)
+        if detail == .detailed {
+            parts.append(quickActions)
+        }
         return parts.joined(separator: " ")
     }
 
